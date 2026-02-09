@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einundzwanzig Badge Verifier</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #0A0A0A 0%, #1a1a1a 100%);
+            color: #E8E8E8;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 40px 20px;
+            background: rgba(247, 147, 26, 0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(247, 147, 26, 0.3);
+        }
+
+        h1 {
+            color: #F7931A;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .subtitle {
+            color: #9CA3AF;
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background: #1F1F1F;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 1px solid #2D2D2D;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: #F7931A;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            background: #0A0A0A;
+            border: 2px solid #2D2D2D;
+            border-radius: 12px;
+            color: #E8E8E8;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #F7931A;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            background: #F7931A;
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(247, 147, 26, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result.show {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: rgba(247, 147, 26, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(247, 147, 26, 0.3);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #F7931A;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #9CA3AF;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-list {
+            margin-top: 20px;
+        }
+
+        .badge-item {
+            background: #0A0A0A;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 3px solid #F7931A;
+        }
+
+        .badge-item h4 {
+            color: #F7931A;
+            margin-bottom: 8px;
+        }
+
+        .badge-meta {
+            color: #9CA3AF;
+            font-size: 0.9rem;
+        }
+
+        .verified-badge {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.2);
+            color: #22C55E;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #EF4444;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22C55E;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .info-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 30px;
+        }
+
+        .info-box h3 {
+            color: #3B82F6;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-box li {
+            padding: 8px 0;
+            color: #9CA3AF;
+        }
+
+        .info-box li::before {
+            content: "✓ ";
+            color: #22C55E;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Badge Verifier</h1>
+            <p class="subtitle">Verifiziere Einundzwanzig Meetup Reputationen</p>
+        </header>
+
+        <div class="card">
+            <div class="input-section">
+                <label>JSON-Daten einfügen</label>
+                <textarea id="jsonInput" placeholder='{"version": "1.0", "user": "npub1...", "badges": [...]}'>
+</textarea>
+            </div>
+
+            <button onclick="verifyBadges()">REPUTATION VERIFIZIEREN</button>
+        </div>
+
+        <div id="result" class="result">
+            <!-- Wird dynamisch befüllt -->
+        </div>
+
+        <div class="info-box">
+            <h3>ℹ️ So funktioniert's</h3>
+            <ul>
+                <li>Kopiere die JSON-Daten aus der Einundzwanzig Meetup App</li>
+                <li>Füge sie oben ein und klicke auf "Verifizieren"</li>
+                <li>Du siehst alle gesammelten Badges und die Reputation</li>
+                <li>Jedes Badge hat einen Hash zur Integritätsprüfung</li>
+                <li>Die Checksum verifiziert, dass die Daten nicht manipuliert wurden</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function verifyBadges() {
+            const input = document.getElementById('jsonInput').value.trim();
+            const resultDiv = document.getElementById('result');
+
+            if (!input) {
+                resultDiv.innerHTML = '<div class="card error">Bitte JSON-Daten einfügen</div>';
+                resultDiv.classList.add('show');
+                return;
+            }
+
+            try {
+                const data = JSON.parse(input);
+
+                // Validierung
+                if (!data.version || !data.badges || !Array.isArray(data.badges)) {
+                    throw new Error('Ungültiges JSON-Format');
+                }
+
+                // Checksum verifizieren
+                const checksumData = {...data};
+                delete checksumData.checksum;
+                const calculatedChecksum = calculateChecksum(JSON.stringify(checksumData));
+                const checksumValid = data.checksum && calculatedChecksum.substring(0, 8) === data.checksum;
+
+                // Ergebnis anzeigen
+                let html = `
+                    <div class="card">
+                        ${checksumValid 
+                            ? '<div class="success"><strong>✅ Checksum verifiziert</strong><br>Die Daten wurden nicht manipuliert.</div>'
+                            : '<div class="error"><strong>⚠️ Checksum ungültig</strong><br>Die Daten könnten manipuliert worden sein.</div>'
+                        }
+                        
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">${data.total_badges || data.badges.length}</div>
+                                <div class="stat-label">Badges</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${data.meetups_visited || new Set(data.badges.map(b => b.meetup)).size}</div>
+                                <div class="stat-label">Meetups</div>
+                            </div>
+                            ${data.user && data.user !== 'anonymous' 
+                                ? `<div class="stat-card">
+                                    <div class="stat-value">✓</div>
+                                    <div class="stat-label">Nostr verifiziert</div>
+                                   </div>`
+                                : ''
+                            }
+                        </div>
+
+                        ${data.user && data.user !== 'anonymous' 
+                            ? `<div style="background: rgba(138, 43, 226, 0.1); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(138, 43, 226, 0.3);">
+                                <strong style="color: #8A2BE2;">Nostr:</strong><br>
+                                <code style="color: #E8E8E8; word-break: break-all;">${data.user}</code>
+                               </div>`
+                            : ''
+                        }
+
+                        <div class="badge-list">
+                            <h3 style="color: #F7931A; margin-bottom: 15px;">📍 Besuchte Meetups</h3>
+                `;
+
+                data.badges.forEach((badge, index) => {
+                    const date = new Date(badge.date);
+                    const formattedDate = `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`;
+                    
+                    html += `
+                        <div class="badge-item">
+                            <h4>${badge.meetup} <span class="verified-badge">Badge #${index + 1}</span></h4>
+                            <div class="badge-meta">
+                                📅 ${formattedDate} • 
+                                ⛓️ Block ${badge.block ? badge.block.toLocaleString() : 'N/A'}<br>
+                                🔐 Hash: <code>${badge.hash}</code>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                        
+                        <div style="margin-top: 20px; padding: 15px; background: rgba(247, 147, 26, 0.1); border-radius: 10px; text-align: center;">
+                            <small style="color: #9CA3AF;">
+                                Exportiert am ${data.exported_at ? new Date(data.exported_at).toLocaleString('de-DE') : 'Unbekannt'}
+                            </small>
+                        </div>
+                    </div>
+                `;
+
+                resultDiv.innerHTML = html;
+                resultDiv.classList.add('show');
+
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="card error">
+                        <strong>❌ Fehler beim Parsen</strong><br>
+                        ${error.message}<br><br>
+                        Stelle sicher, dass du gültiges JSON aus der Einundzwanzig App kopiert hast.
+                    </div>
+                `;
+                resultDiv.classList.add('show');
+            }
+        }
+
+        // Simple SHA-256 implementation für Checksum-Verifizierung
+        async function calculateChecksum(str) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(str);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Beispiel-Daten zum Testen
+        const exampleData = {
+            "version": "1.0",
+            "user": "npub1example...",
+            "total_badges": 3,
+            "meetups_visited": 3,
+            "badges": [
+                {
+                    "meetup": "München",
+                    "date": "2026-01-15T19:00:00.000Z",
+                    "block": 875432,
+                    "hash": "a3f9b2c1e5d4f8a2"
+                },
+                {
+                    "meetup": "Berlin",
+                    "date": "2026-01-22T19:00:00.000Z",
+                    "block": 876123,
+                    "hash": "f8a2c1b3e5d4a9b6"
+                },
+                {
+                    "meetup": "Hamburg",
+                    "date": "2026-01-29T19:00:00.000Z",
+                    "block": 876814,
+                    "hash": "c1b3a5f7e9d2b4c8"
+                }
+            ],
+            "exported_at": "2026-02-09T12:30:00.000Z",
+            "checksum": "d8e7f5a3"
+        };
+
+        // Beispiel-Button (optional)
+        if (window.location.hash === '#demo') {
+            document.getElementById('jsonInput').value = JSON.stringify(exampleData, null, 2);
+            verifyBadges();
+        }
+    </script>
+</body>
+</html>

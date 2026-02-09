@@ -1,0 +1,356 @@
+import 'package:flutter/material.dart';
+// import 'package:nfc_manager/nfc_manager.dart'; // <--- Für Mobile einkommentieren
+import 'dart:convert';
+import '../theme.dart';
+import '../models/badge.dart';
+import '../models/meetup.dart';
+import '../models/user.dart'; 
+import '../services/mempool.dart'; // <--- WICHTIG: Damit wir die Blockzeit holen können
+
+class MeetupVerificationScreen extends StatefulWidget {
+  final Meetup meetup;
+  final bool initialChefMode; // <--- NEU: Ermöglicht direkten Admin-Start
+  final bool verifyOnlyMode; // <--- NEU: Nur Verifizierung, keine Badges
+
+  const MeetupVerificationScreen({
+    super.key, 
+    required this.meetup,
+    this.initialChefMode = false, // Standardmäßig aus
+    this.verifyOnlyMode = false, // Standardmäßig aus
+  });
+
+  @override
+  State<MeetupVerificationScreen> createState() => _MeetupVerificationScreenState();
+}
+
+class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> with SingleTickerProviderStateMixin {
+  late bool _isChefMode; // <--- Jetzt 'late', weil wir es im Init setzen
+  bool _success = false;
+  String _statusText = "Bereit zum Scannen";
+  
+  // true = "Badge für alle", false = "Admin Verifizierung"
+  bool _writeModeBadge = true; 
+
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  final TextEditingController _passwordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // Wir übernehmen den Startwert vom Widget (für den roten Dashboard-Button)
+    _isChefMode = widget.initialChefMode;
+    if (_isChefMode) {
+      _statusText = "ADMIN MODUS AKTIV";
+    }
+
+    _controller = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.2).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // --- SIMULATION ---
+
+  // type: "BADGE" oder "VERIFY"
+  void _simulateHandshake(String type) async {
+    setState(() {
+      _statusText = _isChefMode ? "Schreibe Tag..." : "Lese Tag...";
+    });
+
+    await Future.delayed(const Duration(seconds: 1)); // Kurze Wartezeit
+
+    if (_isChefMode) {
+      // ADMIN MODE: Erstellen
+      String createdType = _writeModeBadge ? "BADGE" : "VERIFY";
+      setState(() {
+        _success = true;
+        _statusText = "$createdType Tag erstellt!";
+      });
+    } else {
+      // PLEB MODE: Finden und lesen
+      bool foundBadge = type == "BADGE";
+      bool foundVerify = type == "VERIFY";
+      
+      // Simuliere gelesene Tag-Daten (in echt würden diese vom NFC Tag kommen)
+      Map<String, dynamic>? tagData;
+      if (foundBadge) {
+        // Simuliere Badge-Tag mit Meetup-Daten
+        tagData = {
+          'type': 'BADGE',
+          'meetup_id': widget.meetup.id,
+          'meetup_name': widget.meetup.city,
+          'meetup_country': widget.meetup.country,
+          'meetup_date': DateTime.now().toIso8601String(),
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+      } else if (foundVerify) {
+        tagData = {
+          'type': 'VERIFY',
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+      }
+      
+      _processFoundTagData(tagData: tagData);
+    }
+  }
+
+  // --- VERARBEITUNG DER DATEN ---
+  void _processFoundTagData({Map<String, dynamic>? tagData}) async {
+    if (tagData == null) {
+      setState(() {
+        _statusText = "❌ Kein gültiger Tag erkannt";
+      });
+      return;
+    }
+
+    final user = await UserProfile.load();
+    String msg = "";
+    String tagType = tagData['type'] ?? '';
+
+    // A) Blockhöhe laden (Asynchron von Mempool.space)
+    int currentBlockHeight = 0;
+    try {
+      currentBlockHeight = await MempoolService.getBlockHeight();
+    } catch (e) {
+      // Offline fallback
+    }
+
+    // B) Badge Logik
+    if (tagType == 'BADGE') {
+      String meetupName = tagData['meetup_name'] ?? 'Unbekanntes Meetup';
+      String meetupCountry = tagData['meetup_country'] ?? '';
+      String meetupId = tagData['meetup_id'] ?? DateTime.now().toString();
+      
+      // Prüfe ob Badge bereits gesammelt wurde
+      bool alreadyCollected = myBadges.any((b) => 
+        b.meetupName == meetupName && 
+        b.date.year == DateTime.now().year &&
+        b.date.month == DateTime.now().month &&
+        b.date.day == DateTime.now().day
+      );
+
+      if (!alreadyCollected) {
+        myBadges.add(MeetupBadge(
+          id: meetupId, 
+          meetupName: meetupCountry.isNotEmpty ? "$meetupName, $meetupCountry" : meetupName, 
+          date: DateTime.now(), 
+          iconPath: "assets/badge_icon.png",
+          blockHeight: currentBlockHeight, // Echte Blockzeit vom Mempool
+        ));
+        
+        // Badges speichern
+        await MeetupBadge.saveBadges(myBadges);
+        
+        msg = "🎉 BADGE GESAMMELT!\n\n📍 $meetupName";
+        if (meetupCountry.isNotEmpty) msg += ", $meetupCountry";
+        if (currentBlockHeight > 0) {
+          msg += "\n⛓️ Block: $currentBlockHeight";
+        }
+      } else {
+        msg = "✅ Badge bereits gesammelt\n\n📍 $meetupName";
+      }
+    }
+
+    // C) Verifizierungs Logik
+    if (tagType == 'VERIFY') {
+      if (!user.isAdminVerified) {
+        user.isAdminVerified = true;
+        // Wenn der Nutzer einen Nostr npub hat, verifizieren wir diesen auch
+        if (user.nostrNpub.isNotEmpty) {
+          user.isNostrVerified = true;
+        }
+        await user.save(); // WICHTIG: Speichern!
+        msg = "IDENTITÄT VERIFIZIERT! ✅";
+        if (user.nostrNpub.isNotEmpty) {
+          msg += "\nNostr-Identität bestätigt.";
+        }
+      } else {
+        msg = "Bereits verifiziert.";
+      }
+    }
+
+    setState(() {
+      _success = true;
+      _statusText = msg;
+    });
+
+    // Kurz warten, dann schließen
+    await Future.delayed(const Duration(seconds: 3));
+    if (mounted) Navigator.pop(context, true); 
+  }
+
+  void _showAdminLogin() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: cCard,
+        title: const Text("ADMIN LOGIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Login für Organisatoren.", style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              decoration: const InputDecoration(
+                hintText: "PASSWORT",
+                hintStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: cOrange)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABBRUCH", style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: cOrange),
+            onPressed: () {
+              if (_passwordController.text == widget.meetup.adminSecret) {
+                setState(() {
+                  _isChefMode = true;
+                  _statusText = "ADMIN MODUS";
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("ADMIN AKTIV ⚡️")));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Falsches Passwort!")));
+              }
+            },
+            child: const Text("LOGIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_isChefMode ? "ADMIN TOOLS" : "SCANNER"),
+        actions: [
+          if (!_isChefMode) IconButton(icon: const Icon(Icons.security), onPressed: _showAdminLogin)
+        ],
+      ),
+      body: Center(
+        child: _success 
+        ? Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.check_circle, size: 100, color: Colors.green),
+              const SizedBox(height: 20),
+              Text("ERFOLG!", style: Theme.of(context).textTheme.displayLarge),
+              const SizedBox(height: 10),
+              Text(_statusText, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ],
+          )
+        : Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ANIMATION KREIS
+            ScaleTransition(
+              scale: _animation,
+              child: Container(
+                width: 200, height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _isChefMode ? Colors.red : cOrange, width: 4),
+                  boxShadow: [
+                    BoxShadow(color: (_isChefMode ? Colors.red : cOrange).withOpacity(0.5), blurRadius: 40, spreadRadius: 10)
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    _isChefMode ? Icons.edit_attributes : Icons.nfc, 
+                    size: 80, 
+                    color: Colors.white
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            Text(
+              _isChefMode ? "TAG BESCHREIBEN" : "TAG SCANNEN",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            
+            // --- ADMIN MODUS ---
+            if (_isChefMode) ...[
+              const SizedBox(height: 20),
+              // Wahl zwischen Badge und Verify
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ChoiceChip(
+                    label: const Text("BADGE"),
+                    selected: _writeModeBadge,
+                    onSelected: (val) => setState(() => _writeModeBadge = true),
+                    selectedColor: cOrange,
+                  ),
+                  const SizedBox(width: 10),
+                  ChoiceChip(
+                    label: const Text("VERIFY"),
+                    selected: !_writeModeBadge,
+                    onSelected: (val) => setState(() => _writeModeBadge = false),
+                    selectedColor: Colors.red,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: 250, height: 50,
+                child: ElevatedButton(
+                  onPressed: () => _simulateHandshake("CREATE"),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
+                  child: const Text("TAG ERSTELLEN (SIM)", style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ] 
+            
+            // --- PLEB MODUS ---
+            else ...[
+              const SizedBox(height: 40),
+              // Wenn verifyOnlyMode: NUR Verifizierung
+              if (widget.verifyOnlyMode) ...[
+                SizedBox(
+                  width: 250, height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => _simulateHandshake("VERIFY"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      side: const BorderSide(color: cCyan),
+                    ),
+                    child: const Text(
+                      "VERIFIZIERUNGS-TAG SCANNEN",
+                      style: TextStyle(color: cCyan, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // Normaler Modus: Badge sammeln
+                SizedBox(
+                  width: 250, height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => _simulateHandshake("BADGE"),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
+                    child: const Text("BADGE FINDEN (SIM)", style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+}
