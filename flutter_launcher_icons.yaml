@@ -1,0 +1,11 @@
+dev_dependencies:
+  flutter_launcher_icons: "^0.13.1"
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/app_icon.png"
+  min_sdk_android: 21
+  # Optional: Wenn dein Logo transparent ist, kannst du eine Hintergrundfarbe setzen (Hex-Code)
+  # adaptive_icon_background: "#FF9900" 
+  # adaptive_icon_foreground: "assets/app_icon.png"
