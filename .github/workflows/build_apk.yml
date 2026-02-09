@@ -12,35 +12,41 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
-    # Java 17 ist Pflicht für moderne Android Builds
+    # 1. Java Setup
     - name: Set up Java
       uses: actions/setup-java@v3
       with:
         distribution: 'zulu'
         java-version: '17'
 
-    # Flutter installieren
+    # 2. WICHTIG: Android SDK Tools bereitstellen
+    # Dieser Schritt sorgt dafür, dass 'sdkmanager' gefunden wird
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    # 3. Flutter Setup
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
         channel: 'stable'
 
-    # WICHTIG: Wir erzwingen die Installation von SDK 36 und NDK 27
-    # Damit vermeiden wir den Fehler, den du vorhin im Terminal hattest
+    # 4. Android Versionen installieren (Jetzt klappt der Befehl)
     - name: Install Android SDK & NDK
       run: |
-        yes | sdkmanager --install "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973"
+        yes | sdkmanager --licenses
+        sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973"
 
+    # 5. Abhängigkeiten laden
     - name: Clean & Get Dependencies
       run: |
         flutter clean
         flutter pub get
 
-    # Wir bauen die Release-APK (ohne Code-Shrinking, damit sie stabil läuft)
+    # 6. Bauen
     - name: Build APK
       run: flutter build apk --release
 
-    # Die fertige Datei hochladen, damit du sie downloaden kannst
+    # 7. Hochladen
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
