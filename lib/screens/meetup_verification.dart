@@ -80,7 +80,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         onDiscovered: (tag) async {
           try {
             // Versuche NDEF-Daten zu extrahieren (Android/iOS unterschiedlich!)
-            final ndef = tag.data['ndef'];
+            final tagMap = tag.data as Map;
+            final ndef = tagMap['ndef'];
             if (ndef == null || ndef['cachedMessage'] == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
               await NfcManager.instance.stopSession();

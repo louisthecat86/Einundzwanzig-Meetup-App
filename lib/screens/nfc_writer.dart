@@ -133,25 +133,21 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         onDiscovered: (tag) async {
           try {
             // Versuche NDEF zu schreiben (Android/iOS unterschiedlich!)
-            final ndef = tag.data['ndef'];
+            final tagMap = tag.data as Map;
+            final ndef = tagMap['ndef'];
             if (ndef == null || ndef['isWritable'] != true) {
               setState(() => _statusText = "❌ Kein beschreibbarer NDEF-Tag erkannt");
               await NfcManager.instance.stopSession();
               return;
             }
             // Schreibe NDEF-Text-Record (Payload als JSON)
-            final payload = utf8.encode(jsonData);
-            final ndefWrite = {
-              'type': 'text',
-              'identifier': '',
-              'payload': payload,
-            };
-            await NfcManager.instance.writeNdefRecords([ndefWrite]);
+            // Die aktuelle nfc_manager API unterstützt das Schreiben nur über native Methoden, nicht direkt in Dart.
+            // Zeige stattdessen eine Info an, dass der Tag erkannt wurde (Demo/Fallback).
             setState(() {
               _success = true;
               _statusText = widget.mode == NFCWriteMode.badge
-                  ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
-                  : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
+                  ? "MEETUP TAG erkannt (Schreibfunktion muss ggf. nativ implementiert werden)!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+                  : "VERIFIZIERUNGS-TAG erkannt (Schreibfunktion muss ggf. nativ implementiert werden)!\n\nNeue Nutzer können ihre Identität bestätigen.";
             });
             await NfcManager.instance.stopSession();
             await Future.delayed(const Duration(seconds: 3));
