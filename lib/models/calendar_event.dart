@@ -16,40 +16,47 @@ class CalendarEvent {
   });
 
   factory CalendarEvent.fromMap(Map<String, dynamic> map) {
-    DateTime start = DateTime.now().add(const Duration(days: 365)); // Fallback
+    // Standard-Fallback (falls alles schiefgeht): Datum in der Zukunft
+    DateTime start = DateTime.now().add(const Duration(days: 365));
 
     try {
       final dtStart = map['dtstart'];
 
-      // Fall A: Das Paket hat es schon erkannt
+      // VARIANTE A: Das Paket hat das Datum schon erkannt
       if (dtStart is IcsDateTime) {
-        start = dtStart.toDateTime() ?? start;
+        // .toLocal() ist hier wichtig!
+        start = dtStart.toDateTime()?.toLocal() ?? start;
       } 
-      // Fall B: String parsen (Manuell & Robust)
+      // VARIANTE B: Wir müssen den String selbst zerlegen (häufigster Fall)
       else if (dtStart is String) {
-        // Bereinigen: "20260210T183000Z" -> "20260210183000"
+        // Wir entfernen alles, was keine Zahl ist (z.B. T, Z, -)
+        // Beispiel Input: "20260210T173000Z" -> "20260210173000"
         String s = dtStart.replaceAll(RegExp(r'[^0-9]'), ''); 
         
         if (s.length >= 8) {
           int y = int.parse(s.substring(0, 4));
           int m = int.parse(s.substring(4, 6));
           int d = int.parse(s.substring(6, 8));
-          int h = 19; // Standard 19 Uhr
+          int h = 19; // Fallback, falls keine Uhrzeit dabei ist
           int min = 0;
 
+          // Wenn Uhrzeit dabei ist (String ist lang genug)
           if (s.length >= 12) {
              h = int.parse(s.substring(8, 10));
              min = int.parse(s.substring(10, 12));
           }
 
-          start = DateTime(y, m, d, h, min);
+          // DER ENTSCHEIDENDE FIX:
+          // 1. Wir erstellen das Datum als UTC (Weltzeit) -> DateTime.utc(...)
+          // 2. Wir wandeln es sofort in Lokale Zeit um -> .toLocal()
+          start = DateTime.utc(y, m, d, h, min).toLocal();
         }
       }
     } catch (e) {
       print("PARSE ERROR: $e");
     }
 
-    // Text säubern
+    // Beschreibung säubern (Zeilenumbrüche fixen)
     String rawDesc = map['description']?.toString() ?? '';
     String cleanDesc = rawDesc
         .replaceAll('\\n', '\n')

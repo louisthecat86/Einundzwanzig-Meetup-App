@@ -182,30 +182,35 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                   
                   const Divider(color: Colors.white10, height: 30),
 
-                  // Twitter / X (JETZT KORRIGIERT)
-                  InkWell(
-                    // Hier der Link zum offiziellen Account statt #Bitcoin
-                    onTap: () => _launchURL("https://twitter.com/Einundzwanzig_"), 
-                    child: Row(
-                      children: [
-                        const Icon(Icons.alternate_email, color: Colors.grey, size: 20),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Twitter / X", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                              Text("@Einundzwanzig", style: TextStyle(color: cCyan, fontWeight: FontWeight.w500)),
-                            ],
+                 // Twitter / X (JETZT DYNAMISCH)
+                  // Wir zeigen den Button nur an, wenn ein Twitter-Handle da ist
+                  if (widget.meetup.twitterHandle.isNotEmpty) ...[
+                    const Divider(color: Colors.white10, height: 30),
+                    InkWell(
+                      onTap: () {
+                         // Twitter Handle säubern (falls @ dabei ist)
+                         final handle = widget.meetup.twitterHandle.replaceAll('@', '');
+                         _launchURL("https://twitter.com/$handle");
+                      },
+                      child: Row(
+                        children: [
+                          const Icon(Icons.alternate_email, color: Colors.grey, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("Twitter / X", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                Text("@${widget.meetup.twitterHandle}", style: const TextStyle(color: cCyan, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
                           ),
-                        ),
-                        const Icon(Icons.chevron_right, color: Colors.grey),
-                      ],
+                          const Icon(Icons.chevron_right, color: Colors.grey),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                  
              const SizedBox(height: 20),
              
              // STANDORT SEKTION (MIT FIX FÜR GOOGLE MAPS)
