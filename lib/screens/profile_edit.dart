@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../theme.dart';
+import 'verification_gate.dart'; // WICHTIG: Importieren, damit wir dahin umleiten können!
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -12,7 +13,6 @@ class ProfileEditScreen extends StatefulWidget {
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _formKey = GlobalKey<FormState>();
   
-  // Controller für die Eingabefelder
   final TextEditingController _nicknameController = TextEditingController();
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _homeMeetupController = TextEditingController();
@@ -20,7 +20,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   UserProfile? _user;
   bool _isLoading = true;
-  bool _isEditing = false; // Steuert, ob wir im "Ansehen" oder "Bearbeiten" Modus sind
+  bool _isEditing = false; 
 
   @override
   void initState() {
@@ -38,7 +38,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _nostrController.text = user.nostrPubkey;
       
       // Wenn NICHT verifiziert, sind wir automatisch im Edit-Modus.
-      // Wenn verifiziert, sind wir im Read-Only Modus.
       _isEditing = !user.isAdminVerified; 
       
       _isLoading = false;
@@ -49,38 +48,40 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      // Neue Daten speichern
-      // WICHTIG: isAdminVerified wird hier ZWANGSLÄUFIG auf false gesetzt,
-      // da wir ja gerade die Daten geändert haben!
+      // Neue Daten speichern -> Status wird FALSE
       final newUser = UserProfile(
         nickname: _nicknameController.text.trim(),
         fullName: _fullNameController.text.trim(),
         homeMeetupId: _homeMeetupController.text.trim(),
         nostrPubkey: _nostrController.text.trim(),
-        isAdminVerified: false, // <--- VERIFIZIERUNG VERLOREN!
-        isAdmin: _user?.isAdmin ?? false, // Admin-Rechte behalten (falls relevant)
+        isAdminVerified: false, // VERIFIZIERUNG WEG!
+        isAdmin: _user?.isAdmin ?? false, 
       );
 
       await newUser.save();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profil gespeichert (Verifizierung muss erneuert werden)')),
+        // HIER IST DIE ÄNDERUNG:
+        // Statt nur 'pop' (zurück), werfen wir den User komplett zum Verification Gate
+        // und löschen den Verlauf, damit er nicht "Zurück" drücken kann.
+        
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => VerificationGateScreen()),
+          (route) => false, // Alle vorherigen Routen löschen
         );
-        Navigator.pop(context); // Zurück zum Dashboard
       }
     }
   }
 
-  // Warnung anzeigen, bevor der Edit-Modus aktiviert wird
   void _unlockEditMode() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: cCard,
-        title: const Text("Warnung", style: TextStyle(color: Colors.white)),
+        title: const Text("Achtung!", style: TextStyle(color: Colors.white)),
         content: const Text(
-          "Wenn du dein Profil bearbeitest, verlierst du deinen 'Verifiziert'-Status.\n\nDu musst dich beim nächsten Meetup erneut von einem Admin freischalten lassen.",
+          "Wenn du dein Profil bearbeitest, verlierst du deinen 'Verifiziert'-Status.\n\nDu wirst sofort aus dem Dashboard ausgeloggt und musst dich beim nächsten Meetup erneut von einem Admin freischalten lassen.",
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -91,12 +92,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              Navigator.pop(context); // Dialog schließen
+              Navigator.pop(context); 
               setState(() {
-                _isEditing = true; // Felder freischalten
+                _isEditing = true; 
               });
             },
-            child: const Text("Trotzdem bearbeiten", style: TextStyle(color: Colors.white)),
+            child: const Text("Verstanden & Bearbeiten", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -131,7 +132,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return Column(
       children: [
         const SizedBox(height: 20),
-        // Das Siegel
         Container(
           padding: const EdgeInsets.all(30),
           decoration: BoxDecoration(
@@ -148,13 +148,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ),
         const SizedBox(height: 10),
         const Text(
-          "Deine Identität wurde durch einen Admin bestätigt.\nÄnderungen erfordern eine neue Prüfung.",
+          "Deine Identität wurde bestätigt. Änderungen erfordern eine neue Prüfung.",
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey),
         ),
         const SizedBox(height: 40),
 
-        // Die Daten Karten
         _buildInfoTile("Nickname", _user!.nickname, Icons.person),
         _buildInfoTile("Voller Name", _user!.fullName.isEmpty ? "-" : _user!.fullName, Icons.badge),
         _buildInfoTile("Home Meetup", _user!.homeMeetupId.isEmpty ? "-" : _user!.homeMeetupId, Icons.home),
@@ -162,7 +161,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
         const SizedBox(height: 40),
 
-        // Der "Gefahr"-Button
         SizedBox(
           width: double.infinity,
           height: 50,
@@ -172,7 +170,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               foregroundColor: Colors.redAccent,
             ),
             icon: const Icon(Icons.edit),
-            label: const Text("DATEN ÄNDERN (STATUS VERLIEREN)"),
+            label: const Text("DATEN ÄNDERN & NEU PRÜFEN"),
             onPressed: _unlockEditMode,
           ),
         ),
@@ -180,7 +178,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  // Hilfs-Widget für die Info-Karten
   Widget _buildInfoTile(String label, String value, IconData icon) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -203,13 +200,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ],
             ),
           ),
-          const Icon(Icons.lock, color: Colors.grey, size: 16), // Schloss-Symbol
+          const Icon(Icons.lock, color: Colors.grey, size: 16),
         ],
       ),
     );
   }
 
-  // --- ANSICHT 2: BEARBEITEN (WIE VORHER) ---
+  // --- ANSICHT 2: BEARBEITEN ---
   Widget _buildEditForm() {
     return Form(
       key: _formKey,
@@ -217,13 +214,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "IDENTITÄT ANPASSEN",
+            "DATEN EINGEBEN",
             style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            "Bitte gib deine Daten wahrheitsgemäß an.",
-            style: TextStyle(color: Colors.grey),
+            "Hinweis: Nach dem Speichern musst du dich erneut am Einlass scannen lassen.",
+            style: TextStyle(color: Colors.redAccent),
           ),
           const SizedBox(height: 30),
 
@@ -299,7 +296,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text(
-                "SPEICHERN & STATUS ZURÜCKSETZEN",
+                "SPEICHERN & ZUR VERIFIZIERUNG",
                 style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
               ),
             ),

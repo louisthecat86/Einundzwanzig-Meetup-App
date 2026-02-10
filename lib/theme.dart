@@ -13,6 +13,10 @@ const Color cTextSecondary = Color(0xFFB0B0B0); // Grauer Text
 const Color cTextTertiary = Color(0xFF808080); // Noch grauer
 const Color cBorder = Color(0xFF2A2A2A); // Subtile Borders
 
+// --- NEUE FARBEN FÜR DAS PROFIL-FEATURE ---
+const Color cGreen = Color(0xFF00C853); // Erfolgs-Grün für Verifiziert
+const Color cRed = Color(0xFFCF6679);   // Rot für Warnungen/Logout
+
 // Das globale Design-Thema (Einundzwanzig Style)
 final ThemeData appTheme = ThemeData(
   brightness: Brightness.dark,
@@ -27,7 +31,7 @@ final ThemeData appTheme = ThemeData(
     secondary: cCyan,
     surface: cCard,
     background: cDark,
-    error: Color(0xFFFF4444),
+    error: cRed, // Hier nutzen wir jetzt die Konstante
   ),
   
   // Text Styles
