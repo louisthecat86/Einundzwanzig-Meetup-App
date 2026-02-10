@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
-import '../models/meetup.dart'; // Für die Liste
-import '../services/meetup_service.dart'; // Zum Laden der Liste
+import '../models/meetup.dart'; 
+import '../services/meetup_service.dart'; 
 import '../theme.dart';
 import 'verification_gate.dart'; 
 
@@ -18,10 +18,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final TextEditingController _nicknameController = TextEditingController();
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _nostrController = TextEditingController();
-  final TextEditingController _telegramController = TextEditingController(); // NEU
-  final TextEditingController _twitterController = TextEditingController(); // NEU
+  final TextEditingController _telegramController = TextEditingController();
+  final TextEditingController _twitterController = TextEditingController();
   
-  // Statt Controller speichern wir das gewählte Meetup direkt
   String _selectedHomeMeetup = "";
   List<Meetup> _allMeetups = [];
 
@@ -36,16 +35,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _loadData() async {
-    // 1. User laden
     final user = await UserProfile.load();
-    // 2. Alle Meetups laden (für die Auswahl)
     final meetups = await MeetupService.fetchMeetups();
+
+    // Sortieren wir die Meetups alphabetisch für bessere Übersicht
+    meetups.sort((a, b) => a.city.compareTo(b.city));
 
     setState(() {
       _user = user;
       _allMeetups = meetups;
       
-      // Felder befüllen
       _nicknameController.text = user.nickname;
       _fullNameController.text = user.fullName;
       _nostrController.text = user.nostrNpub;
@@ -58,7 +57,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     });
   }
 
-  // --- MEETUP AUSWAHL DIALOG ---
+  // --- DER NEUE SUCHBARE PICKER ---
   void _showMeetupPicker() {
     showModalBottomSheet(
       context: context,
@@ -66,40 +65,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) {
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text("Wähle dein Home-Meetup", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: _allMeetups.length,
-                    itemBuilder: (context, index) {
-                      final meetup = _allMeetups[index];
-                      return ListTile(
-                        leading: const Icon(Icons.location_city, color: cOrange),
-                        title: Text(meetup.city, style: const TextStyle(color: Colors.white)),
-                        subtitle: Text(meetup.country, style: TextStyle(color: Colors.grey.shade400)),
-                        onTap: () {
-                          setState(() {
-                            _selectedHomeMeetup = meetup.city; // Stadtname speichern
-                          });
-                          Navigator.pop(context); // Schließen
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
+        return MeetupSearchSheet(
+          meetups: _allMeetups,
+          onSelect: (cityName) {
+            setState(() {
+              _selectedHomeMeetup = cityName;
+            });
           },
         );
       },
@@ -113,10 +84,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       final newUser = UserProfile(
         nickname: _nicknameController.text.trim(),
         fullName: _fullNameController.text.trim(),
-        homeMeetupId: _selectedHomeMeetup, // Das gewählte Meetup
+        homeMeetupId: _selectedHomeMeetup,
         nostrNpub: _nostrController.text.trim(),
-        telegramHandle: _telegramController.text.trim(), // NEU
-        twitterHandle: _twitterController.text.trim(), // NEU
+        telegramHandle: _telegramController.text.trim(),
+        twitterHandle: _twitterController.text.trim(),
         isAdminVerified: false, 
         isAdmin: _user?.isAdmin ?? false, 
       );
@@ -177,7 +148,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  // --- ANSICHT: NUR LESEN ---
   Widget _buildReadOnlyView() {
     return Column(
       children: [
@@ -215,7 +185,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  // --- ANSICHT: BEARBEITEN ---
   Widget _buildEditForm() {
     return Form(
       key: _formKey,
@@ -229,7 +198,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           _buildTextField(_fullNameController, "Name (Optional)", Icons.badge),
           const SizedBox(height: 10),
           
-          // MEETUP PICKER (Statt Textfeld)
           InkWell(
             onTap: _showMeetupPicker,
             child: Container(
@@ -269,6 +237,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               child: const Text("SPEICHERN & ZUM EINLASS"),
             ),
           ),
+          const SizedBox(height: 300), // Platz für Tastatur
         ],
       ),
     );
@@ -285,6 +254,82 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       validator: required ? (v) => v!.isEmpty ? "Pflichtfeld" : null : null,
+    );
+  }
+}
+
+// --- EIGENES WIDGET FÜR DIE SUCHE ---
+class MeetupSearchSheet extends StatefulWidget {
+  final List<Meetup> meetups;
+  final Function(String) onSelect;
+
+  const MeetupSearchSheet({super.key, required this.meetups, required this.onSelect});
+
+  @override
+  State<MeetupSearchSheet> createState() => _MeetupSearchSheetState();
+}
+
+class _MeetupSearchSheetState extends State<MeetupSearchSheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  List<Meetup> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.meetups;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filtered = widget.meetups.where((m) => m.city.toLowerCase().contains(query.toLowerCase())).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: "Stadt suchen...",
+                  prefixIcon: Icon(Icons.search, color: cOrange),
+                  filled: true, fillColor: cDark,
+                ),
+                onChanged: _filter,
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: _filtered.length,
+                itemBuilder: (context, index) {
+                  final meetup = _filtered[index];
+                  return ListTile(
+                    leading: const Icon(Icons.location_city, color: cOrange),
+                    title: Text(meetup.city, style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(meetup.country, style: TextStyle(color: Colors.grey.shade400)),
+                    onTap: () {
+                      widget.onSelect(meetup.city);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
