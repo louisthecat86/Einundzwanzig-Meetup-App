@@ -3,7 +3,8 @@ import '../models/user.dart';
 import '../models/meetup.dart'; 
 import '../services/meetup_service.dart'; 
 import '../theme.dart';
-import 'verification_gate.dart'; 
+import 'verification_gate.dart';
+import 'profile_review.dart'; // <--- NEU: Import für den Review Screen
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -41,20 +42,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     // Sortieren wir die Meetups alphabetisch für bessere Übersicht
     meetups.sort((a, b) => a.city.compareTo(b.city));
 
-    setState(() {
-      _user = user;
-      _allMeetups = meetups;
-      
-      _nicknameController.text = user.nickname;
-      _fullNameController.text = user.fullName;
-      _nostrController.text = user.nostrNpub;
-      _telegramController.text = user.telegramHandle;
-      _twitterController.text = user.twitterHandle;
-      _selectedHomeMeetup = user.homeMeetupId;
-      
-      _isEditing = !user.isAdminVerified; 
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _user = user;
+        _allMeetups = meetups;
+        
+        _nicknameController.text = user.nickname;
+        _fullNameController.text = user.fullName;
+        _nostrController.text = user.nostrNpub;
+        _telegramController.text = user.telegramHandle;
+        _twitterController.text = user.twitterHandle;
+        _selectedHomeMeetup = user.homeMeetupId;
+        
+        _isEditing = !user.isAdminVerified; 
+        _isLoading = false;
+      });
+    }
   }
 
   // --- DER NEUE SUCHBARE PICKER ---
@@ -77,10 +80,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
-  Future<void> _saveProfile() async {
+  // --- HIER IST DIE WICHTIGE ÄNDERUNG ---
+  Future<void> _saveAndVerify() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
+      // 1. User Objekt aktualisieren
       final newUser = UserProfile(
         nickname: _nicknameController.text.trim(),
         fullName: _fullNameController.text.trim(),
@@ -92,15 +97,34 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         isAdmin: _user?.isAdmin ?? false, 
       );
 
+      // 2. Speichern
       await newUser.save();
+      
+      setState(() {
+         _user = newUser; // Lokal aktualisieren
+         _isLoading = false;
+      });
 
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => VerificationGateScreen()),
-          (route) => false, 
-        );
-      }
+      if (!mounted) return;
+
+      // 3. JETZT KOMMT DIE WEICHE:
+      // Statt direkt zum Gate zu gehen, zeigen wir erst die Übersicht.
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ProfileReviewScreen(
+            user: newUser, // Wir geben den gespeicherten User weiter
+            onConfirm: () {
+              // 4. ERST WENN HIER BESTÄTIGT WIRD, GEHT ES ZUM NFC SCAN (VerificationGate)
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => VerificationGateScreen()),
+                (route) => false, 
+              );
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -162,7 +186,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         const SizedBox(height: 30),
         _buildInfoTile("Nickname", _user!.nickname, Icons.person),
         _buildInfoTile("Home Meetup", _user!.homeMeetupId.isEmpty ? "-" : _user!.homeMeetupId, Icons.home),
-        if (_user!.nostrNpub.isNotEmpty) _buildInfoTile("Nostr", _user!.nostrNpub.substring(0, 10) + "...", Icons.key),
+        if (_user!.nostrNpub.isNotEmpty) _buildInfoTile("Nostr", _user!.nostrNpub.length > 10 ? "${_user!.nostrNpub.substring(0, 10)}..." : _user!.nostrNpub, Icons.key),
         if (_user!.telegramHandle.isNotEmpty) _buildInfoTile("Telegram", _user!.telegramHandle, Icons.send),
         if (_user!.twitterHandle.isNotEmpty) _buildInfoTile("Twitter", _user!.twitterHandle, Icons.alternate_email),
         const SizedBox(height: 30),
@@ -233,11 +257,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _saveProfile,
-              child: const Text("SPEICHERN & ZUM EINLASS"),
+              // HIER RUFEN WIR JETZT DIE NEUE FUNKTION AUF
+              onPressed: _saveAndVerify,
+              child: const Text("SPEICHERN & ZUR PRÜFUNG"),
             ),
           ),
-          const SizedBox(height: 300), // Platz für Tastatur
+          const SizedBox(height: 300), 
         ],
       ),
     );
@@ -258,7 +283,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 }
 
-// --- EIGENES WIDGET FÜR DIE SUCHE ---
+// --- EIGENES WIDGET FÜR DIE SUCHE (unverändert) ---
 class MeetupSearchSheet extends StatefulWidget {
   final List<Meetup> meetups;
   final Function(String) onSelect;
@@ -280,9 +305,11 @@ class _MeetupSearchSheetState extends State<MeetupSearchSheet> {
   }
 
   void _filter(String query) {
-    setState(() {
-      _filtered = widget.meetups.where((m) => m.city.toLowerCase().contains(query.toLowerCase())).toList();
-    });
+    if (mounted) {
+      setState(() {
+        _filtered = widget.meetups.where((m) => m.city.toLowerCase().contains(query.toLowerCase())).toList();
+      });
+    }
   }
 
   @override
