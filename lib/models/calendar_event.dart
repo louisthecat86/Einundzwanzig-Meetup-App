@@ -1,3 +1,5 @@
+import 'package:icalendar_parser/icalendar_parser.dart';
+
 class CalendarEvent {
   final String title;
   final String description;
@@ -13,43 +15,55 @@ class CalendarEvent {
     required this.url,
   });
 
-  // Diese Funktion verwandelt den iCal-Müll in ein sauberes Objekt
   factory CalendarEvent.fromMap(Map<String, dynamic> map) {
-    // 1. Datum parsen (Format: 20240520T180000)
-    DateTime start = DateTime.now();
+    DateTime start = DateTime.now().add(const Duration(days: 365)); // Fallback weit in Zukunft, damit man Fehler bemerkt
+
     try {
-      String dtString = map['dtstart']?.toString() ?? '';
-      if (dtString.length >= 8) {
-        // Jahr, Monat, Tag extrahieren
-        String y = dtString.substring(0, 4);
-        String m = dtString.substring(4, 6);
-        String d = dtString.substring(6, 8);
-        String h = '00';
-        String min = '00';
-        
-        // Uhrzeit extrahieren (falls vorhanden und mit T getrennt)
-        if (dtString.contains('T') && dtString.length >= 13) {
-          int tIndex = dtString.indexOf('T');
-          h = dtString.substring(tIndex + 1, tIndex + 3);
-          min = dtString.substring(tIndex + 3, tIndex + 5);
+      final dtStart = map['dtstart'];
+
+      // Fall 1: Das Paket hat es schon als IcsDateTime Objekt erkannt
+      if (dtStart is IcsDateTime) {
+        start = dtStart.toDateTime() ?? DateTime.now();
+      } 
+      // Fall 2: Es ist ein String (z.B. "20260210T190000" oder "20260210T190000Z")
+      else if (dtStart is String) {
+        String cleanDt = dtStart.replaceAll('Z', ''); // Zeitzone 'Z' entfernen
+        if (cleanDt.length >= 8) {
+          String y = cleanDt.substring(0, 4);
+          String m = cleanDt.substring(4, 6);
+          String d = cleanDt.substring(6, 8);
+          String time = "000000";
+          
+          if (cleanDt.contains('T')) {
+             final parts = cleanDt.split('T');
+             if (parts.length > 1) {
+               time = parts[1].padRight(6, '0'); // Sicherstellen dass genug Stellen da sind
+             }
+          }
+          
+          String h = time.substring(0, 2);
+          String min = time.substring(2, 4);
+          
+          start = DateTime.parse('$y-$m-$d $h:$min:00');
         }
-        start = DateTime.parse('$y-$m-$d $h:$min:00');
       }
     } catch (e) {
-      print("Datum konnte nicht geparst werden: $e");
+      print("CRITICAL DATE ERROR: $e");
     }
 
-    // 2. Text säubern (Backslashes entfernen)
+    // Text säubern
     String rawDesc = map['description']?.toString() ?? '';
-    // Entferne typische iCal Escape Characters
-    String cleanDesc = rawDesc.replaceAll('\\n', '\n').replaceAll('\\', '');
+    String cleanDesc = rawDesc
+        .replaceAll('\\n', '\n')
+        .replaceAll('\\', '')
+        .replaceAll('\,', ',');
 
     return CalendarEvent(
       title: map['summary']?.toString() ?? 'Meetup',
       description: cleanDesc,
       location: map['location']?.toString() ?? 'Ort unbekannt',
       startTime: start,
-      url: '', // Könnte man aus der Description parsen, falls nötig
+      url: '',
     );
   }
 }
