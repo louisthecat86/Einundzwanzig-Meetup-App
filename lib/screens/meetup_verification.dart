@@ -103,9 +103,16 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               final payload = record.payload;
               // Text-Record hat das Format: [Status-Byte][Language-Code][Text]
               // Status-Byte enthält die Länge des Language-Codes in den unteren 6 Bits
+              // Hinweis: Dies erwartet ein NDEF Text Record (Type 'T')
               if (payload.isNotEmpty) {
                 final languageCodeLength = payload[0] & 0x3F;
                 final textStartIndex = 1 + languageCodeLength;
+                // Prüfe ob genug Daten vorhanden sind
+                if (payload.length < textStartIndex) {
+                  setState(() => _statusText = "❌ Ungültiges Text-Record Format");
+                  await NfcManager.instance.stopSession(errorMessage: 'Ungültiges Format');
+                  return;
+                }
                 jsonString = utf8.decode(payload.sublist(textStartIndex));
               } else {
                 setState(() => _statusText = "❌ Leeres Payload");
