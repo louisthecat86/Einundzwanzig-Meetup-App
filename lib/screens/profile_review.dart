@@ -5,7 +5,7 @@ import '../models/user.dart';
 
 class ProfileReviewScreen extends StatelessWidget {
   final UserProfile user;
-  final VoidCallback onConfirm; // Hier kommt deine alte NFC-Logik rein
+  final VoidCallback onConfirm;
 
   const ProfileReviewScreen({
     super.key, 
@@ -62,30 +62,34 @@ class ProfileReviewScreen extends StatelessWidget {
                 children: [
                   _buildRow("Nickname", user.nickname, Icons.person, null),
                   const Divider(height: 1, color: Colors.white10),
+                  
+                  // KORRIGIERTE FELDNAMEN:
                   _buildRow(
                     "Telegram", 
-                    user.telegram, 
+                    user.telegramHandle, // War user.telegram 
                     Icons.send, 
-                    user.telegram.isNotEmpty 
-                      ? () => _launch("https://t.me/${user.telegram.replaceAll('@','')}", context) 
+                    user.telegramHandle.isNotEmpty 
+                      ? () => _launch("https://t.me/${user.telegramHandle.replaceAll('@','')}", context) 
                       : null
                   ),
                   const Divider(height: 1, color: Colors.white10),
+                  
                   _buildRow(
                     "Twitter / X", 
-                    user.twitter, 
+                    user.twitterHandle, // War user.twitter
                     Icons.alternate_email, 
-                    user.twitter.isNotEmpty 
-                      ? () => _launch("https://twitter.com/${user.twitter.replaceAll('@','')}", context) 
+                    user.twitterHandle.isNotEmpty 
+                      ? () => _launch("https://twitter.com/${user.twitterHandle.replaceAll('@','')}", context) 
                       : null
                   ),
                   const Divider(height: 1, color: Colors.white10),
+                  
                   _buildRow(
                     "Nostr (npub)", 
-                    user.nostr.length > 10 ? "${user.nostr.substring(0,10)}..." : user.nostr, 
+                    user.nostrNpub.length > 10 ? "${user.nostrNpub.substring(0,10)}..." : user.nostrNpub, // War user.nostr
                     Icons.key, 
-                    user.nostr.isNotEmpty 
-                      ? () => _launch("https://njump.me/${user.nostr}", context) 
+                    user.nostrNpub.isNotEmpty 
+                      ? () => _launch("https://njump.me/${user.nostrNpub}", context) 
                       : null
                   ),
                 ],
@@ -104,7 +108,7 @@ class ProfileReviewScreen extends StatelessWidget {
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: onConfirm, // Führt deine existierende Logik aus
+                onPressed: onConfirm,
                 child: const Text(
                   "DATEN SIND KORREKT -> SCANNEN",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
