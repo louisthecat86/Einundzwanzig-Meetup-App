@@ -1,36 +1,43 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:icalendar_parser/icalendar_parser.dart';
+import '../models/calendar_event.dart'; // Importiere das neue Modell
 
 class MeetupCalendarService {
   static const String calendarUrl = 'https://portal.einundzwanzig.space/stream-calendar';
 
-  Future<List<Map<String, dynamic>>> fetchMeetups() async {
+  Future<List<CalendarEvent>> fetchMeetups() async {
     try {
       final response = await http.get(Uri.parse(calendarUrl));
 
       if (response.statusCode == 200) {
-        // Dekodieren als UTF-8 für Umlaute
         final iCalString = utf8.decode(response.bodyBytes);
         final iCalendar = ICalendar.fromString(iCalString);
         
-        List<Map<String, dynamic>> meetups = [];
+        List<CalendarEvent> events = [];
         
         if (iCalendar.data != null) {
           for (var item in iCalendar.data) {
             if (item['type'] == 'VEVENT') {
-              meetups.add(item);
+              // Hier nutzen wir unsere neue "Waschstraße" für Daten
+              events.add(CalendarEvent.fromMap(item));
             }
           }
         }
-        return meetups;
+        
+        // Sortieren: Nächste Termine zuerst
+        events.sort((a, b) => a.startTime.compareTo(b.startTime));
+
+        // Nur Termine in der Zukunft anzeigen (optional)
+        // events = events.where((e) => e.startTime.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
+
+        return events;
       } else {
-        throw Exception('Fehler: ${response.statusCode}');
+        throw Exception('Server Fehler: ${response.statusCode}');
       }
-   } catch (e) {
+    } catch (e) {
       print("Fehler im CalendarService: $e");
-      // WICHTIG: Wir werfen den Fehler weiter, damit der Screen ihn anzeigen kann!
-      throw Exception("Fehler beim Laden: $e"); 
+      return [];
     }
   }
 }

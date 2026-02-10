@@ -15,7 +15,7 @@ import 'admin_panel.dart'; // Neuer Admin Bereich
 import 'events.dart'; // Events/Termine Screen
 import 'meetup_details.dart'; // Meetup Details Screen
 import 'reputation_qr.dart'; // Reputation QR-Code
-import 'calendar_screen.dart';
+import 'calendar_screen.dart'; // WICHTIG: Kalender importiert
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -138,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           IconButton(
              icon: const Icon(Icons.settings),
-             onPressed: _showSettings, // <--- Jetzt funktioniert der Button
+             onPressed: _showSettings,
           )
         ],
       ),
@@ -199,11 +199,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.event,
                   color: cCyan,
                   title: "TERMINE",
-                  subtitle: "Kalender & Events", // Habe ich leicht angepasst
+                  subtitle: "Kalender & Events",
                   onTap: () {
                     Navigator.push(
                       context,
-                      // HIER ÄNDERN: Statt EventsScreen() nimmst du CalendarScreen()
+                      // Öffnet den Kalender ohne Filter (alle Events)
                       MaterialPageRoute(builder: (context) => const CalendarScreen()),
                     );
                   },
@@ -249,22 +249,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // (Die restlichen Widgets _buildHomeMeetupCard und _buildTile bleiben gleich wie vorher)
-  // Um den Code kurz zu halten, füge ich sie hier nicht nochmal ein, wenn du sie brauchst sag Bescheid!
-  // ...
-  // (Füge hier den Code von _buildHomeMeetupCard und _buildTile aus dem vorherigen Schritt wieder ein)
-  
   Widget _buildHomeMeetupCard() {
     bool hasHome = _user.homeMeetupId.isNotEmpty;
     
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        // === HIER IST DIE ÄNDERUNG ===
+        // Wenn man auf die Karte klickt, öffnet sich der Kalender mit Filter auf die Stadt
         onTap: hasHome && _homeMeetup != null ? () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => MeetupDetailsScreen(meetup: _homeMeetup!),
+              builder: (context) => CalendarScreen(
+                initialSearch: _homeMeetup!.city // Wir geben die Stadt als Filter mit
+              ),
             ),
           );
         } : null,
@@ -348,6 +347,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
+                          // Der "DETAILS" Button führt weiterhin zu den technischen Details (Links, Koordinaten etc.)
+                          // Falls du das auch auf den Kalender ändern willst, sag Bescheid!
                           if (_homeMeetup != null) {
                             Navigator.push(
                               context,
