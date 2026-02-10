@@ -137,9 +137,13 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             if (tag.data is Map) {
               tagMap = tag.data as Map;
             } else {
-              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ: " + tag.data.runtimeType.toString());
-              await NfcManager.instance.stopSession();
-              return;
+              try {
+                tagMap = Map.from(tag.data);
+              } catch (_) {
+                setState(() => _statusText = "❌ Fehler: Tag-Typ nicht unterstützt (${tag.data.runtimeType})");
+                await NfcManager.instance.stopSession();
+                return;
+              }
             }
             final ndef = tagMap['ndef'];
             if (ndef == null || ndef['isWritable'] != true) {
