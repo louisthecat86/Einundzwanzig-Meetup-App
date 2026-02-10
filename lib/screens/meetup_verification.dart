@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart'; // <--- Für Mobile einkommentieren
+import 'package:nfc_manager/nfc_manager.dart' as nfc;
 import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
@@ -64,19 +65,25 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     });
 
     // Fallback für Web/Desktop: Simulation
-    if (!NfcManager.instance.isAvailableSync) {
+    final isAvailable = await NfcManager.instance.isAvailable();
+    if (!isAvailable) {
       _simulateHandshake(type);
       return;
     }
 
     try {
-      NfcManager.instance.startSession(
-        onDiscovered: (NfcTag tag) async {
+      await NfcManager.instance.startSession(
+        pollingOptions: {
+          nfc.PollingOption.iso14443,
+          nfc.PollingOption.iso15693,
+          nfc.PollingOption.iso18092,
+        },
+        onDiscovered: (nfc.NfcTag tag) async {
           try {
-            final ndef = Ndef.from(tag);
+            final ndef = nfc.Ndef.from(tag);
             if (ndef == null || ndef.cachedMessage == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession();
               return;
             }
             final record = ndef.cachedMessage!.records.first;
@@ -84,11 +91,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             // Entferne Sprachcode (z.B. "en") falls vorhanden
             String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3) : payload);
             Map<String, dynamic>? tagData = json.decode(jsonString);
-            NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession();
             _processFoundTagData(tagData: tagData);
           } catch (e) {
             setState(() => _statusText = "❌ Fehler beim Lesen: $e");
-            NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession();
           }
         },
       );

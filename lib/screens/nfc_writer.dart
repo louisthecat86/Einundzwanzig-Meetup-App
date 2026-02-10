@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:nfc_manager/nfc_manager.dart' as nfc;
 import 'package:nfc_manager/nfc_manager.dart';
 import '../theme.dart';
 import '../models/user.dart';
@@ -103,7 +104,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     });
 
     // Fallback für Web/Desktop: Simulation
-    if (!NfcManager.instance.isAvailableSync) {
+    final isAvailable = await nfc.NfcManager.instance.isAvailable();
+    if (!isAvailable) {
       await _simulateWriteTag();
       return;
     }
@@ -122,17 +124,22 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     final payload = [0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]; // Sprachcode "en"
 
     try {
-      NfcManager.instance.startSession(
-        onDiscovered: (NfcTag tag) async {
+      await nfc.NfcManager.instance.startSession(
+        pollingOptions: {
+          nfc.PollingOption.iso14443,
+          nfc.PollingOption.iso15693,
+          nfc.PollingOption.iso18092,
+        },
+        onDiscovered: (nfc.NfcTag tag) async {
           try {
-            final ndef = Ndef.from(tag);
+            final ndef = nfc.Ndef.from(tag);
             if (ndef == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag erkannt");
+              await nfc.NfcManager.instance.stopSession();
               return;
             }
-            final ndefMessage = NdefMessage([
-              NdefRecord.createText(jsonData),
+            final ndefMessage = nfc.NdefMessage([
+              nfc.NdefRecord.createText(jsonData),
             ]);
             await ndef.write(ndefMessage);
             setState(() {
@@ -141,12 +148,12 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                   ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
                   : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
             });
-            NfcManager.instance.stopSession();
+            await nfc.NfcManager.instance.stopSession();
             await Future.delayed(const Duration(seconds: 3));
             if (mounted) Navigator.pop(context);
           } catch (e) {
             setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
-            NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
+            await nfc.NfcManager.instance.stopSession();
           }
         },
       );
