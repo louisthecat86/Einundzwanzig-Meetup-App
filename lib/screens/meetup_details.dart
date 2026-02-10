@@ -41,10 +41,12 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
   }
 
   Future<void> _launchURL(String urlString) async {
+    if (urlString.isEmpty) return;
     final Uri url = Uri.parse(urlString);
-    // mode: LaunchMode.externalApplication ist wichtig, damit sich die echte App (Twitter/Maps) öffnet
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konnte Link nicht öffnen')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konnte Link nicht öffnen')));
+      }
     }
   }
 
@@ -180,16 +182,12 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                     child: Row(children: [const Icon(Icons.send, color: Colors.grey, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Telegram", style: TextStyle(color: Colors.grey, fontSize: 12)), Text(widget.meetup.telegramLink, style: const TextStyle(color: cCyan), maxLines: 1, overflow: TextOverflow.ellipsis)])), const Icon(Icons.chevron_right, color: Colors.grey)]),
                   ),
                   
-                  const Divider(color: Colors.white10, height: 30),
-
-                 // Twitter / X (JETZT DYNAMISCH)
-                  // Wir zeigen den Button nur an, wenn ein Twitter-Handle da ist
-                  if (widget.meetup.twitterHandle.isNotEmpty) ...[
-                    const Divider(color: Colors.white10, height: 30),
-                    InkWell(
+                  // Twitter / X (Hier verwenden wir jetzt twitterUsername)
+                  if (widget.meetup.twitterUsername.isNotEmpty) ...[
+                     const Divider(color: Colors.white10, height: 30),
+                     InkWell(
                       onTap: () {
-                         // Twitter Handle säubern (falls @ dabei ist)
-                         final handle = widget.meetup.twitterHandle.replaceAll('@', '');
+                         final handle = widget.meetup.twitterUsername.replaceAll('@', '');
                          _launchURL("https://twitter.com/$handle");
                       },
                       child: Row(
@@ -201,7 +199,7 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text("Twitter / X", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                Text("@${widget.meetup.twitterHandle}", style: const TextStyle(color: cCyan, fontWeight: FontWeight.w500)),
+                                Text("@${widget.meetup.twitterUsername}", style: const TextStyle(color: cCyan, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
@@ -210,10 +208,12 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                       ),
                     ),
                   ],
-                  
+                ],
+              ),
+            ),
              const SizedBox(height: 20),
              
-             // STANDORT SEKTION (MIT FIX FÜR GOOGLE MAPS)
+             // STANDORT SEKTION
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16)),
@@ -227,8 +227,7 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                     children: [
                       Text("${widget.meetup.lat.toStringAsFixed(4)}, ${widget.meetup.lng.toStringAsFixed(4)}", style: const TextStyle(color: Colors.grey, fontFamily: 'monospace')),
                       TextButton.icon(
-                        // Hier war vorher ein Tippfehler mit '0{...}'
-                        onPressed: () => _launchURL("https://www.google.com/maps/search/?api=1&query=${widget.meetup.lat},${widget.meetup.lng}"),
+                        onPressed: () => _launchURL("https://www.google.com/maps/search/?api=1&query=$${widget.meetup.lat},${widget.meetup.lng}"),
                         icon: const Icon(Icons.directions, size: 18),
                         label: const Text("Route"),
                         style: TextButton.styleFrom(foregroundColor: cCyan),

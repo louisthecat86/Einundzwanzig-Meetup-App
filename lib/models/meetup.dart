@@ -9,7 +9,7 @@ class Meetup {
   final String description;
   final String website;
   final String portalLink;
-  final String twitterUsername; // Das Feld nutzen wir
+  final String twitterUsername; // Wir bleiben bei diesem Namen
   final String nostrNpub;
   final String adminSecret;
 
@@ -29,13 +29,12 @@ class Meetup {
     this.adminSecret = "21",
   });
 
-  // HIER IST DAS NEUE: Wir bauen das Objekt aus den Internet-Daten
   factory Meetup.fromJson(Map<String, dynamic> json) {
     return Meetup(
       id: json['id'].toString(),
       city: json['name'] ?? 'Unbekannt',
       country: _parseCountry(json),
-      // Das Portal liefert Twitter manchmal als 'twitter' oder 'twitter_username'
+      // Hier holen wir die Daten aus dem Portal
       twitterUsername: json['twitter'] ?? json['twitter_username'] ?? '', 
       telegramLink: json['telegram'] ?? '',
       website: json['website'] ?? '',
@@ -45,7 +44,6 @@ class Meetup {
     );
   }
 
-  // Kleine Hilfsfunktion um das Land zu bestimmen
   static String _parseCountry(Map<String, dynamic> json) {
     if (json['country'] != null) return json['country'].toString();
     String name = (json['name'] ?? '').toString().toLowerCase();
@@ -56,7 +54,7 @@ class Meetup {
   }
 }
 
-// Demo-Daten (Fallback, falls Internet weg ist)
+// Fallback Daten
 List<Meetup> allMeetups = [
   Meetup(id: "m_muc", city: "München", country: "DE", telegramLink: "t.me/einundzwanzig_muc", lat: 48.1351, lng: 11.5820),
   Meetup(id: "m_hh", city: "Hamburg", country: "DE", telegramLink: "t.me/einundzwanzig_hh", lat: 53.5511, lng: 9.9937),
