@@ -16,39 +16,37 @@ class CalendarEvent {
   });
 
   factory CalendarEvent.fromMap(Map<String, dynamic> map) {
-    DateTime start = DateTime.now().add(const Duration(days: 365)); // Fallback weit in Zukunft, damit man Fehler bemerkt
+    DateTime start = DateTime.now().add(const Duration(days: 365)); // Fallback
 
     try {
       final dtStart = map['dtstart'];
 
-      // Fall 1: Das Paket hat es schon als IcsDateTime Objekt erkannt
+      // Fall A: Das Paket hat es schon erkannt
       if (dtStart is IcsDateTime) {
-        start = dtStart.toDateTime() ?? DateTime.now();
+        start = dtStart.toDateTime() ?? start;
       } 
-      // Fall 2: Es ist ein String (z.B. "20260210T190000" oder "20260210T190000Z")
+      // Fall B: String parsen (Manuell & Robust)
       else if (dtStart is String) {
-        String cleanDt = dtStart.replaceAll('Z', ''); // Zeitzone 'Z' entfernen
-        if (cleanDt.length >= 8) {
-          String y = cleanDt.substring(0, 4);
-          String m = cleanDt.substring(4, 6);
-          String d = cleanDt.substring(6, 8);
-          String time = "000000";
-          
-          if (cleanDt.contains('T')) {
-             final parts = cleanDt.split('T');
-             if (parts.length > 1) {
-               time = parts[1].padRight(6, '0'); // Sicherstellen dass genug Stellen da sind
-             }
+        // Bereinigen: "20260210T183000Z" -> "20260210183000"
+        String s = dtStart.replaceAll(RegExp(r'[^0-9]'), ''); 
+        
+        if (s.length >= 8) {
+          int y = int.parse(s.substring(0, 4));
+          int m = int.parse(s.substring(4, 6));
+          int d = int.parse(s.substring(6, 8));
+          int h = 19; // Standard 19 Uhr
+          int min = 0;
+
+          if (s.length >= 12) {
+             h = int.parse(s.substring(8, 10));
+             min = int.parse(s.substring(10, 12));
           }
-          
-          String h = time.substring(0, 2);
-          String min = time.substring(2, 4);
-          
-          start = DateTime.parse('$y-$m-$d $h:$min:00');
+
+          start = DateTime(y, m, d, h, min);
         }
       }
     } catch (e) {
-      print("CRITICAL DATE ERROR: $e");
+      print("PARSE ERROR: $e");
     }
 
     // Text säubern
