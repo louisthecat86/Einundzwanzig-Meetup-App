@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-// import 'package:nfc_manager/nfc_manager.dart'; // <--- Für Mobile einkommentieren
+import 'package:nfc_manager/nfc_manager.dart'; // <--- Für Mobile einkommentieren
 import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
@@ -56,49 +56,70 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     super.dispose();
   }
 
-  // --- SIMULATION ---
-
+  // --- NFC HANDSHAKE ---
   // type: "BADGE" oder "VERIFY"
-  void _simulateHandshake(String type) async {
+  void _startNfcRead(String type) async {
     setState(() {
-      _statusText = _isChefMode ? "Schreibe Tag..." : "Lese Tag...";
+      _statusText = "Warte auf NFC Tag...";
     });
 
-    await Future.delayed(const Duration(seconds: 1)); // Kurze Wartezeit
-
-    if (_isChefMode) {
-      // ADMIN MODE: Erstellen
-      String createdType = _writeModeBadge ? "BADGE" : "VERIFY";
-      setState(() {
-        _success = true;
-        _statusText = "$createdType Tag erstellt!";
-      });
-    } else {
-      // PLEB MODE: Finden und lesen
-      bool foundBadge = type == "BADGE";
-      bool foundVerify = type == "VERIFY";
-      
-      // Simuliere gelesene Tag-Daten (in echt würden diese vom NFC Tag kommen)
-      Map<String, dynamic>? tagData;
-      if (foundBadge) {
-        // Simuliere Badge-Tag mit Meetup-Daten
-        tagData = {
-          'type': 'BADGE',
-          'meetup_id': widget.meetup.id,
-          'meetup_name': widget.meetup.city,
-          'meetup_country': widget.meetup.country,
-          'meetup_date': DateTime.now().toIso8601String(),
-          'timestamp': DateTime.now().toIso8601String(),
-        };
-      } else if (foundVerify) {
-        tagData = {
-          'type': 'VERIFY',
-          'timestamp': DateTime.now().toIso8601String(),
-        };
-      }
-      
-      _processFoundTagData(tagData: tagData);
+    // Fallback für Web/Desktop: Simulation
+    if (!NfcManager.instance.isAvailableSync) {
+      _simulateHandshake(type);
+      return;
     }
+
+    try {
+      NfcManager.instance.startSession(
+        onDiscovered: (NfcTag tag) async {
+          try {
+            final ndef = Ndef.from(tag);
+            if (ndef == null || ndef.cachedMessage == null) {
+              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
+              NfcManager.instance.stopSession();
+              return;
+            }
+            final record = ndef.cachedMessage!.records.first;
+            final payload = record.payload;
+            // Entferne Sprachcode (z.B. "en") falls vorhanden
+            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3) : payload);
+            Map<String, dynamic>? tagData = json.decode(jsonString);
+            NfcManager.instance.stopSession();
+            _processFoundTagData(tagData: tagData);
+          } catch (e) {
+            setState(() => _statusText = "❌ Fehler beim Lesen: $e");
+            NfcManager.instance.stopSession();
+          }
+        },
+      );
+    } catch (e) {
+      setState(() => _statusText = "❌ NFC Fehler: $e");
+    }
+  }
+
+  // Simulation für Web/Desktop
+  void _simulateHandshake(String type) async {
+    setState(() {
+      _statusText = _isChefMode ? "Schreibe Tag... (SIM)" : "Lese Tag... (SIM)";
+    });
+    await Future.delayed(const Duration(seconds: 1));
+    Map<String, dynamic>? tagData;
+    if (type == "BADGE") {
+      tagData = {
+        'type': 'BADGE',
+        'meetup_id': widget.meetup.id,
+        'meetup_name': widget.meetup.city,
+        'meetup_country': widget.meetup.country,
+        'meetup_date': DateTime.now().toIso8601String(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    } else if (type == "VERIFY") {
+      tagData = {
+        'type': 'VERIFY',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+    }
+    _processFoundTagData(tagData: tagData);
   }
 
   // --- VERARBEITUNG DER DATEN ---
@@ -310,9 +331,9 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               SizedBox(
                 width: 250, height: 50,
                 child: ElevatedButton(
-                  onPressed: () => _simulateHandshake("CREATE"),
+                  onPressed: () => _startNfcRead(_writeModeBadge ? "BADGE" : "VERIFY"),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                  child: const Text("TAG ERSTELLEN (SIM)", style: TextStyle(color: Colors.white)),
+                  child: const Text("TAG ERSTELLEN (NFC)", style: TextStyle(color: Colors.white)),
                 ),
               ),
             ] 
@@ -325,7 +346,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 SizedBox(
                   width: 250, height: 50,
                   child: ElevatedButton(
-                    onPressed: () => _simulateHandshake("VERIFY"),
+                    onPressed: () => _startNfcRead("VERIFY"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white12,
                       side: const BorderSide(color: cCyan),
@@ -341,7 +362,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 SizedBox(
                   width: 250, height: 50,
                   child: ElevatedButton(
-                    onPressed: () => _simulateHandshake("BADGE"),
+                    onPressed: () => _startNfcRead("BADGE"),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
                     child: const Text("BADGE FINDEN (SIM)", style: TextStyle(color: Colors.white)),
                   ),

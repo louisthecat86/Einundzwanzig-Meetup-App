@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'package:nfc_manager/nfc_manager.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -98,38 +99,74 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
 
     setState(() {
-      _statusText = "Schreibe Tag...";
+      _statusText = "Warte auf NFC Tag zum Schreiben...";
     });
 
-    // Simulation des Schreibvorgangs
-    await Future.delayed(const Duration(seconds: 2));
+    // Fallback für Web/Desktop: Simulation
+    if (!NfcManager.instance.isAvailableSync) {
+      await _simulateWriteTag();
+      return;
+    }
 
-    // Hier würde der echte NFC-Schreibvorgang stattfinden
-    // Für die Simulation erstellen wir einfach die entsprechenden Daten
-    
     Map<String, dynamic> tagData = {
       'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
       'timestamp': DateTime.now().toIso8601String(),
     };
-
-    // Meetup-Daten für Badge-Tags hinzufügen
     if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
       tagData['meetup_id'] = _homeMeetup!.id;
       tagData['meetup_name'] = _homeMeetup!.city;
       tagData['meetup_country'] = _homeMeetup!.country;
-      tagData['meetup_date'] = DateTime.now().toIso8601String(); // Datum des Tag-Schreibens
+      tagData['meetup_date'] = DateTime.now().toIso8601String();
     }
-    
     String jsonData = jsonEncode(tagData);
-    
+    final payload = [0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]; // Sprachcode "en"
+
+    try {
+      NfcManager.instance.startSession(
+        onDiscovered: (NfcTag tag) async {
+          try {
+            final ndef = Ndef.from(tag);
+            if (ndef == null) {
+              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
+              NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag erkannt");
+              return;
+            }
+            final ndefMessage = NdefMessage([
+              NdefRecord.createText(jsonData),
+            ]);
+            await ndef.write(ndefMessage);
+            setState(() {
+              _success = true;
+              _statusText = widget.mode == NFCWriteMode.badge
+                  ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+                  : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
+            });
+            NfcManager.instance.stopSession();
+            await Future.delayed(const Duration(seconds: 3));
+            if (mounted) Navigator.pop(context);
+          } catch (e) {
+            setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
+            NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
+          }
+        },
+      );
+    } catch (e) {
+      setState(() => _statusText = "❌ NFC Fehler: $e");
+    }
+  }
+
+  // Simulation für Web/Desktop
+  Future<void> _simulateWriteTag() async {
+    setState(() {
+      _statusText = "Schreibe Tag... (SIM)";
+    });
+    await Future.delayed(const Duration(seconds: 2));
     setState(() {
       _success = true;
       _statusText = widget.mode == NFCWriteMode.badge
-          ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+          ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup?.city ?? "?"}, ${_homeMeetup?.country ?? "?"}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
           : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
     });
-
-    // Nach 3 Sekunden zurück
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) Navigator.pop(context);
   }
