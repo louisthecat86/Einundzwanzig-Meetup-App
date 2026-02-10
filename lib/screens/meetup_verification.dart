@@ -79,28 +79,51 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (tag) async {
           try {
-            // Versuche NDEF-Daten zu extrahieren (Android/iOS unterschiedlich!)
-            final tagMap = tag.data as Map;
-            final ndef = tagMap['ndef'];
-            if (ndef == null || ndef['cachedMessage'] == null) {
+            // Versuche NDEF-Daten zu lesen
+            final ndef = Ndef.from(tag);
+            if (ndef == null || ndef.cachedMessage == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession(errorMessage: 'Kein NDEF-Tag');
               return;
             }
-            final records = ndef['cachedMessage']['records'] as List<dynamic>;
+            
+            final records = ndef.cachedMessage!.records;
             if (records.isEmpty) {
               setState(() => _statusText = "❌ Kein NDEF-Record gefunden");
-              await NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession(errorMessage: 'Tag ist leer');
               return;
             }
-            final payload = records[0]['payload'] as List<dynamic>;
-            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3).cast<int>() : payload.cast<int>());
+            
+            // Lese das erste Text-Record
+            final record = records[0];
+            String jsonString;
+            
+            // Text-Record dekodieren
+            if (record.typeNameFormat == NdefTypeNameFormat.nfcWellKnown) {
+              final payload = record.payload;
+              // Text-Record hat das Format: [Status-Byte][Language-Code][Text]
+              // Status-Byte enthält die Länge des Language-Codes in den unteren 6 Bits
+              if (payload.isNotEmpty) {
+                final languageCodeLength = payload[0] & 0x3F;
+                final textStartIndex = 1 + languageCodeLength;
+                jsonString = utf8.decode(payload.sublist(textStartIndex));
+              } else {
+                setState(() => _statusText = "❌ Leeres Payload");
+                await NfcManager.instance.stopSession(errorMessage: 'Leeres Payload');
+                return;
+              }
+            } else {
+              setState(() => _statusText = "❌ Unbekanntes Record-Format");
+              await NfcManager.instance.stopSession(errorMessage: 'Unbekanntes Format');
+              return;
+            }
+            
             Map<String, dynamic>? tagData = json.decode(jsonString);
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(alertMessage: 'Tag erfolgreich gelesen!');
             _processFoundTagData(tagData: tagData);
           } catch (e) {
             setState(() => _statusText = "❌ Fehler beim Lesen: $e");
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(errorMessage: e.toString());
           }
         },
       );
@@ -345,7 +368,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 child: ElevatedButton(
                   onPressed: () => _startNfcRead(_writeModeBadge ? "BADGE" : "VERIFY"),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                  child: const Text("TAG ERSTELLEN (NFC)", style: TextStyle(color: Colors.white)),
+                  child: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white)),
                 ),
               ),
             ] 
@@ -376,7 +399,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                   child: ElevatedButton(
                     onPressed: () => _startNfcRead("BADGE"),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                    child: const Text("BADGE FINDEN (SIM)", style: TextStyle(color: Colors.white)),
+                    child: const Text("BADGE FINDEN", style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ],
