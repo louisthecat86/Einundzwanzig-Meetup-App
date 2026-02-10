@@ -27,9 +27,10 @@ class MeetupCalendarService {
       } else {
         throw Exception('Fehler: ${response.statusCode}');
       }
-    } catch (e) {
+   } catch (e) {
       print("Fehler im CalendarService: $e");
-      return []; // Leere Liste bei Fehler (damit die App nicht abstürzt)
+      // WICHTIG: Wir werfen den Fehler weiter, damit der Screen ihn anzeigen kann!
+      throw Exception("Fehler beim Laden: $e"); 
     }
   }
 }
