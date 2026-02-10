@@ -133,7 +133,16 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         onDiscovered: (tag) async {
           try {
             // Versuche NDEF zu schreiben (Android/iOS unterschiedlich!)
-            final tagMap = tag.data as Map;
+            dynamic tagMap;
+            if (tag.data is Map) {
+              tagMap = tag.data as Map;
+            } else if (tag.data.runtimeType.toString().contains('TagPigeon') && tag.data.toJson != null) {
+              tagMap = tag.data.toJson();
+            } else {
+              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ: "+tag.data.runtimeType.toString());
+              await NfcManager.instance.stopSession();
+              return;
+            }
             final ndef = tagMap['ndef'];
             if (ndef == null || ndef['isWritable'] != true) {
               setState(() => _statusText = "❌ Kein beschreibbarer NDEF-Tag erkannt");
