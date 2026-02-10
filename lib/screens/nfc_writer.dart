@@ -136,10 +136,10 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             dynamic tagMap;
             if (tag.data is Map) {
               tagMap = tag.data as Map;
-            } else if (tag.data.runtimeType.toString().contains('TagPigeon') && tag.data.toJson != null) {
-              tagMap = tag.data.toJson();
+            } else if (tag.data is TagPigeon) {
+              tagMap = (tag.data as TagPigeon).toJson();
             } else {
-              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ: "+tag.data.runtimeType.toString());
+              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ: " + tag.data.runtimeType.toString());
               await NfcManager.instance.stopSession();
               return;
             }
