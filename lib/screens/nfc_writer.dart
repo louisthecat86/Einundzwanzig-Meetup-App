@@ -139,7 +139,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             } else {
               // Versuche, das Feld ndef direkt auszulesen (Workaround für Pigeon-Objekte)
               try {
-                final ndef = tag.data.ndef;
+                final ndef = (tag.data as dynamic).ndef;
                 tagMap = {'ndef': ndef};
               } catch (_) {
                 setState(() => _statusText = "❌ Fehler: Tag-Typ nicht unterstützt (${tag.data.runtimeType})");
