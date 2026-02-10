@@ -2,9 +2,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProfile {
   String nickname;
-  String fullName; // <--- NEU
+  String fullName; 
   String telegramHandle;
-  String nostrPubkey; // <--- Umbenannt (vorher nostrNpub), damit es zum Edit-Screen passt
+  String nostrNpub; // <--- WIEDER ZURÜCKGENANNT (damit der Rest der App funktioniert)
   String twitterHandle;
   bool isNostrVerified; 
   bool isAdminVerified; 
@@ -13,9 +13,9 @@ class UserProfile {
 
   UserProfile({
     this.nickname = "Anon",
-    this.fullName = "", // <--- NEU
+    this.fullName = "", 
     this.telegramHandle = "",
-    this.nostrPubkey = "", // <--- Geändert
+    this.nostrNpub = "", // <--- Hier auch
     this.twitterHandle = "",
     this.isNostrVerified = false,
     this.isAdminVerified = false,
@@ -27,9 +27,9 @@ class UserProfile {
     final prefs = await SharedPreferences.getInstance();
     return UserProfile(
       nickname: prefs.getString('nickname') ?? "Anon",
-      fullName: prefs.getString('full_name') ?? "", // <--- NEU
+      fullName: prefs.getString('full_name') ?? "", 
       telegramHandle: prefs.getString('telegram') ?? "",
-      nostrPubkey: prefs.getString('nostr') ?? "", // Wir nutzen weiterhin den Key 'nostr' damit alte Daten bleiben
+      nostrNpub: prefs.getString('nostr') ?? "", // <--- Hier auch
       twitterHandle: prefs.getString('twitter') ?? "",
       isNostrVerified: prefs.getBool('nostr_verified') ?? false,
       isAdminVerified: prefs.getBool('admin_verified') ?? false,
@@ -41,9 +41,9 @@ class UserProfile {
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('nickname', nickname);
-    await prefs.setString('full_name', fullName); // <--- NEU
+    await prefs.setString('full_name', fullName);
     await prefs.setString('telegram', telegramHandle);
-    await prefs.setString('nostr', nostrPubkey); // Speichert unter dem alten Key 'nostr'
+    await prefs.setString('nostr', nostrNpub); // <--- Hier auch
     await prefs.setString('twitter', twitterHandle);
     await prefs.setBool('nostr_verified', isNostrVerified);
     await prefs.setBool('admin_verified', isAdminVerified);

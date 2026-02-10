@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../theme.dart';
-import 'verification_gate.dart'; // WICHTIG: Importieren, damit wir dahin umleiten können!
+import 'verification_gate.dart'; 
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -35,9 +35,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _nicknameController.text = user.nickname;
       _fullNameController.text = user.fullName;
       _homeMeetupController.text = user.homeMeetupId;
-      _nostrController.text = user.nostrPubkey;
+      _nostrController.text = user.nostrNpub; // <--- Hier geändert zu nostrNpub
       
-      // Wenn NICHT verifiziert, sind wir automatisch im Edit-Modus.
       _isEditing = !user.isAdminVerified; 
       
       _isLoading = false;
@@ -48,27 +47,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      // Neue Daten speichern -> Status wird FALSE
       final newUser = UserProfile(
         nickname: _nicknameController.text.trim(),
         fullName: _fullNameController.text.trim(),
         homeMeetupId: _homeMeetupController.text.trim(),
-        nostrPubkey: _nostrController.text.trim(),
-        isAdminVerified: false, // VERIFIZIERUNG WEG!
+        nostrNpub: _nostrController.text.trim(), // <--- Hier geändert zu nostrNpub
+        isAdminVerified: false, 
         isAdmin: _user?.isAdmin ?? false, 
       );
 
       await newUser.save();
 
       if (mounted) {
-        // HIER IST DIE ÄNDERUNG:
-        // Statt nur 'pop' (zurück), werfen wir den User komplett zum Verification Gate
-        // und löschen den Verlauf, damit er nicht "Zurück" drücken kann.
-        
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => VerificationGateScreen()),
-          (route) => false, // Alle vorherigen Routen löschen
+          (route) => false, 
         );
       }
     }
@@ -157,7 +151,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         _buildInfoTile("Nickname", _user!.nickname, Icons.person),
         _buildInfoTile("Voller Name", _user!.fullName.isEmpty ? "-" : _user!.fullName, Icons.badge),
         _buildInfoTile("Home Meetup", _user!.homeMeetupId.isEmpty ? "-" : _user!.homeMeetupId, Icons.home),
-        _buildInfoTile("Nostr Pubkey", _user!.nostrPubkey.isEmpty ? "-" : _user!.nostrPubkey, Icons.key),
+        _buildInfoTile("Nostr Pubkey", _user!.nostrNpub.isEmpty ? "-" : _user!.nostrNpub, Icons.key), // <--- Hier geändert
 
         const SizedBox(height: 40),
 
