@@ -56,6 +56,7 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
 
   String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
+  // POPUP FÜR TERMIN DETAILS
   void _showEventDetails(CalendarEvent event) {
     showModalBottomSheet(
       context: context,
@@ -122,6 +123,7 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // HEADER (Land & Stadt)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(border: Border.all(color: cOrange), borderRadius: BorderRadius.circular(8)),
@@ -131,7 +133,7 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
             Text(widget.meetup.city, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
             const SizedBox(height: 32),
 
-            // TERMINE SEKTION
+            // TERMINE SEKTION (Klickbar!)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -165,8 +167,8 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            
-            // LINKS SEKTION
+
+            // LINKS SEKTION (Mit Twitter!)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16)),
@@ -181,14 +183,14 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                     onTap: () => _launchURL(widget.meetup.telegramLink),
                     child: Row(children: [const Icon(Icons.send, color: Colors.grey, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Telegram", style: TextStyle(color: Colors.grey, fontSize: 12)), Text(widget.meetup.telegramLink, style: const TextStyle(color: cCyan), maxLines: 1, overflow: TextOverflow.ellipsis)])), const Icon(Icons.chevron_right, color: Colors.grey)]),
                   ),
-                  
-                  // Twitter / X (Hier verwenden wir jetzt twitterUsername)
+
+                  // Twitter / X (Aus deinem Code wiederhergestellt)
                   if (widget.meetup.twitterUsername.isNotEmpty) ...[
-                     const Divider(color: Colors.white10, height: 30),
-                     InkWell(
+                      const Divider(color: Colors.white10, height: 30),
+                      InkWell(
                       onTap: () {
-                         final handle = widget.meetup.twitterUsername.replaceAll('@', '');
-                         _launchURL("https://twitter.com/$handle");
+                          final handle = widget.meetup.twitterUsername.replaceAll('@', '');
+                          _launchURL("https://twitter.com/$handle");
                       },
                       child: Row(
                         children: [
@@ -212,8 +214,8 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
               ),
             ),
              const SizedBox(height: 20),
-             
-             // STANDORT SEKTION
+
+             // STANDORT SEKTION (Reparierter Link)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16)),
@@ -226,8 +228,10 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text("${widget.meetup.lat.toStringAsFixed(4)}, ${widget.meetup.lng.toStringAsFixed(4)}", style: const TextStyle(color: Colors.grey, fontFamily: 'monospace')),
+                      
+                      // KORRIGIERTER ROUTE BUTTON (Mit $ und sauberer URL)
                       TextButton.icon(
-                        onPressed: () => _launchURL("https://www.google.com/maps/search/?api=1&query=$${widget.meetup.lat},${widget.meetup.lng}"),
+                        onPressed: () => _launchURL("https://www.google.com/maps/search/?api=1&query=${widget.meetup.lat},${widget.meetup.lng}"),
                         icon: const Icon(Icons.directions, size: 18),
                         label: const Text("Route"),
                         style: TextButton.styleFrom(foregroundColor: cCyan),
