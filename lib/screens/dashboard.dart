@@ -15,6 +15,7 @@ import 'admin_panel.dart'; // Neuer Admin Bereich
 import 'events.dart'; // Events/Termine Screen
 import 'meetup_details.dart'; // Meetup Details Screen
 import 'reputation_qr.dart'; // Reputation QR-Code
+import 'calendar_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -198,11 +199,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.event,
                   color: cCyan,
                   title: "TERMINE",
-                  subtitle: "Alle Events",
+                  subtitle: "Kalender & Events", // Habe ich leicht angepasst
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const EventsScreen()),
+                      // HIER ÄNDERN: Statt EventsScreen() nimmst du CalendarScreen()
+                      MaterialPageRoute(builder: (context) => const CalendarScreen()),
                     );
                   },
                 ),
