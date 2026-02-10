@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart'; // <--- Für Mobile einkommentieren
-import 'package:nfc_manager/nfc_manager.dart' as nfc;
+import 'package:nfc_manager/nfc_manager.dart';
 import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
@@ -74,22 +73,27 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     try {
       await NfcManager.instance.startSession(
         pollingOptions: {
-          nfc.PollingOption.iso14443,
-          nfc.PollingOption.iso15693,
-          nfc.PollingOption.iso18092,
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+          NfcPollingOption.iso18092,
         },
-        onDiscovered: (nfc.NfcTag tag) async {
+        onDiscovered: (tag) async {
           try {
-            final ndef = nfc.Ndef.from(tag);
-            if (ndef == null || ndef.cachedMessage == null) {
+            // Versuche NDEF-Daten zu extrahieren (Android/iOS unterschiedlich!)
+            final ndef = tag.data['ndef'];
+            if (ndef == null || ndef['cachedMessage'] == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
               await NfcManager.instance.stopSession();
               return;
             }
-            final record = ndef.cachedMessage!.records.first;
-            final payload = record.payload;
-            // Entferne Sprachcode (z.B. "en") falls vorhanden
-            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3) : payload);
+            final records = ndef['cachedMessage']['records'] as List<dynamic>;
+            if (records.isEmpty) {
+              setState(() => _statusText = "❌ Kein NDEF-Record gefunden");
+              await NfcManager.instance.stopSession();
+              return;
+            }
+            final payload = records[0]['payload'] as List<dynamic>;
+            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3).cast<int>() : payload.cast<int>());
             Map<String, dynamic>? tagData = json.decode(jsonString);
             await NfcManager.instance.stopSession();
             _processFoundTagData(tagData: tagData);

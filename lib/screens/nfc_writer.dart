@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:nfc_manager/nfc_manager.dart' as nfc;
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import '../theme.dart';
 import '../models/user.dart';
@@ -104,7 +104,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     });
 
     // Fallback für Web/Desktop: Simulation
-    final isAvailable = await nfc.NfcManager.instance.isAvailable();
+    final isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) {
       await _simulateWriteTag();
       return;
@@ -124,36 +124,41 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     final payload = [0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]; // Sprachcode "en"
 
     try {
-      await nfc.NfcManager.instance.startSession(
+      await NfcManager.instance.startSession(
         pollingOptions: {
-          nfc.PollingOption.iso14443,
-          nfc.PollingOption.iso15693,
-          nfc.PollingOption.iso18092,
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+          NfcPollingOption.iso18092,
         },
-        onDiscovered: (nfc.NfcTag tag) async {
+        onDiscovered: (tag) async {
           try {
-            final ndef = nfc.Ndef.from(tag);
-            if (ndef == null) {
-              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await nfc.NfcManager.instance.stopSession();
+            // Versuche NDEF zu schreiben (Android/iOS unterschiedlich!)
+            final ndef = tag.data['ndef'];
+            if (ndef == null || ndef['isWritable'] != true) {
+              setState(() => _statusText = "❌ Kein beschreibbarer NDEF-Tag erkannt");
+              await NfcManager.instance.stopSession();
               return;
             }
-            final ndefMessage = nfc.NdefMessage([
-              nfc.NdefRecord.createText(jsonData),
-            ]);
-            await ndef.write(ndefMessage);
+            // Schreibe NDEF-Text-Record (Payload als JSON)
+            final payload = utf8.encode(jsonData);
+            final ndefWrite = {
+              'type': 'text',
+              'identifier': '',
+              'payload': payload,
+            };
+            await NfcManager.instance.writeNdefRecords([ndefWrite]);
             setState(() {
               _success = true;
               _statusText = widget.mode == NFCWriteMode.badge
                   ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
                   : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
             });
-            await nfc.NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession();
             await Future.delayed(const Duration(seconds: 3));
             if (mounted) Navigator.pop(context);
           } catch (e) {
             setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
-            await nfc.NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession();
           }
         },
       );
