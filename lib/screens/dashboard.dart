@@ -16,6 +16,7 @@ import 'events.dart'; // Events/Termine Screen
 import 'meetup_details.dart'; // Meetup Details Screen
 import 'reputation_qr.dart'; // Reputation QR-Code
 import 'calendar_screen.dart'; // WICHTIG: Kalender importiert
+import '../services/backup_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -91,26 +92,105 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showModalBottomSheet(
       context: context, 
       backgroundColor: cCard,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        height: 250,
+      isScrollControlled: true, // Erlaubt dem Sheet, größer zu werden
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // Nimmt nur so viel Platz wie nötig
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("EINSTELLUNGEN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Center(
+              child: Container(
+                width: 40, height: 4, 
+                decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
             const SizedBox(height: 20),
+            const Text("DATENSICHERUNG", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 10),
+            
+            // --- BACKUP EXPORT ---
             ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text("App zurücksetzen / Logout", style: TextStyle(color: Colors.white)),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.upload, color: Colors.blue),
+              ),
+              title: const Text("Backup erstellen", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Sichere deinen Account als Datei.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () async {
+                Navigator.pop(context); // Menü schließen
+                await BackupService.createBackup(context);
+              },
+            ),
+
+            // --- BACKUP IMPORT ---
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.download, color: Colors.green),
+              ),
+              title: const Text("Backup importieren", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Stelle Daten aus einer Datei wieder her.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () async {
+                Navigator.pop(context); // Menü erst schließen
+                
+                // Warnung anzeigen
+                bool confirm = await showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: cCard,
+                    title: const Text("Achtung", style: TextStyle(color: Colors.white)),
+                    content: const Text(
+                      "Der Import überschreibt deine aktuellen Daten auf diesem Gerät. Willst du fortfahren?",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbruch")),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true), 
+                        child: const Text("Überschreiben", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+                      ),
+                    ],
+                  )
+                ) ?? false;
+
+                if (confirm) {
+                  bool success = await BackupService.restoreBackup(context);
+                  if (success) {
+                    // WICHTIG: Dashboard neu laden, damit die neuen Badges angezeigt werden!
+                    _loadUser();
+                    _loadBadges();
+                  }
+                }
+              },
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 10),
+            
+            const Text("ACCOUNT", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 10),
+
+            // --- RESET ---
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.red.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.delete_forever, color: Colors.red),
+              ),
+              title: const Text("App zurücksetzen", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Löscht alle lokalen Daten.", style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: _resetApp,
             ),
-             ListTile(
-              leading: const Icon(Icons.close, color: Colors.grey),
-              title: const Text("Abbrechen", style: TextStyle(color: Colors.grey)),
-              onTap: () => Navigator.pop(context),
-            )
           ],
         ),
-      )
+      ),
     );
   }
 
