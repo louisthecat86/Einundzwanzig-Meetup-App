@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:crypto/crypto.dart'; // <--- WICHTIG: Für den Hash
+import 'dart:convert';             // <--- WICHTIG: Für utf8
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart'; 
@@ -15,8 +17,9 @@ class VerificationGateScreen extends StatefulWidget {
 class _VerificationGateScreenState extends State<VerificationGateScreen> {
   final TextEditingController _pwController = TextEditingController();
   
-  // Admin-Passwort (wird beim Compile obfuskiert)
-  static const String _adminPassword = "#21AdminTag21#";
+  // HIER IST DEIN NEUER HASH
+  // Das Klartext-Passwort steht nirgendwo mehr im Code!
+  static const String _adminPasswordHash = "5d3e17aa4120142e8ef1e124c1a164070654efafb29f3267e56d2e7ffa8aa441";
 
   void _startVerification() async {
     // Dummy Meetup für Scan
@@ -43,6 +46,13 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
         MaterialPageRoute(builder: (context) => const DashboardScreen())
       );
     }
+  }
+
+  // Hilfsfunktion: Hasht einen String (Eingabe -> Fingerabdruck)
+  String _hashPassword(String password) {
+    final bytes = utf8.encode(password);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
   }
 
   // --- DIE HINTERTÜR FÜR ORGANISATOREN ---
@@ -74,20 +84,27 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: cOrange),
             onPressed: () async {
-              // Passwort direkt prüfen
-              if (_pwController.text == _adminPassword) {
+              
+              // 1. Eingabe nehmen
+              final input = _pwController.text;
+              
+              // 2. Eingabe hashen (Fingerabdruck berechnen)
+              final inputHash = _hashPassword(input);
+
+              // 3. Hashes vergleichen
+              if (inputHash == _adminPasswordHash) {
+                
                 // SUCCESS: User wird Admin UND verifiziert
                 final user = await UserProfile.load();
-                user.isAdmin = true; // Hat Admin-Rechte
-                user.isAdminVerified = true; // Identität bestätigt
-                // Wenn der Nutzer einen Nostr npub hat, verifizieren wir diesen auch
+                user.isAdmin = true; 
+                user.isAdminVerified = true; 
                 if (user.nostrNpub.isNotEmpty) {
                   user.isNostrVerified = true;
                 }
                 await user.save();
                 
                 if (mounted) {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Dialog zu
                   Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Willkommen, Admin! ⚡️")));
                 }
@@ -139,8 +156,6 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
               ),
             ),
             const SizedBox(height: 30),
-            
-            // LINK FÜR ADMINS
             TextButton(
               onPressed: _showAdminLogin, 
               child: const Text("Ich bin Organisator / Admin", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline))
