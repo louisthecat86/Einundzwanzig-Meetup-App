@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';           // NfcManager, NfcTag, NfcPollingOption, NfcAvailability, NdefFormatableAndroid
-import 'package:nfc_manager/ndef_record.dart';            // NdefRecord, NdefMessage, NdefTypeNameFormat
-import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';  // Ndef (cross-platform NDEF)
+import 'package:nfc_manager/nfc_manager.dart';             // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager/ndef_record.dart';              // NdefRecord, NdefMessage, TypeNameFormat
+import 'package:nfc_manager/nfc_manager_android.dart';      // NdefFormatableAndroid
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -116,10 +117,10 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     String jsonData = jsonEncode(tagData);
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
-    // v4.x: NdefMessage mit named parameter 'records:'
+    // v4.x: named parameter 'records:', TypeNameFormat.wellKnown
     final message = NdefMessage(records: [
       NdefRecord(
-        typeNameFormat: NdefTypeNameFormat.nfcWellknown,
+        typeNameFormat: TypeNameFormat.wellKnown,
         type: Uint8List.fromList([0x54]),
         identifier: Uint8List(0),
         payload: payload,
@@ -135,7 +136,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
-              // v4.x: NdefFormatableAndroid statt NdefFormatable
+              // v4.x: NdefFormatableAndroid aus nfc_manager_android.dart
               var formatable = NdefFormatableAndroid.from(tag);
               if (formatable != null) {
                 try {
@@ -160,7 +161,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               return;
             }
 
-            // v4.x: write mit named parameter 'message:'
+            // v4.x: named parameter 'message:'
             await ndef.write(message: message);
             await NfcManager.instance.stopSession();
             _handleSuccessInUI();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';           // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
-import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';  // Ndef (cross-platform NDEF)
+import 'package:nfc_manager/nfc_manager.dart';             // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import 'dart:convert';
 import 'dart:typed_data';
 import '../theme.dart';
@@ -81,9 +81,9 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               return;
             }
 
-            // v4.x: read() statt cachedMessage
+            // v4.x: read() gibt NdefMessage? zurück (nullable)
             final ndefMessage = await ndef.read();
-            if (ndefMessage.records.isEmpty) {
+            if (ndefMessage == null || ndefMessage.records.isEmpty) {
               await NfcManager.instance.stopSession();
               return;
             }
