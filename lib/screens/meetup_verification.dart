@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-// Wir importieren ALLES, um sicherzugehen
-import 'package:nfc_manager/nfc_manager.dart'; 
+import 'package:nfc_manager/nfc_manager.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../theme.dart';
@@ -75,22 +74,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           try {
             final ndef = Ndef.from(tag);
             if (ndef == null) {
-              await NfcManager.instance.stopSession(); 
-              setState(() => _statusText = "❌ Kein NDEF Tag");
+              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF Tag");
               return;
             }
 
             final cachedMessage = ndef.cachedMessage;
             if (cachedMessage == null || cachedMessage.records.isEmpty) {
-              await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Tag ist leer");
+              await NfcManager.instance.stopSession(errorMessage: "Tag ist leer");
               return;
             }
 
             final payload = cachedMessage.records.first.payload;
             if (payload.isEmpty) {
-               await NfcManager.instance.stopSession();
-               setState(() => _statusText = "❌ Payload leer");
+               await NfcManager.instance.stopSession(errorMessage: "Payload leer");
               return;
             }
 
@@ -98,8 +94,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             final textStart = 1 + languageCodeLength;
             
             if (payload.length <= textStart) {
-               await NfcManager.instance.stopSession();
-               setState(() => _statusText = "❌ Format ungültig");
+               await NfcManager.instance.stopSession(errorMessage: "Format ungültig");
               return;
             }
 
@@ -107,17 +102,16 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             
             try {
               final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
-              await NfcManager.instance.stopSession();
+              // Erfolgreich gelesen -> Feedback geben
+              await NfcManager.instance.stopSession(alertMessage: "Tag gelesen!");
               _processFoundTagData(tagData: tagData);
             } catch (e) {
-               await NfcManager.instance.stopSession();
-               setState(() => _statusText = "❌ Keine gültigen Meetup-Daten");
+               await NfcManager.instance.stopSession(errorMessage: "Keine gültigen Meetup-Daten");
             }
             
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Lesen: $e");
-            await NfcManager.instance.stopSession();
-            setState(() => _statusText = "❌ Lesefehler");
+            await NfcManager.instance.stopSession(errorMessage: "Lesefehler");
           }
         },
       );

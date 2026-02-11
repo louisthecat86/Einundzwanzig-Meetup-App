@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-// Der wichtige Import:
 import 'package:nfc_manager/nfc_manager.dart'; 
 import '../theme.dart';
 import '../models/user.dart';
@@ -136,34 +135,31 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               if (formatable != null) {
                 try {
                   await formatable.format(message);
-                  await NfcManager.instance.stopSession(); 
+                  await NfcManager.instance.stopSession(alertMessage: "Tag formatiert & geschrieben!");
                   _handleSuccessInUI();
                   return;
                 } catch (e) {
-                  await NfcManager.instance.stopSession();
-                  _handleErrorInUI("Formatierung fehlgeschlagen");
+                  await NfcManager.instance.stopSession(errorMessage: "Formatierung fehlgeschlagen");
                   return;
                 }
               } else {
-                await NfcManager.instance.stopSession();
-                _handleErrorInUI("Kein NDEF");
+                await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
                 return;
               }
             }
 
             if (!ndef.isWritable) {
-              await NfcManager.instance.stopSession();
-              _handleErrorInUI("Schreibgeschützt");
+              await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt!");
               return;
             }
 
             await ndef.write(message);
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
             _handleSuccessInUI();
 
           } catch (e) {
             print("[ERROR] Write Error: $e");
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
             _handleErrorInUI(e.toString());
           }
         },
