@@ -5,6 +5,8 @@ import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
 import '../models/user.dart';
+import '../services/badge_security.dart';
+import 'qr_scanner.dart'; // <--- NEU: Import für den Scanner
 
 class ReputationQRScreen extends StatefulWidget {
   const ReputationQRScreen({super.key});
@@ -28,21 +30,33 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
     final user = await UserProfile.load();
     final uniqueMeetups = myBadges.map((b) => b.meetupName).toSet().length;
     
-    // QR-Code: Lesbare Zusammenfassung + komprimierte Badge-Hashes
-    final badgeHashes = myBadges.map((b) => b.getVerificationHash()).join(',');
-    final qrText = 'EINUNDZWANZIG REPUTATION\n'
-                   'Badges: ${myBadges.length}\n'
-                   'Meetups: $uniqueMeetups\n'
-                   '${user.nostrNpub.isNotEmpty ? 'Npub: ${user.nostrNpub}\n' : ''}'
-                   'Hashes: $badgeHashes\n'
-                   'Verifizieren: einundzwanzig.space';
+    // --- SIGNIERTER QR CODE ---
     
-    // Vollständiges JSON für Kopieren
-    final json = MeetupBadge.exportBadgesForReputation(myBadges, user.nostrNpub);
+    // 1. Die kompakten Daten für den QR-Code
+    final Map<String, dynamic> qrPayload = {
+      'u': user.nickname.isEmpty ? 'Anon' : user.nickname, // User
+      'c': myBadges.length,                                // Count Badges
+      'm': uniqueMeetups,                                  // Count Meetups
+      't': DateTime.now().millisecondsSinceEpoch,          // Timestamp
+    };
+
+    final jsonString = jsonEncode(qrPayload);
+
+    // 2. Wir signieren die Daten mit unserem App-Secret
+    final signature = BadgeSecurity.sign(jsonString, "QR", 0);
+
+    // 3. Wir bauen den String: "21:BASE64_DATEN.SIGNATUR"
+    final base64Json = base64Encode(utf8.encode(jsonString));
+    final secureQrData = "21:$base64Json.$signature";
+
+    // -------------------------------
+    
+    // Vollständiges JSON für manuellen Export
+    final fullJsonExport = MeetupBadge.exportBadgesForReputation(myBadges, user.nostrNpub);
     
     setState(() {
-      _qrData = qrText;
-      _fullJson = json;
+      _qrData = secureQrData;
+      _fullJson = fullJsonExport;
       _isLoading = false;
     });
   }
@@ -65,6 +79,24 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       appBar: AppBar(
         title: const Text("REPUTATION QR-CODE"),
       ),
+      
+      // --- NEU: DER SCANNER BUTTON ---
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const SecureQRScanner()),
+          );
+        },
+        backgroundColor: cCyan,
+        icon: const Icon(Icons.qr_code_scanner, color: Colors.black),
+        label: const Text(
+          "PRÜFEN", 
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)
+        ),
+      ),
+      // -------------------------------
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: cOrange))
           : SingleChildScrollView(
@@ -82,10 +114,10 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.qr_code_2, color: cOrange, size: 48),
+                        const Icon(Icons.verified_user, color: cOrange, size: 48),
                         const SizedBox(height: 16),
                         Text(
-                          "DEINE REPUTATION",
+                          "VERIFIZIERTE REPUTATION",
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: cOrange,
@@ -93,7 +125,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          "Zeige diesen QR-Code, um deine Meetup-Teilnahmen nachzuweisen.",
+                          "Dieser QR-Code ist kryptographisch signiert. Scanne ihn mit der Einundzwanzig-App, um die Echtheit zu prüfen.",
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: cTextSecondary,
                           ),
@@ -120,12 +152,21 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                         ),
                       ],
                     ),
-                    child: QrImageView(
-                      data: _qrData,
-                      version: QrVersions.auto,
-                      size: 280,
-                      backgroundColor: Colors.white,
-                      errorCorrectionLevel: QrErrorCorrectLevel.H,
+                    child: Column(
+                      children: [
+                        QrImageView(
+                          data: _qrData,
+                          version: QrVersions.auto,
+                          size: 260,
+                          backgroundColor: Colors.white,
+                          errorCorrectionLevel: QrErrorCorrectLevel.M,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "🔐 Signiert",
+                          style: TextStyle(color: Colors.black54, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -157,9 +198,9 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => _copyToClipboard(_qrData, 'QR-Code Text'),
+                          onPressed: () => _copyToClipboard(_qrData, 'Signierter Code'),
                           icon: const Icon(Icons.copy, size: 20),
-                          label: const Text('TEXT KOPIEREN'),
+                          label: const Text('CODE KOPIEREN'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: cOrange,
                             foregroundColor: Colors.black,
@@ -172,7 +213,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                         child: OutlinedButton.icon(
                           onPressed: () => _copyToClipboard(_fullJson, 'JSON-Daten'),
                           icon: const Icon(Icons.code, size: 20),
-                          label: const Text('JSON'),
+                          label: const Text('JSON EXPORT'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: cCyan,
                             side: const BorderSide(color: cCyan),
@@ -201,7 +242,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                             Icon(Icons.info_outline, color: cCyan, size: 20),
                             SizedBox(width: 8),
                             Text(
-                              "SO FUNKTIONIERT'S",
+                              "INFO",
                               style: TextStyle(
                                 color: cCyan,
                                 fontWeight: FontWeight.bold,
@@ -212,10 +253,9 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                         ),
                         const SizedBox(height: 12),
                         const Text(
-                          "• Dieser QR-Code zeigt deine Reputation lesbar an\n"
-                          "• Scanne ihn mit jedem QR-Scanner (Smartphone-Kamera)\n"
-                          "• Für technische Verifizierung: JSON-Button nutzen\n"
-                          "• Zeige ihn bei satoshikleinanzeigen.space oder Meetups",
+                          "• Dieser Code enthält deine Statistik und eine digitale Unterschrift der App.\n"
+                          "• Eine andere Einundzwanzig-App kann prüfen, ob die Zahl der Badges manipuliert wurde.\n"
+                          "• Format: 21:DATEN.SIGNATUR",
                           style: TextStyle(
                             color: cTextSecondary,
                             fontSize: 13,
@@ -225,6 +265,9 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                       ],
                     ),
                   ),
+                  
+                  // Kleiner Abstand unten, damit der FAB nicht den Text verdeckt
+                  const SizedBox(height: 60),
                 ],
               ),
             ),
