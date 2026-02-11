@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager.dart' show Ndef, NfcA, MifareUltralight, NdefMessage, NdefRecord, NdefTypeNameFormat, NdefFormatable;
+import 'package:nfc_manager/nfc_manager.dart'; // Import vereinfacht: ALLES importieren
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -77,9 +76,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
   }
 
-  // --- HIER IST DIE OPTIMIERTE SCHREIB-LOGIK ---
   void _writeTag() async {
-    // 1. Validierung vorab
     if (widget.mode == NFCWriteMode.badge && _homeMeetup == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -101,7 +98,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       return;
     }
 
-    // 2. Daten vorbereiten (JSON -> UTF8 -> NDEF Payload)
     Map<String, dynamic> tagData = {
       'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
       'timestamp': DateTime.now().toIso8601String(),
@@ -116,17 +112,12 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     
     String jsonData = jsonEncode(tagData);
     
-    // Wir bauen manuell einen NDEF Text Record (UTF-8, 'en')
-    // Byte 0: 0x02 = UTF-8 encoding, Language Code Length = 2
-    // Byte 1-2: 'en'
-    // Byte 3+: Der eigentliche Text (JSON)
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
-    // NDEF Message Objekt erstellen
     final message = NdefMessage([
       NdefRecord(
         typeNameFormat: NdefTypeNameFormat.nfcWellknown,
-        type: Uint8List.fromList([0x54]), // "T" für Text
+        type: Uint8List.fromList([0x54]),
         identifier: Uint8List(0),
         payload: payload,
       ),
@@ -137,44 +128,48 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
         onDiscovered: (NfcTag tag) async {
           try {
-            // A) Versuche NDEF (formatierte Tags)
             var ndef = Ndef.from(tag);
             
-            // B) Fallback: Versuche NdefFormatable (leere/unformatierte Tags)
             if (ndef == null) {
               final formatable = NdefFormatable.from(tag);
               if (formatable != null) {
                 try {
                   await formatable.format(message);
-                  await NfcManager.instance.stopSession(alertMessage: "Tag formatiert & geschrieben!");
+                  // FIX: Parameter entfernt
+                  await NfcManager.instance.stopSession(); 
                   _handleSuccessInUI();
                   return;
                 } catch (e) {
-                  await NfcManager.instance.stopSession(errorMessage: "Formatierung fehlgeschlagen");
+                  // FIX: Parameter entfernt
+                  await NfcManager.instance.stopSession();
+                  _handleErrorInUI("Formatierung fehlgeschlagen");
                   return;
                 }
               } else {
-                await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
+                // FIX: Parameter entfernt
+                await NfcManager.instance.stopSession();
+                _handleErrorInUI("Kein NDEF");
                 return;
               }
             }
 
-            // Wenn wir hier sind, ist es ein NDEF Tag
             if (!ndef.isWritable) {
-              await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt!");
+              // FIX: Parameter entfernt
+              await NfcManager.instance.stopSession();
+              _handleErrorInUI("Schreibgeschützt");
               return;
             }
 
-            // Schreiben
             await ndef.write(message);
 
-            // ERFOLG: Wichtig für iOS Feedback (Häkchen)
-            await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
+            // FIX: Parameter entfernt
+            await NfcManager.instance.stopSession();
             _handleSuccessInUI();
 
           } catch (e) {
             print("[ERROR] Write Error: $e");
-            await NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
+            // FIX: Parameter entfernt
+            await NfcManager.instance.stopSession();
             _handleErrorInUI(e.toString());
           }
         },
@@ -184,7 +179,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
   }
 
-  // Hilfsfunktion: UI Update bei Erfolg
   void _handleSuccessInUI() {
     if (!mounted) return;
     setState(() {
@@ -194,13 +188,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
           : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nAdmin-Key gespeichert.";
     });
     
-    // Nach 3 Sekunden automatisch schließen
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) Navigator.pop(context);
     });
   }
 
-  // Hilfsfunktion: UI Update bei Fehler
   void _handleErrorInUI(String error) {
     if (!mounted) return;
     setState(() {

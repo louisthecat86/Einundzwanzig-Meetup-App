@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager.dart'; // Import vereinfacht: ALLES importieren
 import 'dart:convert';
-import 'dart:typed_data'; // Wichtig für Uint8List
+import 'dart:typed_data';
 import '../theme.dart';
 import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart'; 
 import '../services/mempool.dart';
-
-// WICHTIG: Stelle sicher, dass der Dateiname hier stimmt!
 import 'nfc_writer.dart'; 
 
 class MeetupVerificationScreen extends StatefulWidget {
@@ -31,7 +29,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   late bool _isChefMode;
   bool _success = false;
   String _statusText = "Bereit zum Scannen";
-  bool _writeModeBadge = true; // Steuert, ob wir Badge oder Verify schreiben wollen
+  bool _writeModeBadge = true;
 
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -40,12 +38,10 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   @override
   void initState() {
     super.initState();
-    
     _isChefMode = widget.initialChefMode;
     if (_isChefMode) {
       _statusText = "ADMIN MODUS AKTIV";
     }
-
     _controller = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
     _animation = Tween<double>(begin: 1.0, end: 1.2).animate(_controller);
   }
@@ -57,7 +53,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     super.dispose();
   }
 
-  // --- LESE-LOGIK (Für normale User) ---
   void _startNfcRead(String type) async {
     setState(() {
       _statusText = "Warte auf NFC Tag...";
@@ -79,45 +74,56 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           try {
             final ndef = Ndef.from(tag);
             if (ndef == null) {
-              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF Tag");
+              // FIX: Parameter entfernt
+              await NfcManager.instance.stopSession(); 
+              setState(() => _statusText = "❌ Kein NDEF Tag");
               return;
             }
 
             final cachedMessage = ndef.cachedMessage;
             if (cachedMessage == null || cachedMessage.records.isEmpty) {
-              await NfcManager.instance.stopSession(errorMessage: "Tag ist leer");
+              // FIX: Parameter entfernt
+              await NfcManager.instance.stopSession();
+              setState(() => _statusText = "❌ Tag ist leer");
               return;
             }
 
             final payload = cachedMessage.records.first.payload;
             if (payload.isEmpty) {
-               await NfcManager.instance.stopSession(errorMessage: "Payload leer");
+               // FIX: Parameter entfernt
+               await NfcManager.instance.stopSession();
+               setState(() => _statusText = "❌ Payload leer");
               return;
             }
 
-            // NDEF Text Record parsen: [statusByte, langCode..., content...]
             final languageCodeLength = payload.first & 0x3F;
             final textStart = 1 + languageCodeLength;
             
             if (payload.length <= textStart) {
-               await NfcManager.instance.stopSession(errorMessage: "Format ungültig");
+               // FIX: Parameter entfernt
+               await NfcManager.instance.stopSession();
+               setState(() => _statusText = "❌ Format ungültig");
               return;
             }
 
             final jsonString = utf8.decode(payload.sublist(textStart));
             
-            // Versuch JSON zu parsen
             try {
               final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
-              await NfcManager.instance.stopSession(alertMessage: "Tag gelesen!");
+              // FIX: Parameter entfernt
+              await NfcManager.instance.stopSession();
               _processFoundTagData(tagData: tagData);
             } catch (e) {
-               await NfcManager.instance.stopSession(errorMessage: "Keine gültigen Meetup-Daten");
+               // FIX: Parameter entfernt
+               await NfcManager.instance.stopSession();
+               setState(() => _statusText = "❌ Keine gültigen Meetup-Daten");
             }
             
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Lesen: $e");
-            await NfcManager.instance.stopSession(errorMessage: "Lesefehler");
+            // FIX: Parameter entfernt
+            await NfcManager.instance.stopSession();
+            setState(() => _statusText = "❌ Lesefehler");
           }
         },
       );
@@ -133,7 +139,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     await Future.delayed(const Duration(seconds: 1));
     Map<String, dynamic>? tagData;
     
-    // Simuliere gelesene Daten
     if (type == "BADGE") {
       tagData = {
         'type': 'BADGE',
@@ -173,7 +178,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       print("[ERROR] Blockhöhe konnte nicht geladen werden: $e");
     }
 
-    // 1. Fall: User scannt Badge
     if (tagType == 'BADGE') {
       String meetupName = tagData['meetup_name'] ?? 'Unbekanntes Meetup';
       String meetupCountry = tagData['meetup_country'] ?? '';
@@ -206,7 +210,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
     }
 
-    // 2. Fall: User scannt Verify-Tag
     if (tagType == 'VERIFY') {
       if (!user.isAdminVerified) {
         user.isAdminVerified = true;
@@ -257,7 +260,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: cOrange),
             onPressed: () {
-              // Einfacher Passwort-Check (hier idealerweise Hash vergleichen)
               if (_passwordController.text == widget.meetup.adminSecret) {
                 setState(() {
                   _isChefMode = true;
@@ -339,7 +341,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
             
-            // --- ADMIN BEREICH (SCHREIBEN) ---
             if (_isChefMode) ...[
               const SizedBox(height: 20),
               const Text("Modus wählen:", style: TextStyle(color: Colors.grey)),
@@ -369,11 +370,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 width: 250, height: 50,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.edit, color: Colors.white),
-                  // *** HIER IST DIE ÄNDERUNG: Navigation zum Writer ***
                   onPressed: () {
-                    // Wir bestimmen den Modus für den Writer
                     final mode = _writeModeBadge ? NFCWriteMode.badge : NFCWriteMode.verify;
-                    
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -397,7 +395,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 ),
               )
             ] 
-            // --- USER BEREICH (LESEN) ---
             else ...[
               const SizedBox(height: 40),
               if (widget.verifyOnlyMode) ...[
