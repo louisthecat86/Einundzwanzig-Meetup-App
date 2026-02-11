@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager.dart' show Ndef, NfcA, MifareUltralight, NdefMessage, NdefRecord, NdefTypeNameFormat, NdefFormatable;
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -144,10 +146,10 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                 payload: Uint8List.fromList(payload),
               ),
             ]);
-                        if (ndef != null) {
+            if (ndef != null) {
               if (!ndef.isWritable) {
                 setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
-                await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt");
+                await NfcManager.instance.stopSession();
                 return;
               }
               await ndef.write(message);
@@ -155,7 +157,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               final ndefFormatable = NdefFormatable.from(tag);
               if (ndefFormatable == null) {
                 setState(() => _statusText = "❌ Tag unterstützt kein NDEF (weder Ndef noch NdefFormatable)");
-                await NfcManager.instance.stopSession(errorMessage: "Tag ist nicht NDEF-kompatibel");
+                await NfcManager.instance.stopSession();
                 return;
               }
               await ndefFormatable.format(message);
@@ -358,5 +360,4 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       ),
     );
   }
-}
 }
