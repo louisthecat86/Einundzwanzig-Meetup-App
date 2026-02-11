@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';
-// WICHTIG für Version 4.x: Hier wohnen jetzt oft die Tag-Definitionen wie Ndef
-import 'package:nfc_manager/platform_tags.dart';
+import 'package:nfc_manager/nfc_manager.dart'; // Standard Import für v3.5.0
 import 'dart:convert';
 import 'dart:typed_data';
 import '../theme.dart';
@@ -68,12 +66,13 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
     try {
       await NfcManager.instance.startSession(
-        // pollingOptions sind optional, Standard deckt das meiste ab
+        pollingOptions: {
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+        },
         onDiscovered: (NfcTag tag) async {
           try {
-            // Dank des Imports 'platform_tags.dart' sollte Ndef jetzt gefunden werden
             final ndef = Ndef.from(tag);
-            
             if (ndef == null) {
               await NfcManager.instance.stopSession(errorMessage: "Kein NDEF Tag");
               return;
@@ -103,8 +102,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             
             try {
               final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
-              
-              // Erfolg!
+              // Version 3.5.0: alertMessage funktioniert!
               await NfcManager.instance.stopSession(alertMessage: "Tag gelesen!");
               _processFoundTagData(tagData: tagData);
             } catch (e) {

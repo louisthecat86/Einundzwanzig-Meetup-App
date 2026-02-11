@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';
-// WICHTIG:
-import 'package:nfc_manager/platform_tags.dart';
-
+import 'package:nfc_manager/nfc_manager.dart'; // Standard Import v3.5.0
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -133,8 +130,22 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
+              // Für v3.5.0: NdefFormatable ist hier verfügbar!
+              var formatable = NdefFormatable.from(tag);
+              if (formatable != null) {
+                try {
+                  await formatable.format(message);
+                  await NfcManager.instance.stopSession(alertMessage: "Formatiert & Geschrieben!");
+                  _handleSuccessInUI();
+                  return;
+                } catch(e) {
+                  await NfcManager.instance.stopSession(errorMessage: "Formatierung Fehler");
+                  _handleErrorInUI("Formatierung fehlgeschlagen");
+                  return;
+                }
+              }
               await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
-              _handleErrorInUI("Kein NDEF Format (Bitte vorformatieren)");
+              _handleErrorInUI("Kein NDEF Format");
               return;
             }
 
@@ -146,6 +157,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
 
             await ndef.write(message);
 
+            // Version 3.5.0: alertMessage verwenden!
             await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
             _handleSuccessInUI();
 
