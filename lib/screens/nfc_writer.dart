@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart'; // Standard Import v3.5.0
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/platform_tags.dart'; // NEU: für NdefFormatable (v4.x)
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -130,40 +131,38 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
-              // Für v3.5.0: NdefFormatable ist hier verfügbar!
+              // v4.x: NdefFormatable aus platform_tags.dart
               var formatable = NdefFormatable.from(tag);
               if (formatable != null) {
                 try {
                   await formatable.format(message);
-                  await NfcManager.instance.stopSession(alertMessage: "Formatiert & Geschrieben!");
+                  await NfcManager.instance.stopSession();
                   _handleSuccessInUI();
                   return;
-                } catch(e) {
-                  await NfcManager.instance.stopSession(errorMessage: "Formatierung Fehler");
+                } catch (e) {
+                  await NfcManager.instance.stopSession();
                   _handleErrorInUI("Formatierung fehlgeschlagen");
                   return;
                 }
               }
-              await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
+              await NfcManager.instance.stopSession();
               _handleErrorInUI("Kein NDEF Format");
               return;
             }
 
             if (!ndef.isWritable) {
-              await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt!");
+              await NfcManager.instance.stopSession();
               _handleErrorInUI("Schreibgeschützt");
               return;
             }
 
             await ndef.write(message);
-
-            // Version 3.5.0: alertMessage verwenden!
-            await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
+            await NfcManager.instance.stopSession();
             _handleSuccessInUI();
 
           } catch (e) {
             print("[ERROR] Write Error: $e");
-            await NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
+            await NfcManager.instance.stopSession();
             _handleErrorInUI(e.toString());
           }
         },

@@ -312,14 +312,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.17.4"
+  ndef_record:
+    dependency: transitive
+    description:
+      name: ndef_record
+      sha256: c4821a7015944c2e98958b1c5e77845aa63aa27f95998309c5c424b1c6ce8a4a
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.1"
   nfc_manager:
     dependency: "direct main"
     description:
       name: nfc_manager
-      sha256: f5be75e90f8f2bff3ee49fbd7ef65bdd4a86ee679c2412e71ab2846a8cff8c59
+      sha256: "24c78b0e5702da53e7f8794d073624c0bee7cd99924f257cbd11f5d1c5866879"
       url: "https://pub.dev"
     source: hosted
-    version: "3.5.0"
+    version: "4.1.1"
   objective_c:
     dependency: transitive
     description:
