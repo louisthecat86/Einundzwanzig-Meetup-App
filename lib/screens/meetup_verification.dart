@@ -148,6 +148,10 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     _processFoundTagData(tagData: tagData);
   }
 
+  // ... (Imports bleiben gleich)
+
+  // ... (initState, dispose, _startNfcRead, _simulateHandshake bleiben gleich)
+
   void _processFoundTagData({Map<String, dynamic>? tagData}) async {
     if (!mounted) return;
     
@@ -161,6 +165,26 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     final user = await UserProfile.load();
     String msg = "";
     String tagType = tagData['type'] ?? '';
+
+    // --- NEU: Validierung des Modus (Stoppt falsche Scans) ---
+    
+    // 1. Fall: Nutzer will VERIFIZIEREN (Gatekeeper/Profil), scannt aber einen BADGE
+    if (widget.verifyOnlyMode && tagType == 'BADGE') {
+      setState(() {
+        _statusText = "❌ Falscher Tag!\nDas ist ein Badge-Tag.\nBitte den Verifizierungs-Tag des Admins scannen.";
+      });
+      return; // Abbruch
+    }
+
+    // 2. Fall: Nutzer will einen BADGE sammeln, scannt aber einen VERIFY-Tag
+    if (!widget.verifyOnlyMode && tagType == 'VERIFY' && !_isChefMode) {
+      setState(() {
+        _statusText = "❌ Falscher Tag!\nDas ist ein Verifizierungs-Tag.\nZum Sammeln bitte den Badge-Tag scannen.";
+      });
+      return; // Abbruch
+    }
+    
+    // -------------------------------------------------------
 
     int currentBlockHeight = 0;
     try {
