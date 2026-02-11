@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/platform_tags.dart';
 import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
@@ -54,13 +53,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     super.dispose();
   }
 
-  // --- NFC LESEN (KORRIGIERT) ---
   void _startNfcRead(String type) async {
     setState(() {
       _statusText = "Warte auf NFC Tag...";
     });
 
-    // Fallback für Web/Desktop: Simulation
     final isAvailable = await NfcManager.instance.isAvailable();
     if (!isAvailable) {
       _simulateHandshake(type);
@@ -75,57 +72,40 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            // KORREKTUR: Nutze Ndef.from() aus platform_tags
-            final ndef = Ndef.from(tag);
+            // KORREKTUR: Sicherer Zugriff auf tag.data
+            if (tag.data is! Map) {
+              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ (${tag.data.runtimeType})");
+              await NfcManager.instance.stopSession();
+              return;
+            }
             
-            if (ndef == null) {
+            final tagMap = tag.data as Map<String, dynamic>;
+            final ndefData = tagMap['ndef'];
+            
+            if (ndefData == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
               await NfcManager.instance.stopSession();
               return;
             }
-
-            // Lese die NDEF Message
-            final message = await ndef.read();
             
-            if (message == null || message.records.isEmpty) {
-              setState(() => _statusText = "❌ Keine Daten auf dem Tag gefunden");
+            final cachedMessage = ndefData['cachedMessage'];
+            if (cachedMessage == null) {
+              setState(() => _statusText = "❌ Keine NDEF-Message gefunden");
               await NfcManager.instance.stopSession();
               return;
             }
-
-            // Extrahiere den ersten Text-Record
-            final record = message.records.first;
             
-            // Text-Record hat Format: [Flags, Lang-Length, Lang-Code, Text...]
-            // Beispiel: [0x02, 0x65, 0x6e, ...JSON...]
-            //            ^^^^  ^^^^  ^^^^  ^^^^^^^^
-            //            Flags Len   "en"  Daten
-            
-            String jsonString;
-            try {
-              // Überspringe die ersten 3 Bytes (Flags + Lang)
-              final payload = record.payload;
-              if (payload.length > 3) {
-                jsonString = utf8.decode(payload.sublist(3));
-              } else {
-                jsonString = utf8.decode(payload);
-              }
-            } catch (e) {
-              setState(() => _statusText = "❌ Fehler beim Dekodieren: $e");
+            final records = cachedMessage['records'] as List<dynamic>?;
+            if (records == null || records.isEmpty) {
+              setState(() => _statusText = "❌ Kein NDEF-Record gefunden");
               await NfcManager.instance.stopSession();
               return;
             }
-
-            // Parse JSON
-            Map<String, dynamic>? tagData;
-            try {
-              tagData = json.decode(jsonString) as Map<String, dynamic>;
-            } catch (e) {
-              setState(() => _statusText = "❌ Ungültiges JSON auf Tag: $e");
-              await NfcManager.instance.stopSession();
-              return;
-            }
-
+            
+            final payload = records[0]['payload'] as List<dynamic>;
+            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3).cast<int>() : payload.cast<int>());
+            Map<String, dynamic>? tagData = json.decode(jsonString);
+            
             await NfcManager.instance.stopSession();
             _processFoundTagData(tagData: tagData);
             
@@ -141,7 +121,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     }
   }
 
-  // Simulation für Web/Desktop
   void _simulateHandshake(String type) async {
     setState(() {
       _statusText = _isChefMode ? "Schreibe Tag... (SIM)" : "Lese Tag... (SIM)";
@@ -166,7 +145,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     _processFoundTagData(tagData: tagData);
   }
 
-  // --- VERARBEITUNG DER DATEN ---
   void _processFoundTagData({Map<String, dynamic>? tagData}) async {
     if (tagData == null) {
       setState(() {
@@ -179,7 +157,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     String msg = "";
     String tagType = tagData['type'] ?? '';
 
-    // A) Blockhöhe laden (Asynchron von Mempool.space)
     int currentBlockHeight = 0;
     try {
       currentBlockHeight = await MempoolService.getBlockHeight();
@@ -187,13 +164,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       print("[ERROR] Blockhöhe konnte nicht geladen werden: $e");
     }
 
-    // B) Badge Logik
     if (tagType == 'BADGE') {
       String meetupName = tagData['meetup_name'] ?? 'Unbekanntes Meetup';
       String meetupCountry = tagData['meetup_country'] ?? '';
       String meetupId = tagData['meetup_id'] ?? DateTime.now().toString();
       
-      // Prüfe ob Badge bereits gesammelt wurde
       bool alreadyCollected = myBadges.any((b) => 
         b.meetupName == meetupName && 
         b.date.year == DateTime.now().year &&
@@ -210,7 +185,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           blockHeight: currentBlockHeight,
         ));
         
-        // Badges speichern
         await MeetupBadge.saveBadges(myBadges);
         
         msg = "🎉 BADGE GESAMMELT!\n\n📍 $meetupName";
@@ -223,7 +197,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
     }
 
-    // C) Verifizierungs Logik
     if (tagType == 'VERIFY') {
       if (!user.isAdminVerified) {
         user.isAdminVerified = true;
@@ -331,7 +304,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ANIMATION KREIS
             ScaleTransition(
               scale: _animation,
               child: Container(
@@ -353,13 +325,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               ),
             ),
             const SizedBox(height: 40),
-
             Text(
               _isChefMode ? "TAG BESCHREIBEN" : "TAG SCANNEN",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
             
-            // --- ADMIN MODUS ---
             if (_isChefMode) ...[
               const SizedBox(height: 20),
               Row(
@@ -390,8 +360,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 ),
               ),
             ] 
-            
-            // --- PLEB MODUS ---
             else ...[
               const SizedBox(height: 40),
               if (widget.verifyOnlyMode) ...[
