@@ -4,16 +4,17 @@ allprojects {
         mavenCentral()
     }
 
-    // --- NEU HINZUGEFÜGT: Fix für veraltete Plugins (wie nfc_manager 3.5.0) ---
-    // Verhindert, dass Warnungen (z.B. 'toLowerCase is deprecated') den Build abbrechen.
+    // --- KORRIGIERTER BLOCK FÜR NEUES KOTLIN ---
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        kotlinOptions {
-            allWarningsAsErrors = false
-            // Hilft zusätzlich bei Kompatibilitätsproblemen mit älteren Kotlin-Versionen
-            freeCompilerArgs = freeCompilerArgs + listOf("-Xjvm-default=all")
+        compilerOptions {
+            // Neue Syntax: .set(false) statt = false
+            allWarningsAsErrors.set(false)
+            
+            // Neue Syntax: .add(...) statt = ... + ...
+            freeCompilerArgs.add("-Xjvm-default=all")
         }
     }
-    // -------------------------------------------------------------------------
+    // -------------------------------------------
 }
 
 val newBuildDir: Directory =
