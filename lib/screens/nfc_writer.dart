@@ -136,23 +136,37 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
 
             // Technologie-Prüfung
             final ndef = Ndef.from(tag);
-            if (ndef == null) {
-              setState(() => _statusText = "❌ Tag ist nicht NDEF-formatiert");
-              await NfcManager.instance.stopSession();
-              return;
-            }
-            if (!ndef.isWritable) {
-              setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
-              await NfcManager.instance.stopSession();
-              return;
+                        final message = NdefMessage([
+              NdefRecord(
+                typeNameFormat: NdefTypeNameFormat.nfcWellknown,
+                type: Uint8List.fromList([0x54]), // "T" (Text)
+                identifier: Uint8List(0),
+                payload: Uint8List.fromList(payload),
+              ),
+            ]);
+                        if (ndef != null) {
+              if (!ndef.isWritable) {
+                setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
+                await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt");
+                return;
+              }
+              await ndef.write(message);
+            } else {
+              final ndefFormatable = NdefFormatable.from(tag);
+              if (ndefFormatable == null) {
+                setState(() => _statusText = "❌ Tag unterstützt kein NDEF (weder Ndef noch NdefFormatable)");
+                await NfcManager.instance.stopSession(errorMessage: "Tag ist nicht NDEF-kompatibel");
+                return;
+              }
+              await ndefFormatable.format(message);
             }
 
-            // Tag erkannt, zeige Erfolg (tatsächliches Schreiben müsste über Platform Channel)
             setState(() {
               _success = true;
               _statusText = widget.mode == NFCWriteMode.badge
-                  ? "✅ MEETUP TAG erkannt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nHinweis: Das tatsächliche Schreiben muss ggf. über native Platform-Methoden erfolgen."
-                  : "✅ VERIFIZIERUNGS-TAG erkannt!\n\nHinweis: Das tatsächliche Schreiben muss ggf. über native Platform-Methoden erfolgen.";
+                 ? "✅ MEETUP TAG geschrieben!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+                 : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nNeue Nutzer können jetzt ihre Identität bestätigen.";
+
             });
 
             await NfcManager.instance.stopSession();
@@ -344,4 +358,5 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       ),
     );
   }
+}
 }

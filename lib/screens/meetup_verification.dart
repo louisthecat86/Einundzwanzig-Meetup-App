@@ -72,39 +72,38 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            // KORREKTUR: Sicherer Zugriff auf tag.data
-            if (tag.data is! Map) {
-              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ (${tag.data.runtimeType})");
-              await NfcManager.instance.stopSession();
-              return;
-            }
-            
-            final tagMap = tag.data as Map<String, dynamic>;
-            final ndefData = tagMap['ndef'];
-            
-            if (ndefData == null) {
+            final ndef = Ndef.from(tag);
+            if (ndef == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
               await NfcManager.instance.stopSession();
               return;
             }
-            
-            final cachedMessage = ndefData['cachedMessage'];
-            if (cachedMessage == null) {
+
+            final cachedMessage = ndef.cachedMessage;
+            if (cachedMessage == null || cachedMessage.records.isEmpty) {
               setState(() => _statusText = "❌ Keine NDEF-Message gefunden");
               await NfcManager.instance.stopSession();
               return;
             }
-            
-            final records = cachedMessage['records'] as List<dynamic>?;
-            if (records == null || records.isEmpty) {
-              setState(() => _statusText = "❌ Kein NDEF-Record gefunden");
+
+            final payload = cachedMessage.records.first.payload;
+            if (payload.isEmpty) {
+              setState(() => _statusText = "❌ NDEF-Payload ist leer");
               await NfcManager.instance.stopSession();
               return;
             }
-            
-            final payload = records[0]['payload'] as List<dynamic>;
-            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3).cast<int>() : payload.cast<int>());
-            Map<String, dynamic>? tagData = json.decode(jsonString);
+
+            // Text-Record: [statusByte, langCode..., content...]
+            final languageCodeLength = payload.first & 0x3F;
+            final textStart = 1 + languageCodeLength;
+            if (payload.length <= textStart) {
+              setState(() => _statusText = "❌ NDEF-Payload ungültig");
+              await NfcManager.instance.stopSession();
+              return;
+            }
+
+            final jsonString = utf8.decode(payload.sublist(textStart));
+            final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
             
             await NfcManager.instance.stopSession();
             _processFoundTagData(tagData: tagData);
