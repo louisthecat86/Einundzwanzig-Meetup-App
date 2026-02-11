@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart'; 
+import 'package:nfc_manager/nfc_manager.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -130,30 +130,22 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
           try {
             var ndef = Ndef.from(tag);
             
+            // Wenn Tag nicht NDEF ist, brechen wir in dieser Version ab, um Build-Fehler zu vermeiden.
             if (ndef == null) {
-              final formatable = NdefFormatable.from(tag);
-              if (formatable != null) {
-                try {
-                  await formatable.format(message);
-                  await NfcManager.instance.stopSession(alertMessage: "Tag formatiert & geschrieben!");
-                  _handleSuccessInUI();
-                  return;
-                } catch (e) {
-                  await NfcManager.instance.stopSession(errorMessage: "Formatierung fehlgeschlagen");
-                  return;
-                }
-              } else {
-                await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
-                return;
-              }
+              await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
+              _handleErrorInUI("Kein NDEF Format");
+              return;
             }
 
             if (!ndef.isWritable) {
               await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt!");
+              _handleErrorInUI("Schreibgeschützt");
               return;
             }
 
             await ndef.write(message);
+
+            // iOS Success Feedback
             await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
             _handleSuccessInUI();
 
