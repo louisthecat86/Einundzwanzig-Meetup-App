@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'dart:convert';
+import 'dart:typed_data'; // Wichtig für Uint8List
 import '../theme.dart';
 import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart'; 
 import '../services/mempool.dart';
+
+// WICHTIG: Stelle sicher, dass der Dateiname hier stimmt!
+import 'nfc_writer.dart'; 
 
 class MeetupVerificationScreen extends StatefulWidget {
   final Meetup meetup;
@@ -27,7 +31,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   late bool _isChefMode;
   bool _success = false;
   String _statusText = "Bereit zum Scannen";
-  bool _writeModeBadge = true;
+  bool _writeModeBadge = true; // Steuert, ob wir Badge oder Verify schreiben wollen
 
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -53,6 +57,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     super.dispose();
   }
 
+  // --- LESE-LOGIK (Für normale User) ---
   void _startNfcRead(String type) async {
     setState(() {
       _statusText = "Warte auf NFC Tag...";
@@ -74,58 +79,61 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           try {
             final ndef = Ndef.from(tag);
             if (ndef == null) {
-              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF Tag");
               return;
             }
 
             final cachedMessage = ndef.cachedMessage;
             if (cachedMessage == null || cachedMessage.records.isEmpty) {
-              setState(() => _statusText = "❌ Keine NDEF-Message gefunden");
-              await NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession(errorMessage: "Tag ist leer");
               return;
             }
 
             final payload = cachedMessage.records.first.payload;
             if (payload.isEmpty) {
-              setState(() => _statusText = "❌ NDEF-Payload ist leer");
-              await NfcManager.instance.stopSession();
+               await NfcManager.instance.stopSession(errorMessage: "Payload leer");
               return;
             }
 
-            // Text-Record: [statusByte, langCode..., content...]
+            // NDEF Text Record parsen: [statusByte, langCode..., content...]
             final languageCodeLength = payload.first & 0x3F;
             final textStart = 1 + languageCodeLength;
+            
             if (payload.length <= textStart) {
-              setState(() => _statusText = "❌ NDEF-Payload ungültig");
-              await NfcManager.instance.stopSession();
+               await NfcManager.instance.stopSession(errorMessage: "Format ungültig");
               return;
             }
 
             final jsonString = utf8.decode(payload.sublist(textStart));
-            final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
             
-            await NfcManager.instance.stopSession();
-            _processFoundTagData(tagData: tagData);
+            // Versuch JSON zu parsen
+            try {
+              final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
+              await NfcManager.instance.stopSession(alertMessage: "Tag gelesen!");
+              _processFoundTagData(tagData: tagData);
+            } catch (e) {
+               await NfcManager.instance.stopSession(errorMessage: "Keine gültigen Meetup-Daten");
+            }
             
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Lesen: $e");
-            setState(() => _statusText = "❌ Fehler beim Lesen: $e");
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(errorMessage: "Lesefehler");
           }
         },
       );
     } catch (e) {
-      setState(() => _statusText = "❌ NFC Fehler: $e");
+      setState(() => _statusText = "❌ NFC Start-Fehler: $e");
     }
   }
 
   void _simulateHandshake(String type) async {
     setState(() {
-      _statusText = _isChefMode ? "Schreibe Tag... (SIM)" : "Lese Tag... (SIM)";
+      _statusText = "Lese Tag... (SIMULATOR)";
     });
     await Future.delayed(const Duration(seconds: 1));
     Map<String, dynamic>? tagData;
+    
+    // Simuliere gelesene Daten
     if (type == "BADGE") {
       tagData = {
         'type': 'BADGE',
@@ -145,6 +153,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   }
 
   void _processFoundTagData({Map<String, dynamic>? tagData}) async {
+    if (!mounted) return;
+    
     if (tagData == null) {
       setState(() {
         _statusText = "❌ Kein gültiger Tag erkannt";
@@ -163,13 +173,14 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       print("[ERROR] Blockhöhe konnte nicht geladen werden: $e");
     }
 
+    // 1. Fall: User scannt Badge
     if (tagType == 'BADGE') {
       String meetupName = tagData['meetup_name'] ?? 'Unbekanntes Meetup';
       String meetupCountry = tagData['meetup_country'] ?? '';
       String meetupId = tagData['meetup_id'] ?? DateTime.now().toString();
       
       bool alreadyCollected = myBadges.any((b) => 
-        b.meetupName == meetupName && 
+        b.meetupName.contains(meetupName) && 
         b.date.year == DateTime.now().year &&
         b.date.month == DateTime.now().month &&
         b.date.day == DateTime.now().day
@@ -187,7 +198,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         await MeetupBadge.saveBadges(myBadges);
         
         msg = "🎉 BADGE GESAMMELT!\n\n📍 $meetupName";
-        if (meetupCountry.isNotEmpty) msg += ", $meetupCountry";
         if (currentBlockHeight > 0) {
           msg += "\n⛓️ Block: $currentBlockHeight";
         }
@@ -196,6 +206,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
     }
 
+    // 2. Fall: User scannt Verify-Tag
     if (tagType == 'VERIFY') {
       if (!user.isAdminVerified) {
         user.isAdminVerified = true;
@@ -204,9 +215,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         }
         await user.save();
         msg = "✅ IDENTITÄT VERIFIZIERT!";
-        if (user.nostrNpub.isNotEmpty) {
-          msg += "\nNostr-Identität bestätigt.";
-        }
       } else {
         msg = "✅ Bereits verifiziert.";
       }
@@ -249,6 +257,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: cOrange),
             onPressed: () {
+              // Einfacher Passwort-Check (hier idealerweise Hash vergleichen)
               if (_passwordController.text == widget.meetup.adminSecret) {
                 setState(() {
                   _isChefMode = true;
@@ -272,6 +281,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     return Scaffold(
       appBar: AppBar(
         title: Text(_isChefMode ? "ADMIN TOOLS" : "SCANNER"),
+        backgroundColor: _isChefMode ? Colors.red.shade900 : cDark,
         actions: [
           if (!_isChefMode) IconButton(icon: const Icon(Icons.security), onPressed: _showAdminLogin)
         ],
@@ -325,12 +335,15 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             ),
             const SizedBox(height: 40),
             Text(
-              _isChefMode ? "TAG BESCHREIBEN" : "TAG SCANNEN",
+              _isChefMode ? "TAG ERSTELLEN" : "TAG SCANNEN",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
             
+            // --- ADMIN BEREICH (SCHREIBEN) ---
             if (_isChefMode) ...[
               const SizedBox(height: 20),
+              const Text("Modus wählen:", style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -339,6 +352,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                     selected: _writeModeBadge,
                     onSelected: (val) => setState(() => _writeModeBadge = true),
                     selectedColor: cOrange,
+                    labelStyle: TextStyle(color: _writeModeBadge ? Colors.white : Colors.black),
                   ),
                   const SizedBox(width: 10),
                   ChoiceChip(
@@ -346,19 +360,44 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                     selected: !_writeModeBadge,
                     onSelected: (val) => setState(() => _writeModeBadge = false),
                     selectedColor: Colors.red,
+                    labelStyle: TextStyle(color: !_writeModeBadge ? Colors.white : Colors.black),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
               SizedBox(
                 width: 250, height: 50,
-                child: ElevatedButton(
-                  onPressed: () => _startNfcRead(_writeModeBadge ? "BADGE" : "VERIFY"),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                  child: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white)),
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                  // *** HIER IST DIE ÄNDERUNG: Navigation zum Writer ***
+                  onPressed: () {
+                    // Wir bestimmen den Modus für den Writer
+                    final mode = _writeModeBadge ? NFCWriteMode.badge : NFCWriteMode.verify;
+                    
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NFCWriterScreen(mode: mode),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _writeModeBadge ? cOrange : Colors.red,
+                  ),
+                  label: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
+              const SizedBox(height: 10),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 40.0),
+                child: Text(
+                  "Legt leere NFC Tags bereit.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white30, fontSize: 12),
+                ),
+              )
             ] 
+            // --- USER BEREICH (LESEN) ---
             else ...[
               const SizedBox(height: 40),
               if (widget.verifyOnlyMode) ...[
@@ -371,7 +410,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                       side: const BorderSide(color: cCyan),
                     ),
                     child: const Text(
-                      "VERIFIZIERUNGS-TAG SCANNEN",
+                      "VERIFIZIERUNG SCANNEN",
                       style: TextStyle(color: cCyan, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -382,11 +421,12 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                   child: ElevatedButton(
                     onPressed: () => _startNfcRead("BADGE"),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                    child: const Text("BADGE SCANNEN", style: TextStyle(color: Colors.white)),
+                    child: const Text("BADGE EINSAMMELN", style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ],
             ],
+            
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),

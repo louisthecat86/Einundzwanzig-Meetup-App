@@ -48,8 +48,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   void _loadHomeMeetup() async {
     final user = await UserProfile.load();
     
-    print("[DEBUG] Home-Meetup Name: ${user.homeMeetupId}");
-    
     if (user.homeMeetupId.isEmpty) {
       setState(() {
         _statusText = "⚠️ Kein Home-Meetup gesetzt";
@@ -63,22 +61,15 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       meetups = allMeetups;
     }
 
-    print("[DEBUG] Geladene Meetups:");
-    for (var m in meetups) {
-      print("  - Name: ${m.city}");
-    }
-
     final meetup = meetups.where((m) => m.city == user.homeMeetupId).firstOrNull;
     
     if (meetup != null) {
-      print("[DEBUG] Meetup gefunden: ${meetup.city}");
       setState(() {
         _homeMeetup = meetup;
         _meetupInfo = "📍 ${meetup.city}, ${meetup.country}";
         _statusText = "Bereit zum Schreiben";
       });
     } else {
-      print("[DEBUG] Kein Meetup gefunden für: ${user.homeMeetupId}");
       setState(() {
         _statusText = "⚠️ Home-Meetup nicht gefunden";
         _meetupInfo = "Meetup: ${user.homeMeetupId}";
@@ -86,7 +77,9 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
   }
 
+  // --- HIER IST DIE OPTIMIERTE SCHREIB-LOGIK ---
   void _writeTag() async {
+    // 1. Validierung vorab
     if (widget.mode == NFCWriteMode.badge && _homeMeetup == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -98,7 +91,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
 
     setState(() {
-      _statusText = "Warte auf NFC Tag zum Schreiben...";
+      _statusText = "Halte Tag an das Gerät...";
+      _success = false;
     });
 
     final isAvailable = await NfcManager.instance.isAvailable();
@@ -107,84 +101,111 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       return;
     }
 
+    // 2. Daten vorbereiten (JSON -> UTF8 -> NDEF Payload)
     Map<String, dynamic> tagData = {
       'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
       'timestamp': DateTime.now().toIso8601String(),
     };
+    
     if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
       tagData['meetup_id'] = _homeMeetup!.id;
       tagData['meetup_name'] = _homeMeetup!.city;
       tagData['meetup_country'] = _homeMeetup!.country;
       tagData['meetup_date'] = DateTime.now().toIso8601String();
     }
+    
     String jsonData = jsonEncode(tagData);
-    final payload = [0x02, 0x65, 0x6e, ...utf8.encode(jsonData)];
+    
+    // Wir bauen manuell einen NDEF Text Record (UTF-8, 'en')
+    // Byte 0: 0x02 = UTF-8 encoding, Language Code Length = 2
+    // Byte 1-2: 'en'
+    // Byte 3+: Der eigentliche Text (JSON)
+    final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
+
+    // NDEF Message Objekt erstellen
+    final message = NdefMessage([
+      NdefRecord(
+        typeNameFormat: NdefTypeNameFormat.nfcWellknown,
+        type: Uint8List.fromList([0x54]), // "T" für Text
+        identifier: Uint8List(0),
+        payload: payload,
+      ),
+    ]);
 
     try {
       await NfcManager.instance.startSession(
-        pollingOptions: {
-          NfcPollingOption.iso14443,
-          NfcPollingOption.iso15693,
-        },
+        pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
         onDiscovered: (NfcTag tag) async {
           try {
-            // Erweiterte Debug-Ausgabe
-            print('=== TAG DEBUG ===');
-            print('Tag Data: ${tag.data}');
-            print('NDEF verfügbar: ${Ndef.from(tag) != null}');
-            print('NfcA verfügbar: ${NfcA.from(tag) != null}');
-            print('MifareUltralight verfügbar: ${MifareUltralight.from(tag) != null}');
-            print('=================');
-
-            // Technologie-Prüfung
-            final ndef = Ndef.from(tag);
-                        final message = NdefMessage([
-              NdefRecord(
-                typeNameFormat: NdefTypeNameFormat.nfcWellknown,
-                type: Uint8List.fromList([0x54]), // "T" (Text)
-                identifier: Uint8List(0),
-                payload: Uint8List.fromList(payload),
-              ),
-            ]);
-            if (ndef != null) {
-              if (!ndef.isWritable) {
-                setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
-                await NfcManager.instance.stopSession();
+            // A) Versuche NDEF (formatierte Tags)
+            var ndef = Ndef.from(tag);
+            
+            // B) Fallback: Versuche NdefFormatable (leere/unformatierte Tags)
+            if (ndef == null) {
+              final formatable = NdefFormatable.from(tag);
+              if (formatable != null) {
+                try {
+                  await formatable.format(message);
+                  await NfcManager.instance.stopSession(alertMessage: "Tag formatiert & geschrieben!");
+                  _handleSuccessInUI();
+                  return;
+                } catch (e) {
+                  await NfcManager.instance.stopSession(errorMessage: "Formatierung fehlgeschlagen");
+                  return;
+                }
+              } else {
+                await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
                 return;
               }
-              await ndef.write(message);
-            } else {
-              final ndefFormatable = NdefFormatable.from(tag);
-              if (ndefFormatable == null) {
-                setState(() => _statusText = "❌ Tag unterstützt kein NDEF (weder Ndef noch NdefFormatable)");
-                await NfcManager.instance.stopSession();
-                return;
-              }
-              await ndefFormatable.format(message);
             }
 
-            setState(() {
-              _success = true;
-              _statusText = widget.mode == NFCWriteMode.badge
-                 ? "✅ MEETUP TAG geschrieben!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
-                 : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nNeue Nutzer können jetzt ihre Identität bestätigen.";
+            // Wenn wir hier sind, ist es ein NDEF Tag
+            if (!ndef.isWritable) {
+              await NfcManager.instance.stopSession(errorMessage: "Tag ist schreibgeschützt!");
+              return;
+            }
 
-            });
+            // Schreiben
+            await ndef.write(message);
 
-            await NfcManager.instance.stopSession();
-            await Future.delayed(const Duration(seconds: 3));
-            if (mounted) Navigator.pop(context);
+            // ERFOLG: Wichtig für iOS Feedback (Häkchen)
+            await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
+            _handleSuccessInUI();
 
           } catch (e) {
-            print("[ERROR] Fehler beim Tag-Handling: $e");
-            setState(() => _statusText = "❌ Fehler: $e");
-            await NfcManager.instance.stopSession();
+            print("[ERROR] Write Error: $e");
+            await NfcManager.instance.stopSession(errorMessage: "Fehler beim Schreiben");
+            _handleErrorInUI(e.toString());
           }
         },
       );
     } catch (e) {
-      setState(() => _statusText = "❌ NFC Fehler: $e");
+      setState(() => _statusText = "❌ Start Fehler: $e");
     }
+  }
+
+  // Hilfsfunktion: UI Update bei Erfolg
+  void _handleSuccessInUI() {
+    if (!mounted) return;
+    setState(() {
+      _success = true;
+      _statusText = widget.mode == NFCWriteMode.badge
+          ? "✅ MEETUP TAG geschrieben!\n\n📍 ${_homeMeetup?.city}\nBadge-System aktiv."
+          : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nAdmin-Key gespeichert.";
+    });
+    
+    // Nach 3 Sekunden automatisch schließen
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) Navigator.pop(context);
+    });
+  }
+
+  // Hilfsfunktion: UI Update bei Fehler
+  void _handleErrorInUI(String error) {
+    if (!mounted) return;
+    setState(() {
+      _statusText = "❌ Fehler: $error";
+    });
   }
 
   Future<void> _simulateWriteTag() async {
@@ -192,14 +213,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       _statusText = "Schreibe Tag... (SIM)";
     });
     await Future.delayed(const Duration(seconds: 2));
-    setState(() {
-      _success = true;
-      _statusText = widget.mode == NFCWriteMode.badge
-          ? "✅ MEETUP TAG erstellt! (Simulation)\n\n📍 ${_homeMeetup?.city ?? "?"}, ${_homeMeetup?.country ?? "?"}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
-          : "✅ VERIFIZIERUNGS-TAG erstellt! (Simulation)\n\nNeue Nutzer können ihre Identität bestätigen.";
-    });
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) Navigator.pop(context);
+    _handleSuccessInUI();
   }
 
   @override
@@ -219,7 +233,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle, size: 100, color: Colors.green),
+                  const Icon(Icons.check_circle, size: 100, color: Colors.green),
                   const SizedBox(height: 20),
                   const Text(
                     "ERFOLG!",
