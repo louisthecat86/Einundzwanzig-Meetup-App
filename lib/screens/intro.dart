@@ -4,6 +4,7 @@ import '../theme.dart';
 import 'profile_edit.dart'; 
 import 'dashboard.dart'; 
 import 'verification_gate.dart'; 
+import '../services/backup_service.dart'; // NEU: Backup Service Import
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -35,16 +36,29 @@ class _IntroScreenState extends State<IntroScreen> {
     setState(() => _showButton = true);
   }
 
-  // --- DIE NEUE LOGIK ---
+  // --- BACKUP LOGIK ---
+  void _restoreAccount() async {
+    bool success = await BackupService.restoreBackup(context);
+    if (success && mounted) {
+      // Wenn das Backup erfolgreich war, springen wir direkt zum Dashboard,
+      // da alle Daten (Name, Verifizierung, Badges) nun im Speicher sind.
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const DashboardScreen(), 
+          transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
+        ),
+      );
+    }
+  }
+
   void _enterCommunity() async {
     setState(() => _isLoading = true);
 
-    // 1. Profil laden
     UserProfile user = await UserProfile.load();
 
     if (!mounted) return;
 
-    // SCHRITT A: Ist er noch "Anon"? -> Zwinge zum Profil
     if (user.nickname == "Anon" && !user.isVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -54,36 +68,29 @@ class _IntroScreenState extends State<IntroScreen> {
         )
       );
 
-      // Wir warten, bis er vom Editor zurückkommt
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
       );
 
-      // WICHTIG: User neu laden, falls er den Namen geändert hat!
       user = await UserProfile.load();
     }
 
     if (!mounted) return;
 
-    // SCHRITT B: Ist er verifiziert? (Deine Logik)
     if (user.isAdminVerified) {
-       // JA -> Dashboard (Zutritt gewährt)
-       // HIER WURDE 'const' ENTFERNT:
        Navigator.pushReplacement(
          context,
          PageRouteBuilder(
-           pageBuilder: (_, __, ___) => DashboardScreen(), 
+           pageBuilder: (_, __, ___) => const DashboardScreen(), 
            transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
          ),
        );
     } else {
-      // NEIN -> Gatekeeper (Zutritt verweigert, muss scannen)
-      // HIER WURDE 'const' ENTFERNT:
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => VerificationGateScreen(),
+          pageBuilder: (_, __, ___) => const VerificationGateScreen(),
           transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
         ),
       );
@@ -138,28 +145,46 @@ class _IntroScreenState extends State<IntroScreen> {
 
             const SizedBox(height: 60),
 
-            // BUTTON
+            // BUTTONS
             AnimatedOpacity(
               duration: const Duration(milliseconds: 500),
               opacity: _showButton ? 1.0 : 0.0,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _enterCommunity,
-                    child: _isLoading 
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.black,
-                            strokeWidth: 2.5,
-                          ),
-                        )
-                      : const Text("COMMUNITY BETRETEN"),
-                  ),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _enterCommunity,
+                        child: _isLoading 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                                strokeWidth: 2.5,
+                              ),
+                            )
+                          : const Text("COMMUNITY BETRETEN"),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // NEU: Backup Button
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _restoreAccount,
+                      icon: const Icon(Icons.restore, color: Colors.orange, size: 20),
+                      label: const Text(
+                        "BACKUP LADEN",
+                        style: TextStyle(
+                          color: Colors.orange, 
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

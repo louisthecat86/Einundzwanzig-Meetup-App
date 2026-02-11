@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Für Reset
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -10,13 +10,13 @@ import 'meetup_selection.dart';
 import 'badge_details.dart'; 
 import 'badge_wallet.dart';
 import 'profile_edit.dart'; 
-import 'intro.dart'; // Um zum Start zurückzukehren
-import 'admin_panel.dart'; // Neuer Admin Bereich
-import 'events.dart'; // Events/Termine Screen
-import 'meetup_details.dart'; // Meetup Details Screen
-import 'reputation_qr.dart'; // Reputation QR-Code
-import 'calendar_screen.dart'; // WICHTIG: Kalender importiert
-import '../services/backup_service.dart';
+import 'intro.dart'; 
+import 'admin_panel.dart'; 
+import 'events.dart'; 
+import 'meetup_details.dart'; 
+import 'reputation_qr.dart'; 
+import 'calendar_screen.dart';
+import '../services/backup_service.dart'; // Backup Service Import
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -27,7 +27,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   UserProfile _user = UserProfile();
-  Meetup? _homeMeetup; // Das geladene Home-Meetup
+  Meetup? _homeMeetup; 
   
   @override
   void initState() {
@@ -48,23 +48,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _loadUser() async {
     final u = await UserProfile.load();
     
-    print("[DEBUG Dashboard] User geladen: ${u.nickname}, Home-Meetup: ${u.homeMeetupId}");
-    
-    // Home-Meetup laden wenn vorhanden (Matching auf Namen)
     Meetup? homeMeetup;
     if (u.homeMeetupId.isNotEmpty) {
       List<Meetup> meetups = await MeetupService.fetchMeetups();
       if (meetups.isEmpty) {
         meetups = allMeetups;
       }
-      // Match auf Stadt-Namen statt ID
       homeMeetup = meetups.where((m) => m.city == u.homeMeetupId).firstOrNull;
-      
-      if (homeMeetup != null) {
-        print("[DEBUG Dashboard] Home-Meetup gefunden: ${homeMeetup.city}");
-      } else {
-        print("[DEBUG Dashboard] Home-Meetup NICHT gefunden für: ${u.homeMeetupId}");
-      }
     }
     
     setState(() {
@@ -73,12 +63,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  // APP ZURÜCKSETZEN (Logout)
   void _resetApp() async {
+    // Sicherheitsabfrage vor dem Löschen
+    bool confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: cCard,
+        title: const Text("App zurücksetzen?", style: TextStyle(color: Colors.white)),
+        content: const Text("Alle Badges und dein Profil werden gelöscht. Stelle sicher, dass du ein Backup hast!"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbruch")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text("LÖSCHEN", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+          ),
+        ],
+      )
+    ) ?? false;
+
+    if (!confirm) return;
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // Alles löschen (Admin status, Namen, etc.)
-    myBadges.clear();    // Badges im Speicher löschen
-    await MeetupBadge.saveBadges([]); // Badges auch persistent löschen
+    await prefs.clear(); 
+    myBadges.clear();    
+    await MeetupBadge.saveBadges([]); 
     
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -92,14 +100,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showModalBottomSheet(
       context: context, 
       backgroundColor: cCard,
-      isScrollControlled: true, // Erlaubt dem Sheet, größer zu werden
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
         child: Column(
-          mainAxisSize: MainAxisSize.min, // Nimmt nur so viel Platz wie nötig
+          mainAxisSize: MainAxisSize.min, 
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
@@ -112,7 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Text("DATENSICHERUNG", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 10),
             
-            // --- BACKUP EXPORT ---
+            // --- BACKUP EXPORT (Nur Erstellen) ---
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(8),
@@ -120,53 +128,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: const Icon(Icons.upload, color: Colors.blue),
               ),
               title: const Text("Backup erstellen", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Sichere deinen Account als Datei.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              subtitle: const Text("Sichere deinen Account extern als Datei.", style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: () async {
-                Navigator.pop(context); // Menü schließen
+                Navigator.pop(context); 
                 await BackupService.createBackup(context);
-              },
-            ),
-
-            // --- BACKUP IMPORT ---
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.green.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.download, color: Colors.green),
-              ),
-              title: const Text("Backup importieren", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Stelle Daten aus einer Datei wieder her.", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () async {
-                Navigator.pop(context); // Menü erst schließen
-                
-                // Warnung anzeigen
-                bool confirm = await showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: cCard,
-                    title: const Text("Achtung", style: TextStyle(color: Colors.white)),
-                    content: const Text(
-                      "Der Import überschreibt deine aktuellen Daten auf diesem Gerät. Willst du fortfahren?",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbruch")),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true), 
-                        child: const Text("Überschreiben", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
-                      ),
-                    ],
-                  )
-                ) ?? false;
-
-                if (confirm) {
-                  bool success = await BackupService.restoreBackup(context);
-                  if (success) {
-                    // WICHTIG: Dashboard neu laden, damit die neuen Badges angezeigt werden!
-                    _loadUser();
-                    _loadBadges();
-                  }
-                }
               },
             ),
 
@@ -185,8 +150,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: const Icon(Icons.delete_forever, color: Colors.red),
               ),
               title: const Text("App zurücksetzen", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Löscht alle lokalen Daten.", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: _resetApp,
+              subtitle: const Text("Löscht Profil und Badges vom Gerät.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                _resetApp();
+              },
             ),
           ],
         ),
@@ -200,7 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context,
       MaterialPageRoute(builder: (context) => MeetupVerificationScreen(meetup: dummy)),
     );
-    setState(() {}); // Badge-Anzahl aktualisieren
+    _loadBadges(); // Sicherstellen, dass Badges nach Scan neu geladen werden
   }
 
   void _selectHomeMeetup() async {
@@ -217,8 +185,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         automaticallyImplyLeading: false, 
         actions: [
           IconButton(
-             icon: const Icon(Icons.settings),
-             onPressed: _showSettings,
+            icon: const Icon(Icons.settings),
+            onPressed: _showSettings,
           )
         ],
       ),
@@ -227,7 +195,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Text(
               "Hallo, ${_user.nickname}!",
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
@@ -242,13 +209,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 color: cTextSecondary,
               ),
             ),
-            
             const SizedBox(height: 32),
-
             _buildHomeMeetupCard(),
-
             const SizedBox(height: 20),
-
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -261,18 +224,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: cOrange,
                   title: "BADGES",
                   subtitle: "Jetzt scannen",
-                  onTap: _scanAnyMeetup, // DIREKT NFC ÖFFNEN
+                  onTap: _scanAnyMeetup, 
                 ),
                 _buildTile(
                   icon: Icons.collections_bookmark, 
                   color: cPurple, 
                   title: "WALLET", 
                   subtitle: "${myBadges.length} Badges", 
-                  onTap: () {
-                    Navigator.push(
+                  onTap: () async {
+                    await Navigator.push(
                       context, 
                       MaterialPageRoute(builder: (context) => BadgeWalletScreen()),
                     );
+                    _loadBadges(); // Reload nach Rückkehr aus Wallet
                   }
                 ),
                 _buildTile(
@@ -283,7 +247,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      // Öffnet den Kalender ohne Filter (alle Events)
                       MaterialPageRoute(builder: (context) => const CalendarScreen()),
                     );
                   },
@@ -295,7 +258,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _loadUser();
                   }
                 ),
-                if (myBadges.isNotEmpty) // Nur wenn Badges vorhanden
+                if (myBadges.isNotEmpty) 
                   _buildTile(
                     icon: Icons.workspace_premium,
                     color: Colors.amber,
@@ -308,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   ),
-                if (_user.isAdmin) // Nur für echte Admins
+                if (_user.isAdmin) 
                   _buildTile(
                     icon: Icons.admin_panel_settings,
                     color: Colors.redAccent,
@@ -335,14 +298,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        // === HIER IST DIE ÄNDERUNG ===
-        // Wenn man auf die Karte klickt, öffnet sich der Kalender mit Filter auf die Stadt
         onTap: hasHome && _homeMeetup != null ? () {
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CalendarScreen(
-                initialSearch: _homeMeetup!.city // Wir geben die Stadt als Filter mit
+                initialSearch: _homeMeetup!.city 
               ),
             ),
           );
@@ -427,8 +388,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          // Der "DETAILS" Button führt weiterhin zu den technischen Details (Links, Koordinaten etc.)
-                          // Falls du das auch auf den Kalender ändern willst, sag Bescheid!
                           if (_homeMeetup != null) {
                             Navigator.push(
                               context,
