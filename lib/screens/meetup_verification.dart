@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/platform_tags.dart';
 import 'dart:convert';
 import '../theme.dart';
 import '../models/badge.dart';
@@ -74,28 +75,26 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            print("[DEBUG] Tag entdeckt: ${tag.data.keys}");
-            
-            // KORREKTUR: Nutze Ndef.from() statt tag.data als Map
-            Ndef? ndef = Ndef.from(tag);
+            // KORREKTUR: Nutze Ndef.from() aus platform_tags
+            final ndef = Ndef.from(tag);
             
             if (ndef == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag");
+              await NfcManager.instance.stopSession();
               return;
             }
 
             // Lese die NDEF Message
-            NdefMessage? message = await ndef.read();
+            final message = await ndef.read();
             
             if (message == null || message.records.isEmpty) {
               setState(() => _statusText = "❌ Keine Daten auf dem Tag gefunden");
-              await NfcManager.instance.stopSession(errorMessage: "Leerer Tag");
+              await NfcManager.instance.stopSession();
               return;
             }
 
             // Extrahiere den ersten Text-Record
-            NdefRecord record = message.records.first;
+            final record = message.records.first;
             
             // Text-Record hat Format: [Flags, Lang-Length, Lang-Code, Text...]
             // Beispiel: [0x02, 0x65, 0x6e, ...JSON...]
@@ -105,7 +104,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             String jsonString;
             try {
               // Überspringe die ersten 3 Bytes (Flags + Lang)
-              List<int> payload = record.payload;
+              final payload = record.payload;
               if (payload.length > 3) {
                 jsonString = utf8.decode(payload.sublist(3));
               } else {
@@ -113,7 +112,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               }
             } catch (e) {
               setState(() => _statusText = "❌ Fehler beim Dekodieren: $e");
-              await NfcManager.instance.stopSession(errorMessage: "Dekodier-Fehler");
+              await NfcManager.instance.stopSession();
               return;
             }
 
@@ -123,7 +122,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               tagData = json.decode(jsonString) as Map<String, dynamic>;
             } catch (e) {
               setState(() => _statusText = "❌ Ungültiges JSON auf Tag: $e");
-              await NfcManager.instance.stopSession(errorMessage: "JSON-Fehler");
+              await NfcManager.instance.stopSession();
               return;
             }
 
@@ -133,7 +132,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Lesen: $e");
             setState(() => _statusText = "❌ Fehler beim Lesen: $e");
-            await NfcManager.instance.stopSession(errorMessage: "Lesefehler");
+            await NfcManager.instance.stopSession();
           }
         },
       );

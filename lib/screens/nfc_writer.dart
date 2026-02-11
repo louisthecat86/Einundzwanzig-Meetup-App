@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/platform_tags.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -130,26 +131,24 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            print("[DEBUG] Tag entdeckt: ${tag.data.keys}");
-            
-            // KORREKTUR: Nutze die Ndef-Klasse direkt statt tag.data als Map zu behandeln
-            Ndef? ndef = Ndef.from(tag);
+            // KORREKTUR: Nutze Ndef.from() aus platform_tags
+            final ndef = Ndef.from(tag);
             
             if (ndef == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag");
+              await NfcManager.instance.stopSession();
               return;
             }
 
             // Prüfe ob der Tag beschreibbar ist
             if (!ndef.isWritable) {
               setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
-              await NfcManager.instance.stopSession(errorMessage: "Tag schreibgeschützt");
+              await NfcManager.instance.stopSession();
               return;
             }
 
             // Erstelle NDEF Message mit Text Record
-            NdefMessage message = NdefMessage([
+            final message = NdefMessage([
               NdefRecord.createText(jsonData),
             ]);
 
@@ -170,13 +169,13 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               
             } catch (e) {
               setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
-              await NfcManager.instance.stopSession(errorMessage: "Schreibfehler");
+              await NfcManager.instance.stopSession();
             }
             
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Handling: $e");
             setState(() => _statusText = "❌ Fehler: $e");
-            await NfcManager.instance.stopSession(errorMessage: "Fehler");
+            await NfcManager.instance.stopSession();
           }
         },
       );
