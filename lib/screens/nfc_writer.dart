@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart'; // Import vereinfacht: ALLES importieren
+// Der wichtige Import:
+import 'package:nfc_manager/nfc_manager.dart'; 
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -135,18 +136,15 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               if (formatable != null) {
                 try {
                   await formatable.format(message);
-                  // FIX: Parameter entfernt
                   await NfcManager.instance.stopSession(); 
                   _handleSuccessInUI();
                   return;
                 } catch (e) {
-                  // FIX: Parameter entfernt
                   await NfcManager.instance.stopSession();
                   _handleErrorInUI("Formatierung fehlgeschlagen");
                   return;
                 }
               } else {
-                // FIX: Parameter entfernt
                 await NfcManager.instance.stopSession();
                 _handleErrorInUI("Kein NDEF");
                 return;
@@ -154,21 +152,17 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             }
 
             if (!ndef.isWritable) {
-              // FIX: Parameter entfernt
               await NfcManager.instance.stopSession();
               _handleErrorInUI("Schreibgeschützt");
               return;
             }
 
             await ndef.write(message);
-
-            // FIX: Parameter entfernt
             await NfcManager.instance.stopSession();
             _handleSuccessInUI();
 
           } catch (e) {
             print("[ERROR] Write Error: $e");
-            // FIX: Parameter entfernt
             await NfcManager.instance.stopSession();
             _handleErrorInUI(e.toString());
           }
