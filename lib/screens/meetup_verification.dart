@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';             // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager/nfc_manager.dart';            // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
 import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import 'dart:convert';
 import 'dart:typed_data';
@@ -8,6 +8,7 @@ import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart'; 
 import '../services/mempool.dart';
+import '../services/badge_security.dart'; // <--- NEU: Import für Sicherheits-Check
 import 'nfc_writer.dart'; 
 
 class MeetupVerificationScreen extends StatefulWidget {
@@ -59,7 +60,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       _statusText = "Warte auf NFC Tag...";
     });
 
-    // v4.x: checkAvailability() statt isAvailable()
     final availability = await NfcManager.instance.checkAvailability();
     if (availability != NfcAvailability.enabled) {
       _simulateHandshake(type);
@@ -74,14 +74,12 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            // v4.x: Ndef aus nfc_manager_ndef
             final ndef = Ndef.from(tag);
             if (ndef == null) {
               await NfcManager.instance.stopSession();
               return;
             }
 
-            // v4.x: read() gibt NdefMessage? zurück (nullable)
             final ndefMessage = await ndef.read();
             if (ndefMessage == null || ndefMessage.records.isEmpty) {
               await NfcManager.instance.stopSession();
@@ -107,6 +105,18 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             try {
               final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
               await NfcManager.instance.stopSession();
+
+              // --- NEU: SICHERHEITS-CHECK ---
+              bool isValid = BadgeSecurity.verify(tagData);
+              if (!isValid) {
+                setState(() {
+                  _statusText = "❌ FÄLSCHUNG ERKANNT!\nDieser Tag hat keine gültige Signatur.";
+                  _success = false;
+                });
+                return; // Abbruch!
+              }
+              // ------------------------------
+
               _processFoundTagData(tagData: tagData);
             } catch (e) {
               await NfcManager.instance.stopSession();
@@ -128,29 +138,33 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       _statusText = "Lese Tag... (SIMULATOR)";
     });
     await Future.delayed(const Duration(seconds: 1));
-    Map<String, dynamic>? tagData;
+    
+    // Wir müssen für den Simulator gültige Daten erzeugen, sonst schlägt der Verify fehl
+    final timestamp = DateTime.now().toIso8601String();
+    final int blockHeight = 850000; // Dummy Block
+    final meetupId = widget.meetup.id;
+
+    // Erzeuge gültige Signatur für Simulation
+    final sig = BadgeSecurity.sign(meetupId, timestamp, blockHeight);
+
+    Map<String, dynamic> tagData = {
+      'timestamp': timestamp,
+      'block_height': blockHeight,
+      'meetup_id': meetupId,
+      'sig': sig, // <--- Signatur muss auch im Simulator da sein
+    };
     
     if (type == "BADGE") {
-      tagData = {
-        'type': 'BADGE',
-        'meetup_id': widget.meetup.id,
-        'meetup_name': widget.meetup.city,
-        'meetup_country': widget.meetup.country,
-        'meetup_date': DateTime.now().toIso8601String(),
-        'timestamp': DateTime.now().toIso8601String(),
-      };
+      tagData['type'] = 'BADGE';
+      tagData['meetup_name'] = widget.meetup.city;
+      tagData['meetup_country'] = widget.meetup.country;
+      tagData['meetup_date'] = timestamp;
     } else if (type == "VERIFY") {
-      tagData = {
-        'type': 'VERIFY',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
+      tagData['type'] = 'VERIFY';
     }
+
     _processFoundTagData(tagData: tagData);
   }
-
-  // ... (Imports bleiben gleich)
-
-  // ... (initState, dispose, _startNfcRead, _simulateHandshake bleiben gleich)
 
   void _processFoundTagData({Map<String, dynamic>? tagData}) async {
     if (!mounted) return;
@@ -166,31 +180,31 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     String msg = "";
     String tagType = tagData['type'] ?? '';
 
-    // --- NEU: Validierung des Modus (Stoppt falsche Scans) ---
-    
-    // 1. Fall: Nutzer will VERIFIZIEREN (Gatekeeper/Profil), scannt aber einen BADGE
+    // Validierung des Modus
     if (widget.verifyOnlyMode && tagType == 'BADGE') {
       setState(() {
         _statusText = "❌ Falscher Tag!\nDas ist ein Badge-Tag.\nBitte den Verifizierungs-Tag des Admins scannen.";
       });
-      return; // Abbruch
+      return; 
     }
 
-    // 2. Fall: Nutzer will einen BADGE sammeln, scannt aber einen VERIFY-Tag
     if (!widget.verifyOnlyMode && tagType == 'VERIFY' && !_isChefMode) {
       setState(() {
         _statusText = "❌ Falscher Tag!\nDas ist ein Verifizierungs-Tag.\nZum Sammeln bitte den Badge-Tag scannen.";
       });
-      return; // Abbruch
+      return; 
     }
     
-    // -------------------------------------------------------
-
     int currentBlockHeight = 0;
-    try {
-      currentBlockHeight = await MempoolService.getBlockHeight();
-    } catch (e) {
-      print("[ERROR] Blockhöhe konnte nicht geladen werden: $e");
+    // Wir nehmen die Blockhöhe vom Tag, falls vorhanden, sonst laden wir sie
+    if (tagData['block_height'] != null) {
+      currentBlockHeight = tagData['block_height'];
+    } else {
+      try {
+        currentBlockHeight = await MempoolService.getBlockHeight();
+      } catch (e) {
+        print("Mempool Fehler: $e");
+      }
     }
 
     if (tagType == 'BADGE') {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';             // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager/nfc_manager.dart';            // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
 import 'package:nfc_manager/ndef_record.dart';              // NdefRecord, NdefMessage, TypeNameFormat
 import 'package:nfc_manager/nfc_manager_android.dart';      // NdefFormatableAndroid
 import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
@@ -9,6 +9,8 @@ import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
 import '../services/meetup_service.dart';
+import '../services/badge_security.dart'; // NEU: Für die einfache Signatur
+import '../services/mempool.dart';        // NEU: Für Blockhöhe
 
 enum NFCWriteMode { badge, verify }
 
@@ -91,9 +93,40 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
 
     setState(() {
-      _statusText = "Halte Tag an das Gerät...";
+      _statusText = "Berechne Signatur...";
       _success = false;
     });
+
+    // --- NEU: DATEN VORBEREITEN & SIGNIEREN ---
+    final timestamp = DateTime.now().toIso8601String();
+    int blockHeight = 0;
+    
+    try {
+      // Wir versuchen die Blockhöhe zu holen, bei Fehler nehmen wir 0
+      blockHeight = await MempoolService.getBlockHeight();
+    } catch (e) {
+      print("Mempool Fehler: $e");
+    }
+
+    final meetupId = _homeMeetup?.id ?? "global";
+
+    // Hier entsteht die fälschungssichere Signatur basierend auf unserem App-Secret
+    final signature = BadgeSecurity.sign(meetupId, timestamp, blockHeight);
+
+    Map<String, dynamic> tagData = {
+      'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
+      'meetup_id': meetupId,
+      'timestamp': timestamp,
+      'block_height': blockHeight,
+      'sig': signature, // <--- Die Signatur kommt auf den Tag
+    };
+    
+    if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
+      tagData['meetup_name'] = _homeMeetup!.city;
+      tagData['meetup_country'] = _homeMeetup!.country;
+      tagData['meetup_date'] = DateTime.now().toIso8601String();
+    }
+    // ---------------------------------------------
 
     // v4.x: checkAvailability() statt isAvailable()
     final availability = await NfcManager.instance.checkAvailability();
@@ -102,18 +135,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       return;
     }
 
-    Map<String, dynamic> tagData = {
-      'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-    
-    if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
-      tagData['meetup_id'] = _homeMeetup!.id;
-      tagData['meetup_name'] = _homeMeetup!.city;
-      tagData['meetup_country'] = _homeMeetup!.country;
-      tagData['meetup_date'] = DateTime.now().toIso8601String();
-    }
-    
+    setState(() => _statusText = "Halte Tag an das Gerät...");
+
     String jsonData = jsonEncode(tagData);
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
@@ -184,7 +207,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       _success = true;
       _statusText = widget.mode == NFCWriteMode.badge
           ? "✅ MEETUP TAG geschrieben!\n\n📍 ${_homeMeetup?.city}\nBadge-System aktiv."
-          : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nAdmin-Key gespeichert.";
+          : "✅ VERIFIZIERUNGS-TAG geschrieben!\n\nAdmin-Signatur gespeichert.";
     });
     
     Future.delayed(const Duration(seconds: 3), () {
