@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/nfc_manager.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -110,6 +109,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       return;
     }
 
+    // Erstelle die Daten für den Tag
     Map<String, dynamic> tagData = {
       'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
       'timestamp': DateTime.now().toIso8601String(),
@@ -121,53 +121,62 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       tagData['meetup_date'] = DateTime.now().toIso8601String();
     }
     String jsonData = jsonEncode(tagData);
-    final payload = [0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]; // Sprachcode "en"
 
     try {
       await NfcManager.instance.startSession(
         pollingOptions: {
           NfcPollingOption.iso14443,
           NfcPollingOption.iso15693,
-          NfcPollingOption.iso18092,
         },
-        onDiscovered: (tag) async {
+        onDiscovered: (NfcTag tag) async {
           try {
-            // Versuche NDEF zu schreiben (Android/iOS unterschiedlich!)
-            dynamic tagMap;
-            if (tag.data is Map) {
-              tagMap = tag.data as Map;
-            } else {
-              // Versuche, das Feld ndef direkt auszulesen (Workaround für Pigeon-Objekte)
-              try {
-                final ndef = (tag.data as dynamic).ndef;
-                tagMap = {'ndef': ndef};
-              } catch (_) {
-                setState(() => _statusText = "❌ Fehler: Tag-Typ nicht unterstützt (${tag.data.runtimeType})");
-                await NfcManager.instance.stopSession();
-                return;
-              }
-            }
-            final ndef = tagMap['ndef'];
-            if (ndef == null || ndef['isWritable'] != true) {
-              setState(() => _statusText = "❌ Kein beschreibbarer NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession();
+            print("[DEBUG] Tag entdeckt: ${tag.data.keys}");
+            
+            // KORREKTUR: Nutze die Ndef-Klasse direkt statt tag.data als Map zu behandeln
+            Ndef? ndef = Ndef.from(tag);
+            
+            if (ndef == null) {
+              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
+              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag");
               return;
             }
-            // Schreibe NDEF-Text-Record (Payload als JSON)
-            // Die aktuelle nfc_manager API unterstützt das Schreiben nur über native Methoden, nicht direkt in Dart.
-            // Zeige stattdessen eine Info an, dass der Tag erkannt wurde (Demo/Fallback).
-            setState(() {
-              _success = true;
-              _statusText = widget.mode == NFCWriteMode.badge
-                  ? "MEETUP TAG erkannt (Schreibfunktion muss ggf. nativ implementiert werden)!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
-                  : "VERIFIZIERUNGS-TAG erkannt (Schreibfunktion muss ggf. nativ implementiert werden)!\n\nNeue Nutzer können ihre Identität bestätigen.";
-            });
-            await NfcManager.instance.stopSession();
-            await Future.delayed(const Duration(seconds: 3));
-            if (mounted) Navigator.pop(context);
+
+            // Prüfe ob der Tag beschreibbar ist
+            if (!ndef.isWritable) {
+              setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
+              await NfcManager.instance.stopSession(errorMessage: "Tag schreibgeschützt");
+              return;
+            }
+
+            // Erstelle NDEF Message mit Text Record
+            NdefMessage message = NdefMessage([
+              NdefRecord.createText(jsonData),
+            ]);
+
+            // Schreibe auf den Tag
+            try {
+              await ndef.write(message);
+              
+              setState(() {
+                _success = true;
+                _statusText = widget.mode == NFCWriteMode.badge
+                    ? "✅ MEETUP TAG erfolgreich erstellt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+                    : "✅ VERIFIZIERUNGS-TAG erfolgreich erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
+              });
+              
+              await NfcManager.instance.stopSession();
+              await Future.delayed(const Duration(seconds: 3));
+              if (mounted) Navigator.pop(context);
+              
+            } catch (e) {
+              setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
+              await NfcManager.instance.stopSession(errorMessage: "Schreibfehler");
+            }
+            
           } catch (e) {
-            setState(() => _statusText = "❌ Fehler beim Schreiben: $e");
-            await NfcManager.instance.stopSession();
+            print("[ERROR] Fehler beim Tag-Handling: $e");
+            setState(() => _statusText = "❌ Fehler: $e");
+            await NfcManager.instance.stopSession(errorMessage: "Fehler");
           }
         },
       );
@@ -185,8 +194,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     setState(() {
       _success = true;
       _statusText = widget.mode == NFCWriteMode.badge
-          ? "MEETUP TAG erstellt!\n\n📍 ${_homeMeetup?.city ?? "?"}, ${_homeMeetup?.country ?? "?"}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
-          : "VERIFIZIERUNGS-TAG erstellt!\n\nNeue Nutzer können ihre Identität bestätigen.";
+          ? "✅ MEETUP TAG erstellt! (Simulation)\n\n📍 ${_homeMeetup?.city ?? "?"}, ${_homeMeetup?.country ?? "?"}\n\nTeilnehmer können jetzt scannen und Badge sammeln."
+          : "✅ VERIFIZIERUNGS-TAG erstellt! (Simulation)\n\nNeue Nutzer können ihre Identität bestätigen.";
     });
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) Navigator.pop(context);
@@ -331,7 +340,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                       onPressed: _writeTag,
                       icon: const Icon(Icons.nfc, color: Colors.white),
                       label: const Text(
-                        "TAG ERSTELLEN (SIM)",
+                        "TAG ERSTELLEN",
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,

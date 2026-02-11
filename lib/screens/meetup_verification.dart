@@ -5,18 +5,18 @@ import '../theme.dart';
 import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart'; 
-import '../services/mempool.dart'; // <--- WICHTIG: Damit wir die Blockzeit holen können
+import '../services/mempool.dart';
 
 class MeetupVerificationScreen extends StatefulWidget {
   final Meetup meetup;
-  final bool initialChefMode; // <--- NEU: Ermöglicht direkten Admin-Start
-  final bool verifyOnlyMode; // <--- NEU: Nur Verifizierung, keine Badges
+  final bool initialChefMode;
+  final bool verifyOnlyMode;
 
   const MeetupVerificationScreen({
     super.key, 
     required this.meetup,
-    this.initialChefMode = false, // Standardmäßig aus
-    this.verifyOnlyMode = false, // Standardmäßig aus
+    this.initialChefMode = false,
+    this.verifyOnlyMode = false,
   });
 
   @override
@@ -24,12 +24,10 @@ class MeetupVerificationScreen extends StatefulWidget {
 }
 
 class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> with SingleTickerProviderStateMixin {
-  late bool _isChefMode; // <--- Jetzt 'late', weil wir es im Init setzen
+  late bool _isChefMode;
   bool _success = false;
   String _statusText = "Bereit zum Scannen";
-  
-  // true = "Badge für alle", false = "Admin Verifizierung"
-  bool _writeModeBadge = true; 
+  bool _writeModeBadge = true;
 
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -39,7 +37,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   void initState() {
     super.initState();
     
-    // Wir übernehmen den Startwert vom Widget (für den roten Dashboard-Button)
     _isChefMode = widget.initialChefMode;
     if (_isChefMode) {
       _statusText = "ADMIN MODUS AKTIV";
@@ -56,8 +53,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     super.dispose();
   }
 
-  // --- NFC HANDSHAKE ---
-  // type: "BADGE" oder "VERIFY"
+  // --- NFC LESEN (KORRIGIERT) ---
   void _startNfcRead(String type) async {
     setState(() {
       _statusText = "Warte auf NFC Tag...";
@@ -75,32 +71,69 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         pollingOptions: {
           NfcPollingOption.iso14443,
           NfcPollingOption.iso15693,
-          NfcPollingOption.iso18092,
         },
-        onDiscovered: (tag) async {
+        onDiscovered: (NfcTag tag) async {
           try {
-            // Versuche NDEF-Daten zu extrahieren (Android/iOS unterschiedlich!)
-            final tagMap = tag.data as Map;
-            final ndef = tagMap['ndef'];
-            if (ndef == null || ndef['cachedMessage'] == null) {
+            print("[DEBUG] Tag entdeckt: ${tag.data.keys}");
+            
+            // KORREKTUR: Nutze Ndef.from() statt tag.data als Map
+            Ndef? ndef = Ndef.from(tag);
+            
+            if (ndef == null) {
               setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession();
+              await NfcManager.instance.stopSession(errorMessage: "Kein NDEF-Tag");
               return;
             }
-            final records = ndef['cachedMessage']['records'] as List<dynamic>;
-            if (records.isEmpty) {
-              setState(() => _statusText = "❌ Kein NDEF-Record gefunden");
-              await NfcManager.instance.stopSession();
+
+            // Lese die NDEF Message
+            NdefMessage? message = await ndef.read();
+            
+            if (message == null || message.records.isEmpty) {
+              setState(() => _statusText = "❌ Keine Daten auf dem Tag gefunden");
+              await NfcManager.instance.stopSession(errorMessage: "Leerer Tag");
               return;
             }
-            final payload = records[0]['payload'] as List<dynamic>;
-            String jsonString = utf8.decode(payload.length > 3 ? payload.sublist(3).cast<int>() : payload.cast<int>());
-            Map<String, dynamic>? tagData = json.decode(jsonString);
+
+            // Extrahiere den ersten Text-Record
+            NdefRecord record = message.records.first;
+            
+            // Text-Record hat Format: [Flags, Lang-Length, Lang-Code, Text...]
+            // Beispiel: [0x02, 0x65, 0x6e, ...JSON...]
+            //            ^^^^  ^^^^  ^^^^  ^^^^^^^^
+            //            Flags Len   "en"  Daten
+            
+            String jsonString;
+            try {
+              // Überspringe die ersten 3 Bytes (Flags + Lang)
+              List<int> payload = record.payload;
+              if (payload.length > 3) {
+                jsonString = utf8.decode(payload.sublist(3));
+              } else {
+                jsonString = utf8.decode(payload);
+              }
+            } catch (e) {
+              setState(() => _statusText = "❌ Fehler beim Dekodieren: $e");
+              await NfcManager.instance.stopSession(errorMessage: "Dekodier-Fehler");
+              return;
+            }
+
+            // Parse JSON
+            Map<String, dynamic>? tagData;
+            try {
+              tagData = json.decode(jsonString) as Map<String, dynamic>;
+            } catch (e) {
+              setState(() => _statusText = "❌ Ungültiges JSON auf Tag: $e");
+              await NfcManager.instance.stopSession(errorMessage: "JSON-Fehler");
+              return;
+            }
+
             await NfcManager.instance.stopSession();
             _processFoundTagData(tagData: tagData);
+            
           } catch (e) {
+            print("[ERROR] Fehler beim Tag-Lesen: $e");
             setState(() => _statusText = "❌ Fehler beim Lesen: $e");
-            await NfcManager.instance.stopSession();
+            await NfcManager.instance.stopSession(errorMessage: "Lesefehler");
           }
         },
       );
@@ -152,7 +185,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     try {
       currentBlockHeight = await MempoolService.getBlockHeight();
     } catch (e) {
-      // Offline fallback
+      print("[ERROR] Blockhöhe konnte nicht geladen werden: $e");
     }
 
     // B) Badge Logik
@@ -175,7 +208,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           meetupName: meetupCountry.isNotEmpty ? "$meetupName, $meetupCountry" : meetupName, 
           date: DateTime.now(), 
           iconPath: "assets/badge_icon.png",
-          blockHeight: currentBlockHeight, // Echte Blockzeit vom Mempool
+          blockHeight: currentBlockHeight,
         ));
         
         // Badges speichern
@@ -195,17 +228,16 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     if (tagType == 'VERIFY') {
       if (!user.isAdminVerified) {
         user.isAdminVerified = true;
-        // Wenn der Nutzer einen Nostr npub hat, verifizieren wir diesen auch
         if (user.nostrNpub.isNotEmpty) {
           user.isNostrVerified = true;
         }
-        await user.save(); // WICHTIG: Speichern!
-        msg = "IDENTITÄT VERIFIZIERT! ✅";
+        await user.save();
+        msg = "✅ IDENTITÄT VERIFIZIERT!";
         if (user.nostrNpub.isNotEmpty) {
           msg += "\nNostr-Identität bestätigt.";
         }
       } else {
-        msg = "Bereits verifiziert.";
+        msg = "✅ Bereits verifiziert.";
       }
     }
 
@@ -214,7 +246,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       _statusText = msg;
     });
 
-    // Kurz warten, dann schließen
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) Navigator.pop(context, true); 
   }
@@ -253,9 +284,9 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                   _statusText = "ADMIN MODUS";
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("ADMIN AKTIV ⚡️")));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚡️ ADMIN AKTIV")));
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Falsches Passwort!")));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Falsches Passwort!")));
               }
             },
             child: const Text("LOGIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -283,7 +314,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               const SizedBox(height: 20),
               Text("ERFOLG!", style: Theme.of(context).textTheme.displayLarge),
               const SizedBox(height: 10),
-              Text(_statusText, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+              Padding(
+                padding: const EdgeInsets.all(30),
+                child: Text(
+                  _statusText, 
+                  textAlign: TextAlign.center, 
+                  style: const TextStyle(
+                    color: Colors.grey, 
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    height: 1.6,
+                  ),
+                ),
+              ),
             ],
           )
         : Column(
@@ -314,13 +357,12 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
             Text(
               _isChefMode ? "TAG BESCHREIBEN" : "TAG SCANNEN",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
             
             // --- ADMIN MODUS ---
             if (_isChefMode) ...[
               const SizedBox(height: 20),
-              // Wahl zwischen Badge und Verify
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -345,7 +387,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 child: ElevatedButton(
                   onPressed: () => _startNfcRead(_writeModeBadge ? "BADGE" : "VERIFY"),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                  child: const Text("TAG ERSTELLEN (NFC)", style: TextStyle(color: Colors.white)),
+                  child: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white)),
                 ),
               ),
             ] 
@@ -353,7 +395,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             // --- PLEB MODUS ---
             else ...[
               const SizedBox(height: 40),
-              // Wenn verifyOnlyMode: NUR Verifizierung
               if (widget.verifyOnlyMode) ...[
                 SizedBox(
                   width: 250, height: 50,
@@ -370,17 +411,25 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                   ),
                 ),
               ] else ...[
-                // Normaler Modus: Badge sammeln
                 SizedBox(
                   width: 250, height: 50,
                   child: ElevatedButton(
                     onPressed: () => _startNfcRead("BADGE"),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                    child: const Text("BADGE FINDEN (SIM)", style: TextStyle(color: Colors.white)),
+                    child: const Text("BADGE SCANNEN", style: TextStyle(color: Colors.white)),
                   ),
                 ),
               ],
-            ]
+            ],
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _statusText,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
           ],
         ),
       ),
