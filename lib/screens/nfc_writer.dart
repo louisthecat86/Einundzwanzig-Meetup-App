@@ -126,24 +126,22 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         },
         onDiscovered: (NfcTag tag) async {
           try {
-            // KORREKTUR: Sicherer Zugriff auf tag.data
-            if (tag.data is! Map) {
-              setState(() => _statusText = "❌ Fehler: Unerwarteter Tag-Typ (${tag.data.runtimeType})");
+            // Erweiterte Debug-Ausgabe
+            print('=== TAG DEBUG ===');
+            print('Tag Data: ${tag.data}');
+            print('NDEF verfügbar: ${Ndef.from(tag) != null}');
+            print('NfcA verfügbar: ${NfcA.from(tag) != null}');
+            print('MifareUltralight verfügbar: ${MifareUltralight.from(tag) != null}');
+            print('=================');
+
+            // Technologie-Prüfung
+            final ndef = Ndef.from(tag);
+            if (ndef == null) {
+              setState(() => _statusText = "❌ Tag ist nicht NDEF-formatiert");
               await NfcManager.instance.stopSession();
               return;
             }
-            
-            final tagMap = tag.data as Map<String, dynamic>;
-            final ndefData = tagMap['ndef'];
-            
-            if (ndefData == null) {
-              setState(() => _statusText = "❌ Kein NDEF-Tag erkannt");
-              await NfcManager.instance.stopSession();
-              return;
-            }
-            
-            final isWritable = ndefData['isWritable'] as bool? ?? false;
-            if (!isWritable) {
+            if (!ndef.isWritable) {
               setState(() => _statusText = "❌ Tag ist nicht beschreibbar");
               await NfcManager.instance.stopSession();
               return;
@@ -156,11 +154,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                   ? "✅ MEETUP TAG erkannt!\n\n📍 ${_homeMeetup!.city}, ${_homeMeetup!.country}\n\nHinweis: Das tatsächliche Schreiben muss ggf. über native Platform-Methoden erfolgen."
                   : "✅ VERIFIZIERUNGS-TAG erkannt!\n\nHinweis: Das tatsächliche Schreiben muss ggf. über native Platform-Methoden erfolgen.";
             });
-            
+
             await NfcManager.instance.stopSession();
             await Future.delayed(const Duration(seconds: 3));
             if (mounted) Navigator.pop(context);
-            
+
           } catch (e) {
             print("[ERROR] Fehler beim Tag-Handling: $e");
             setState(() => _statusText = "❌ Fehler: $e");
