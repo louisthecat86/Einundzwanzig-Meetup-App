@@ -8,7 +8,7 @@ import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart'; 
 import '../services/mempool.dart';
-import '../services/badge_security.dart'; // <--- NEU: Import für Sicherheits-Check
+import '../services/badge_security.dart'; // Security Import
 import 'nfc_writer.dart'; 
 
 class MeetupVerificationScreen extends StatefulWidget {
@@ -35,7 +35,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
   late AnimationController _controller;
   late Animation<double> _animation;
-  final TextEditingController _passwordController = TextEditingController();
+  
+  // PASSWORD CONTROLLER ENTFERNT
 
   @override
   void initState() {
@@ -51,7 +52,6 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   @override
   void dispose() {
     _controller.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -106,16 +106,18 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
               await NfcManager.instance.stopSession();
 
-              // --- NEU: SICHERHEITS-CHECK ---
+              // --- SICHERHEITS-CHECK ---
               bool isValid = BadgeSecurity.verify(tagData);
               if (!isValid) {
-                setState(() {
-                  _statusText = "❌ FÄLSCHUNG ERKANNT!\nDieser Tag hat keine gültige Signatur.";
-                  _success = false;
-                });
+                if (mounted) {
+                  setState(() {
+                    _statusText = "❌ FÄLSCHUNG ERKANNT!\nSignatur ungültig.";
+                    _success = false;
+                  });
+                }
                 return; // Abbruch!
               }
-              // ------------------------------
+              // -------------------------
 
               _processFoundTagData(tagData: tagData);
             } catch (e) {
@@ -139,19 +141,17 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     });
     await Future.delayed(const Duration(seconds: 1));
     
-    // Wir müssen für den Simulator gültige Daten erzeugen, sonst schlägt der Verify fehl
+    // Simulator Signatur
     final timestamp = DateTime.now().toIso8601String();
-    final int blockHeight = 850000; // Dummy Block
+    final int blockHeight = 850000; 
     final meetupId = widget.meetup.id;
-
-    // Erzeuge gültige Signatur für Simulation
     final sig = BadgeSecurity.sign(meetupId, timestamp, blockHeight);
 
     Map<String, dynamic> tagData = {
       'timestamp': timestamp,
       'block_height': blockHeight,
       'meetup_id': meetupId,
-      'sig': sig, // <--- Signatur muss auch im Simulator da sein
+      'sig': sig,
     };
     
     if (type == "BADGE") {
@@ -183,20 +183,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     // Validierung des Modus
     if (widget.verifyOnlyMode && tagType == 'BADGE') {
       setState(() {
-        _statusText = "❌ Falscher Tag!\nDas ist ein Badge-Tag.\nBitte den Verifizierungs-Tag des Admins scannen.";
+        _statusText = "❌ Falscher Tag!\nDas ist ein Badge-Tag.\nBitte Verifizierungs-Tag scannen.";
       });
       return; 
     }
 
     if (!widget.verifyOnlyMode && tagType == 'VERIFY' && !_isChefMode) {
       setState(() {
-        _statusText = "❌ Falscher Tag!\nDas ist ein Verifizierungs-Tag.\nZum Sammeln bitte den Badge-Tag scannen.";
+        _statusText = "❌ Falscher Tag!\nDas ist ein Verifizierungs-Tag.";
       });
       return; 
     }
     
     int currentBlockHeight = 0;
-    // Wir nehmen die Blockhöhe vom Tag, falls vorhanden, sonst laden wir sie
     if (tagData['block_height'] != null) {
       currentBlockHeight = tagData['block_height'];
     } else {
@@ -230,7 +229,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         
         await MeetupBadge.saveBadges(myBadges);
         
-        msg = "🎉 BADGE GESAMMELT!\n\n📍 $meetupName";
+        msg = "🎉 BADGE ECHT & GESAMMELT!\n\n📍 $meetupName";
         if (currentBlockHeight > 0) {
           msg += "\n⛓️ Block: $currentBlockHeight";
         }
@@ -261,68 +260,20 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     if (mounted) Navigator.pop(context, true); 
   }
 
-  void _showAdminLogin() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: cCard,
-        title: const Text("ADMIN LOGIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Login für Organisatoren.", style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
-              decoration: const InputDecoration(
-                hintText: "PASSWORT",
-                hintStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: cOrange)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("ABBRUCH", style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: cOrange),
-            onPressed: () {
-              if (_passwordController.text == widget.meetup.adminSecret) {
-                setState(() {
-                  _isChefMode = true;
-                  _statusText = "ADMIN MODUS";
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("⚡️ ADMIN AKTIV")));
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Falsches Passwort!")));
-              }
-            },
-            child: const Text("LOGIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isChefMode ? "ADMIN TOOLS" : "SCANNER"),
         backgroundColor: _isChefMode ? Colors.red.shade900 : cDark,
-        actions: [
-          if (!_isChefMode) IconButton(icon: const Icon(Icons.security), onPressed: _showAdminLogin)
-        ],
+        // HIER WAR VORHER DAS SCHILD-ICON (ACTIONS) - JETZT ENTFERNT
       ),
       body: Center(
         child: _success 
         ? Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.check_circle, size: 100, color: Colors.green),
+              const Icon(Icons.verified, size: 100, color: Colors.green),
               const SizedBox(height: 20),
               Text("ERFOLG!", style: Theme.of(context).textTheme.displayLarge),
               const SizedBox(height: 10),
