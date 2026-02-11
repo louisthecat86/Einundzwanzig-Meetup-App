@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   nfc_manager: ^4.1.1
+  nfc_manager_ndef: ^1.0.1
   shared_preferences: ^2.5.4
   js: ^0.7.2
   crypto: ^3.0.6

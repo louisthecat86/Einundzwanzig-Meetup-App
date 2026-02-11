@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager.dart';           // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';  // Ndef (cross-platform NDEF)
 import 'dart:convert';
 import 'dart:typed_data';
 import '../theme.dart';
@@ -58,8 +59,9 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       _statusText = "Warte auf NFC Tag...";
     });
 
-    final isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
+    // v4.x: checkAvailability() statt isAvailable()
+    final availability = await NfcManager.instance.checkAvailability();
+    if (availability != NfcAvailability.enabled) {
       _simulateHandshake(type);
       return;
     }
@@ -72,19 +74,21 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         },
         onDiscovered: (NfcTag tag) async {
           try {
+            // v4.x: Ndef aus nfc_manager_ndef
             final ndef = Ndef.from(tag);
             if (ndef == null) {
               await NfcManager.instance.stopSession();
               return;
             }
 
-            final cachedMessage = ndef.cachedMessage;
-            if (cachedMessage == null || cachedMessage.records.isEmpty) {
+            // v4.x: read() statt cachedMessage
+            final ndefMessage = await ndef.read();
+            if (ndefMessage.records.isEmpty) {
               await NfcManager.instance.stopSession();
               return;
             }
 
-            final payload = cachedMessage.records.first.payload;
+            final payload = ndefMessage.records.first.payload;
             if (payload.isEmpty) {
               await NfcManager.instance.stopSession();
               return;

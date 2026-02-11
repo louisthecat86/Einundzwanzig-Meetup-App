@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/platform_tags.dart'; // NEU: für NdefFormatable (v4.x)
+import 'package:nfc_manager/nfc_manager.dart';           // NfcManager, NfcTag, NfcPollingOption, NfcAvailability, NdefFormatableAndroid
+import 'package:nfc_manager/ndef_record.dart';            // NdefRecord, NdefMessage, NdefTypeNameFormat
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';  // Ndef (cross-platform NDEF)
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -93,8 +94,9 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       _success = false;
     });
 
-    final isAvailable = await NfcManager.instance.isAvailable();
-    if (!isAvailable) {
+    // v4.x: checkAvailability() statt isAvailable()
+    final availability = await NfcManager.instance.checkAvailability();
+    if (availability != NfcAvailability.enabled) {
       await _simulateWriteTag();
       return;
     }
@@ -114,7 +116,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     String jsonData = jsonEncode(tagData);
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
-    final message = NdefMessage([
+    // v4.x: NdefMessage mit named parameter 'records:'
+    final message = NdefMessage(records: [
       NdefRecord(
         typeNameFormat: NdefTypeNameFormat.nfcWellknown,
         type: Uint8List.fromList([0x54]),
@@ -128,14 +131,15 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
         onDiscovered: (NfcTag tag) async {
           try {
+            // v4.x: Ndef aus nfc_manager_ndef
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
-              // v4.x: NdefFormatable aus platform_tags.dart
-              var formatable = NdefFormatable.from(tag);
+              // v4.x: NdefFormatableAndroid statt NdefFormatable
+              var formatable = NdefFormatableAndroid.from(tag);
               if (formatable != null) {
                 try {
-                  await formatable.format(message);
+                  await formatable.format(message: message);
                   await NfcManager.instance.stopSession();
                   _handleSuccessInUI();
                   return;
@@ -156,7 +160,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               return;
             }
 
-            await ndef.write(message);
+            // v4.x: write mit named parameter 'message:'
+            await ndef.write(message: message);
             await NfcManager.instance.stopSession();
             _handleSuccessInUI();
 

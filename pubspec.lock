@@ -328,6 +328,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.1"
+  nfc_manager_ndef:
+    dependency: "direct main"
+    description:
+      name: nfc_manager_ndef
+      sha256: "8aacee776120b4d09e3049b26cf4a7397fee3abafc207c0640342ada05c5df7d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
   objective_c:
     dependency: transitive
     description:
