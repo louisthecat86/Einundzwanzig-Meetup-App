@@ -1,510 +1,510 @@
 # 🏆 Einundzwanzig Meetup App
 
-**Die dezentrale Reputations-App für die Bitcoin-Community**
+**Die dezentrale Reputations-App für die deutschsprachige Bitcoin-Community**
 
-Eine Flutter-basierte Cross-Platform App (Web, Android, iOS) zum Sammeln von Meetup-Badges via NFC und Aufbau einer verifizierbaren Reputation.
+Eine Flutter-basierte App für Android zum Sammeln von Meetup-Badges via NFC und Aufbau einer verifizierbaren Reputation – ohne Server, ohne Cloud, ohne KYC.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-orange)
-![Flutter](https://img.shields.io/badge/Flutter-3.38.9-blue)
+![Flutter](https://img.shields.io/badge/Flutter-3.38+-blue)
+![Dart](https://img.shields.io/badge/Dart-3.10+-blue)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-purple)
+![NFC](https://img.shields.io/badge/nfc__manager-4.1.1-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
 ## 📖 Inhaltsverzeichnis
 
-- [Überblick](#überblick)
-- [Features](#features)
-- [Wie funktioniert es?](#wie-funktioniert-es)
-- [Installation](#installation)
-- [App bauen](#app-bauen)
-- [Benutzung](#benutzung)
-- [Badge-Verifizierung](#badge-verifizierung)
-- [Architektur](#architektur)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
+- [Überblick](#-überblick)
+- [Features](#-features)
+- [Wie funktioniert es?](#-wie-funktioniert-es)
+- [Badge-Design](#-badge-design)
+- [Installation & Build](#-installation--build)
+- [Benutzung](#-benutzung)
+- [Sicherheit](#-sicherheit)
+- [Architektur](#-architektur)
+- [API-Integration](#-api-integration)
+- [Roadmap](#-roadmap)
+- [Contributing](#-contributing)
 
 ---
 
 ## 🎯 Überblick
 
-Die **Einundzwanzig Meetup App** löst das Problem der fehlenden Reputation in der dezentralen Bitcoin-Community. Sie ermöglicht es Nutzern:
+Die **Einundzwanzig Meetup App** löst das Problem der fehlenden Reputation in der dezentralen Bitcoin-Community. Bei Peer-to-Peer-Plattformen wie **satoshikleinanzeigen.space** gibt es kein Bewertungssystem und keine zentrale Identitätsprüfung – man weiß nicht, ob jemand vertrauenswürdig ist.
 
-- **Badges zu sammeln** durch physische Teilnahme an Meetups (via NFC)
-- **Reputation aufzubauen** als Nachweis der Community-Aktivität
-- **Vertrauen zu schaffen** bei P2P-Trades (z.B. auf satoshikleinanzeigen.space)
-- **Identitäten zu verifizieren** ohne KYC oder zentrale Instanzen
+Diese App ändert das:
+
+- **Badges sammeln** durch physische Teilnahme an Meetups (via NFC-Tags)
+- **Reputation aufbauen** als kryptografisch nachweisbare Community-Aktivität
+- **Vertrauen schaffen** bei P2P-Trades, ohne KYC oder zentrale Instanzen
+- **Self-Sovereign** – alle Daten liegen lokal auf deinem Gerät
 
 ### Warum ist das wichtig?
 
-Bei dezentralen Plattformen wie **satoshikleinanzeigen.space** fehlt oft das Vertrauen:
-- ❌ Kein Bewertungssystem wie bei eBay
-- ❌ Keine zentrale Instanz zur Identitätsprüfung
-- ❌ Schwer zu erkennen, wer seriös ist
-
-**Mit dieser App:**
-- ✅ Zeige, dass du bei 5+ Meetups warst
-- ✅ Beweise deine Community-Aktivität
-- ✅ Baue Vertrauen durch physische Meetup-Teilnahme auf
-- ✅ Alles lokal gespeichert, keine zentrale Datenbank
+Wer bei 10+ Meetups physisch vor Ort war und das nachweisen kann, ist mit hoher Wahrscheinlichkeit kein Scammer. Die App macht genau diesen Nachweis möglich – dezentral, pseudonym und verifizierbar.
 
 ---
 
 ## ✨ Features
 
-### 🎫 Badge System
-- **NFC-basiert**: Scanne NFC-Tags bei Meetups
-- **Blockchain-Zeitstempel**: Jedes Badge mit Bitcoin-Blockhöhe
-- **Lokal gespeichert**: Deine Daten bleiben auf deinem Gerät
-- **Verifizierbar**: Hash-basierte Integritätsprüfung
+### 🎫 NFC Badge-System
+- **NFC-Tag scannen** → Badge mit Meetup-Name, Datum und aktueller Bitcoin-Blockhöhe wird erstellt
+- **Kryptografische Signatur** – jeder Badge wird mit SHA-256 HMAC signiert (App-Secret + Meetup-ID + Timestamp + Blockhöhe)
+- **Duplikat-Schutz** – gleicher Badge kann nicht zweimal gescannt werden
+- **Offline-fähig** – Badges werden lokal in SharedPreferences gespeichert
 
-### 👥 Zwei User-Flows
+### 🎨 Generative Art Badges
+Jeder Badge bekommt ein **einzigartiges, algorithmisch generiertes Hintergrundmuster** – basierend auf dem SHA-256 Hash aus Meetup-Name und Blockhöhe. Kein Badge sieht aus wie ein anderer. Das Muster besteht aus geometrischen Formen (Kreise, Rauten, Hexagone, Linien) in warmen Bitcoin-Orange-Tönen.
 
-#### User-Flow (Badge-Sammler):
-1. Erstelle dein Profil (Nickname, optional Nostr npub)
-2. Wähle dein Home-Meetup
-3. Scanne NFC-Tags bei Meetups → Erhalte Badges
-4. Teile deine Reputation (QR-Code, JSON, Social Media)
+### 📊 Badge Wallet
+- **Übersichtliches Grid-Layout** mit 2 Spalten (Normal) oder 3 Spalten (Kompakt)
+- **Automatischer Kompakt-Modus** ab 7+ Badges für bessere Übersicht
+- **Dynamische Schriftgröße** – lange Meetup-Namen werden automatisch kleiner dargestellt
+- **Blockhöhe auf jedem Badge** – z.B. „₿ Block 885.432"
+- **Badge-Zähler** in der Titelleiste: „BADGE WALLET (12)"
 
-#### Admin-Flow (Meetup-Organisator):
-1. Logge dich als Admin ein (Passwort: `#21AdminTag21#`)
-2. Erstelle NFC-Tags für dein Meetup
-3. Verifiziere Teilnehmer-Identitäten
-4. Verwalte dein Meetup
+### 📱 Dashboard
+- Persönliche Begrüßung mit Nickname
+- Home-Meetup-Karte mit Direkt-Link zum Kalender
+- Schnellzugriff auf: Badge-Scanner, Wallet, Termine, Profil, Reputation, Admin-Panel
+- Badge-Zähler in Echtzeit
 
-### 📱 Plattformen
-- **Web**: PWA, läuft im Browser
-- **Android**: Native App mit echtem NFC
-- **iOS**: Native App mit echtem NFC
+### 📅 Kalender & Events
+- **Live-Daten** vom Einundzwanzig Portal (ICS-Kalender-Feed)
+- **Suchfunktion** – filtern nach Stadt, Name oder Stichwort
+- **Detail-Ansicht** mit Beschreibung, Ort und Uhrzeit
+- **Meetup-Details** mit Telegram-Link, Twitter/X, Nostr-npub und Google Maps Route
 
-### 🔐 Sicherheit & Datenschutz
-- Keine Cloud, alles lokal (SharedPreferences/localStorage)
-- Optional: Nostr-Integration für dezentrale Identität
-- Pseudonym: Nur Nickname + npub, kein Realname erforderlich
-- Session-Persistenz: Bleibe eingeloggt auch nach Wochen
+### 👤 Profil-System
+- Nickname (Pflichtfeld), optionaler Realname
+- Social-Links: Nostr npub, Telegram, Twitter/X
+- Home-Meetup auswählen (aus 200+ Meetups)
+- Verifizierungsstatus (Admin-bestätigt oder NFC-verifiziert)
 
-### 🌐 Live-Daten
-- Integration mit [portal.einundzwanzig.space](https://portal.einundzwanzig.space)
-- Echtzeit-Meetup-Daten (Standorte, Links, Events)
-- Aktuelle Bitcoin-Blockhöhe (Mempool.space API)
+### 🔐 Verifizierung (Zwei Wege)
+1. **NFC-Tag scannen** – ein Admin hält dir seinen Verifizierungs-Tag hin, du scannst ihn → verifiziert
+2. **Admin-Login** – Organisatoren können sich mit dem Passwort direkt freischalten (Passwort ist nur als SHA-256 Hash im Code gespeichert, nicht im Klartext)
 
-### 📊 Reputation teilen
-- **QR-Code**: Zeige deine Badges als scannbaren Code
-- **Text**: Teile auf Social Media
-- **JSON**: Export mit Checksumme zur Verifizierung
-- **Badge-Verifier**: Standalone-Tool zur Überprüfung
+### 🛡️ Admin-Panel (für Meetup-Organisatoren)
+- **Meetup-Badge-Tag erstellen** – NFC-Tag beschreiben, den Teilnehmer scannen können
+- **Verifizierungs-Tag erstellen** – NFC-Tag für die Identitätsbestätigung neuer Nutzer
+- Zugang nur für verifizierte Admins
+
+### 📤 Reputation teilen
+- **QR-Code** – zeige deine Badges als scannbaren Code (mit qr_flutter)
+- **Text-Export** – formatierte Zusammenfassung für Social Media oder Messenger
+- **JSON-Export** – maschinenlesbar mit SHA-256 Checksumme zur Verifizierung
+- **Badge-Verifier** – standalone HTML-Tool (`badge-verifier.html`) zur Überprüfung
+
+### 💾 Backup & Restore
+- **Backup erstellen** – exportiert Profil + alle Badges als JSON-Datei
+- **Backup laden** – auf dem Intro-Screen kann ein bestehendes Backup eingespielt werden
+- Dateiname mit Datum: `21_backup_2026-02-11.json`
+- Share-Sheet: per Signal, Telegram, E-Mail, in Dateien speichern, etc.
 
 ---
 
 ## 🔧 Wie funktioniert es?
 
-### Badge-Sammlung
+### Badge-Lebenszyklus
 
 ```
-1. Admin erstellt NFC-Tag:
-   Tag enthält: Meetup-Name, Datum, ID
-   
-2. User scannt Tag:
-   App liest Daten + holt aktuelle Blockhöhe
-   
-3. Badge wird erstellt:
-   {
-     "meetup": "München",
-     "date": "2026-01-15",
-     "block": 875432,
-     "hash": "a3f9b2c1e5d4f8a2"
-   }
-   
-4. Badge wird lokal gespeichert:
-   SharedPreferences (Mobile) / localStorage (Web)
+┌─────────────────────────────────────────────────────────┐
+│  1. ADMIN ERSTELLT TAG                                  │
+│     Admin-Panel → "Meetup Tag erstellen"                │
+│     → NFC-Tag wird beschrieben mit:                     │
+│       Meetup-ID, Name, Land, Typ, Timestamp,            │
+│       Blockhöhe, SHA-256 Signatur                       │
+├─────────────────────────────────────────────────────────┤
+│  2. USER SCANNT TAG                                     │
+│     Dashboard → "Badges" → Handy an Tag halten          │
+│     → App liest NDEF-Daten                              │
+│     → Signatur wird geprüft (BadgeSecurity.verify)      │
+│     → Aktuelle Blockhöhe wird von mempool.space geholt  │
+├─────────────────────────────────────────────────────────┤
+│  3. BADGE WIRD ERSTELLT                                 │
+│     MeetupBadge {                                       │
+│       id: "muc_1707661234",                             │
+│       meetupName: "München, DE",                        │
+│       date: 2026-02-11,                                 │
+│       blockHeight: 885432,                              │
+│       hash: "a3f9b2c1e5d4f8a2"                         │
+│     }                                                   │
+├─────────────────────────────────────────────────────────┤
+│  4. BADGE WIRD GESPEICHERT                              │
+│     → SharedPreferences (lokal auf dem Gerät)           │
+│     → Generative Art wird aus Hash berechnet            │
+│     → Badge erscheint im Wallet                         │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Reputation-Verifizierung
+### Signatur & Verifizierung
+
+Jedes NFC-Tag enthält eine kryptografische Signatur:
 
 ```
-1. User exportiert Badges als JSON
-2. JSON enthält Checksumme aller Badges
-3. Andere kopieren JSON in badge-verifier.html
-4. Tool zeigt:
-   ✅ Checksum verifiziert
-   📊 5 Badges, 3 Meetups besucht
-   📍 München, Berlin, Hamburg
+Signatur = SHA-256(meetup_id | timestamp | block_height | APP_SECRET)
 ```
 
-### Hash-Berechnung
+Beim Scannen berechnet die App die Signatur neu und vergleicht sie. Nur Tags, die mit dem korrekten App-Secret erstellt wurden, werden akzeptiert. Ohne Zugang zum Quellcode kann niemand gültige Tags fälschen.
 
-Jedes Badge hat einen eindeutigen Hash:
+### Badge-Hash
 
-```dart
-Hash = SHA256(badge_id + meetup + datum + block).substring(0, 16)
+Jedes Badge hat einen eindeutigen Fingerabdruck:
+
+```
+Hash = SHA-256(id + meetupName + date + blockHeight).substring(0, 16)
 ```
 
-Beispiel: `a3f9b2c1e5d4f8a2`
+Dieser Hash fließt in den JSON-Export und die QR-Codes ein und ermöglicht die Verifizierung der Integrität.
 
 ---
 
-## 🚀 Installation
+## 🎨 Badge-Design
+
+### Generative Art
+
+Jeder Badge generiert sein einzigartiges Muster durch einen `CustomPainter`, der den SHA-256 Hash als Seed verwendet:
+
+- **32 Bytes** des Hashes steuern Position, Größe, Form und Farbe
+- **Formen:** Kreise, Rauten, Hexagone, diagonale Linien
+- **Farbpalette:** Warme Bitcoin-Orange-Töne (Amber, Gold, Kupfer)
+- **Grid-Overlay:** Feines Raster für technischen Look
+- **Gradient:** Dunkler Verlauf am unteren Rand für Textlesbarkeit
+
+Zwei Badges vom selben Meetup aber mit unterschiedlicher Blockhöhe sehen komplett anders aus – jeder Badge ist ein Unikat.
+
+### Badge-Informationen
+
+Jeder Badge zeigt:
+- ✅ Verified-Icon + fortlaufende Nummer (#1, #2, ...)
+- 📍 Meetup-Name + Land (z.B. „MÜNCHEN, DE")
+- 📅 Datum (z.B. „11.2.2026")
+- ₿ Bitcoin-Blockhöhe (z.B. „Block 885.432")
+
+---
+
+## 🚀 Installation & Build
 
 ### Voraussetzungen
 
-- **Flutter SDK** 3.38.9 oder höher
-- **Dart** 3.10.8 oder höher
-- Für Android: Android SDK
-- Für iOS: Xcode (nur auf macOS)
+| Komponente | Version |
+|---|---|
+| Flutter SDK | ≥ 3.38.x |
+| Dart SDK | ≥ 3.10.8 |
+| Kotlin | 2.2.20 |
+| Android SDK | compileSdk 36, minSdk 23, targetSdk 36 |
+| Gradle | 8.11.1 |
 
-### Dependencies installieren
+### Dependencies
 
-```bash
-cd Einundzwanzig-Meetup-App
-./flutter/bin/flutter pub get
+```yaml
+dependencies:
+  http: ^1.6.0              # API-Calls (Portal, Mempool)
+  nfc_manager: ^4.1.1       # NFC-Lesen/Schreiben
+  nfc_manager_ndef: ^1.0.1  # NDEF-Nachrichten (v4 Package-Split)
+  shared_preferences: ^2.5.4 # Lokale Datenspeicherung
+  crypto: ^3.0.6            # SHA-256 Hashing
+  share_plus: ^10.1.4       # Teilen-Funktion
+  qr_flutter: ^4.1.0        # QR-Code-Generierung
+  file_picker: ^8.0.0       # Backup-Datei auswählen
+  path_provider: ^2.1.2     # Temp-Verzeichnis für Backup
+  intl: ^0.19.0             # Datums-Formatierung
+  icalendar_parser: ^2.0.0  # Kalender-Feed parsen
+  url_launcher: ^6.2.5      # Links öffnen (Telegram, Maps)
 ```
 
-### Installierte Packages
-
-- `http`: API-Calls zu portal.einundzwanzig.space
-- `nfc_manager`: NFC-Lesen/Schreiben (Mobile)
-- `shared_preferences`: Lokale Datenspeicherung
-- `crypto`: Hash-Berechnung für Badges
-- `share_plus`: Social Media Sharing
-- `qr_flutter`: QR-Code-Generierung
-
----
-
-## 🏗️ App bauen
-
-### Web (PWA)
+### Build APK
 
 ```bash
-./flutter/bin/flutter build web --release
-```
+# 1. Dependencies installieren
+flutter pub get
 
-Ausgabe: `build/web/`
+# 2. Release-APK bauen
+flutter build apk --release
 
-Testen:
-```bash
-cd build/web
-python3 -m http.server 8080
-# Öffne http://localhost:8080
-```
-
-### Android (APK)
-
-```bash
-./flutter/bin/flutter build apk --release
-```
-
-Ausgabe: `build/app/outputs/flutter-apk/app-release.apk`
-
-Installation auf Gerät:
-```bash
+# 3. APK installieren
 adb install build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### iOS (IPA)
-
-```bash
-./flutter/bin/flutter build ios --release
+Die APK liegt nach dem Build unter:
+```
+build/app/outputs/flutter-apk/app-release.apk
 ```
 
-Erfordert:
-- macOS mit Xcode
-- Apple Developer Account für Signierung
+### Hinweis zu NFC
+
+Die App nutzt `nfc_manager` v4.1.1, das ab Kotlin 2.2.x einen Package-Split erfordert:
+- `nfc_manager` – Basis-Funktionalität (Tag-Discovery, Availability-Check)
+- `nfc_manager_ndef` – NDEF-Nachrichten lesen/schreiben
+- `nfc_manager_android` – Android-spezifisch: `NdefFormatableAndroid` für neue Tags
 
 ---
 
 ## 📱 Benutzung
 
-### Als User (Badge-Sammler)
+### Als Teilnehmer (Badge-Sammler)
 
-#### 1. Erste Einrichtung
-1. Öffne die App
-2. Gib deinen **Nickname** ein (z.B. "Satoshi")
-3. Optional: Füge deinen **Nostr npub** hinzu
-4. Wähle dein **Home-Meetup** aus der Liste
+**Ersteinrichtung:**
+1. App öffnen → Nickname eingeben
+2. Optional: Nostr npub, Telegram, Twitter/X hinzufügen
+3. Home-Meetup aus der Liste wählen
+4. Admin-Tag scannen oder von Admin verifizieren lassen → Dashboard
 
-#### 2. Meetup besuchen & Badge sammeln
-1. Gehe zu einem Einundzwanzig Meetup
-2. Dashboard → **"BADGES"** → Scanne NFC-Tag
-3. Badge wird automatisch gespeichert
-4. Siehst du im **Badge Wallet**
+**Badge sammeln:**
+1. Dashboard → **BADGES** tippen
+2. Smartphone an den NFC-Tag des Meetups halten
+3. Badge wird automatisch erstellt und gespeichert
+4. Im **WALLET** sichtbar mit einzigartigem Generative Art Hintergrund
 
-#### 3. Reputation teilen
-- **Dashboard** → **Badge Wallet** → **Share-Button** (oben rechts)
-- Wähle eine Option:
-  - **QR-Code anzeigen**: Zum Scannen vor Ort
-  - **Als Text teilen**: Für Social Media
-  - **Als JSON exportieren**: Für technische Verifizierung
+**Reputation teilen:**
+1. Dashboard → **WALLET** → Share-Icon (oben rechts)
+2. Wähle: QR-Code, Text-Export oder JSON-Export
+3. Oder: Dashboard → **REPUTATION** → QR-Code direkt anzeigen
 
-#### 4. Meetup-Details ansehen
-- **Dashboard** → **TERMINE** → Tap auf Meetup
-- Siehst du: Logo, Beschreibung, Links, Telegram, Website
+**Backup erstellen:**
+1. Dashboard → Zahnrad (Settings) → **Backup erstellen**
+2. JSON-Datei wird per Share-Sheet geteilt
+3. In Dateien speichern, per Signal senden, etc.
 
-### Als Admin (Meetup-Organisator)
+**Backup laden:**
+1. Intro-Screen → **BACKUP LADEN**
+2. JSON-Datei auswählen → Profil + Badges werden wiederhergestellt
 
-#### 1. Admin-Login
-1. Öffne die App
-2. Erstelle Profil wie gewohnt
-3. Wenn du NICHT als admin verifiziert wirst → Tippe auf "Admin werden"
-4. Gib Passwort ein: `#21AdminTag21#`
-5. Du siehst jetzt die **ADMIN**-Kachel
+### Als Organisator (Admin)
 
-#### 2. NFC-Tags erstellen
+**Admin werden:**
+1. Profil erstellen wie gewohnt
+2. Beim Verifizierungs-Gate → „Ich bin Organisator / Admin"
+3. Admin-Passwort eingeben (wird gegen SHA-256 Hash geprüft)
+4. → Dashboard mit **ADMIN**-Kachel
+
+**NFC-Tags erstellen:**
 1. Dashboard → **ADMIN**
-2. Wähle **"NFC Tag beschreiben"**
-3. Wähle zwischen:
-   - **Badge Tag**: Für Teilnehmer zum Sammeln
-   - **Verify Tag**: Für Identitätsverifizierung
-4. Halte NFC-Karte an dein Gerät
-5. Tag ist beschrieben!
-
-#### 3. Teilnehmer verifizieren
-1. Dashboard → **ADMIN** → **"Identitäten verifizieren"**
-2. Teilnehmer scannt NFC-Tag
-3. Du bestätigst seine Identität
-4. Er ist jetzt verifiziert ✅
+2. **Meetup Tag erstellen** – Tag für Teilnehmer-Badges
+3. **Verifizierungs-Tag erstellen** – Tag für Identitätsbestätigung
+4. NFC-Karte/-Sticker an Smartphone halten → beschrieben
 
 ---
 
-## 🔍 Badge-Verifizierung
+## 🔐 Sicherheit
 
-### Für Verkäufer (z.B. satoshikleinanzeigen.space)
+### Passwort-Schutz
 
-**Reputation in Inserat zeigen:**
+Das Admin-Passwort steht **nicht** im Klartext im Code. Stattdessen wird nur der SHA-256 Hash gespeichert:
 
-1. Öffne **Badge Wallet** → **Share** → **"QR-Code anzeigen"**
-2. Mache Screenshot vom QR-Code
-3. Füge Screenshot ins Inserat ein
-4. Schreibe: "Verifiziere meine Reputation: [Link zum Verifier]"
+```dart
+// Nur der Hash ist im Code – das Passwort selbst ist nirgends zu finden
+static const String _adminPasswordHash = "5d3e17aa...";
 
-**Oder als Text:**
-
-1. **Badge Wallet** → **Share** → **"Als Text teilen"**
-2. Text wird kopiert:
-   ```
-   🏆 MEINE EINUNDZWANZIG REPUTATION
-   
-   Total Badges: 5
-   Meetups besucht: 3
-   
-   📍 München (15.1.2026)
-   📍 Berlin (22.1.2026)
-   📍 Hamburg (29.1.2026)
-   ```
-3. In Inserat-Beschreibung einfügen
-
-### Für Käufer (Reputation prüfen)
-
-**Option 1: QR-Code scannen**
-1. Scanne QR-Code vom Verkäufer
-2. Siehst du direkt: "Badges: 5, Meetups: 3"
-
-**Option 2: JSON verifizieren**
-1. Öffne: [`badge-verifier.html`](badge-verifier.html)
-2. Kopiere JSON vom Verkäufer
-3. Füge in Textfeld ein → Klick "Verifizieren"
-4. Tool zeigt:
-   - ✅ **Checksum verifiziert** (nicht manipuliert)
-   - **Badge-Liste** mit allen Meetups
-   - **Hashes** zur Integritätsprüfung
-
-### Badge Verifier Tool
-
-Das Tool ist eine **standalone HTML-Datei**, die jeder nutzen kann:
-
-**Lokal öffnen:**
-```bash
-open badge-verifier.html
+// Bei Login: Eingabe hashen und mit gespeichertem Hash vergleichen
+final inputHash = sha256(utf8.encode(eingabe)).toString();
+if (inputHash == _adminPasswordHash) { /* Zugang */ }
 ```
 
-**Als Webseite hosten:**
-- Einfach auf GitHub Pages, IPFS oder eigenen Server hochladen
-- Keine Backend-Infrastruktur nötig
-- 100% client-side JavaScript
+Selbst bei Dekompilierung der APK ist das Passwort nicht direkt sichtbar.
 
-**Verwendung:**
-1. JSON aus App kopieren (Badge Wallet → Share → JSON)
-2. In Verifier einfügen
-3. Klick auf "Verifizieren"
-4. Ergebnis zeigt alle Badges + Checksum-Status
+### Badge-Signatur
+
+Jedes NFC-Tag wird mit einem HMAC-ähnlichen Verfahren signiert:
+
+```
+signature = SHA-256(meetup_id | timestamp | block_height | APP_SECRET)
+```
+
+Ohne Kenntnis des `APP_SECRET` können keine gültigen Tags erstellt werden. Beim Scannen wird die Signatur verifiziert – manipulierte Tags werden abgelehnt.
+
+### Datenschutz
+
+- **Lokal gespeichert** – keine Cloud, kein Server, keine Datenbank
+- **Pseudonym** – nur Nickname + optionaler Nostr npub, kein Realname erforderlich
+- **Self-Sovereign** – du kontrollierst deine Daten komplett
+- **Selektives Teilen** – du entscheidest, was du exportierst
 
 ---
 
 ## 🏛️ Architektur
 
-### Ordnerstruktur
+### Projektstruktur
 
 ```
 lib/
-├── main.dart              # App-Entry + Session Management
-├── theme.dart             # Material Design 3 Theme
+├── main.dart                     # App-Entry, Session-Check, Routing
+├── theme.dart                    # Material Design 3 Theme (Dark Mode)
+│
 ├── models/
-│   ├── user.dart          # UserProfile (mit SharedPreferences)
-│   ├── meetup.dart        # Meetup-Datenmodell
-│   └── badge.dart         # MeetupBadge + Reputation-Export
+│   ├── user.dart                 # UserProfile (SharedPreferences)
+│   ├── meetup.dart               # Meetup-Datenmodell
+│   ├── badge.dart                # MeetupBadge + Reputation-Export + Hashing
+│   └── calendar_event.dart       # Kalender-Event (ICS-Parsing)
+│
 ├── screens/
-│   ├── intro.dart         # Onboarding
-│   ├── verification_gate.dart  # Admin-Passwort-Check
-│   ├── dashboard.dart     # Hauptbildschirm
-│   ├── badge_wallet.dart  # Badge-Übersicht
-│   ├── badge_details.dart # Einzelnes Badge
-│   ├── reputation_qr.dart # QR-Code-Anzeige
-│   ├── events.dart        # Meetup-Liste
-│   ├── meetup_details.dart # Meetup-Informationen
-│   ├── meetup_selection.dart # Home-Meetup wählen
-│   ├── meetup_verification.dart # NFC-Scanner
-│   ├── nfc_writer.dart    # NFC-Tag beschreiben (Admin)
-│   ├── admin_panel.dart   # Admin-Dashboard
-│   └── profile_edit.dart  # Profil bearbeiten
+│   ├── intro.dart                # Onboarding + Backup-Restore
+│   ├── verification_gate.dart    # NFC-Verifizierung oder Admin-Login
+│   ├── dashboard.dart            # Hauptbildschirm mit Grid-Tiles
+│   ├── profile_edit.dart         # Profil bearbeiten
+│   ├── profile_review.dart       # Profil-Zusammenfassung
+│   ├── meetup_selection.dart     # Home-Meetup wählen (mit Suche)
+│   ├── meetup_verification.dart  # NFC-Scanner (Lesen & Verifizieren)
+│   ├── nfc_writer.dart           # NFC-Tag beschreiben (Admin)
+│   ├── admin_panel.dart          # Admin-Dashboard
+│   ├── badge_wallet.dart         # Badge-Übersicht (Generative Art)
+│   ├── badge_details.dart        # Einzelnes Badge im Detail
+│   ├── reputation_qr.dart        # QR-Code-Anzeige
+│   ├── calendar_screen.dart      # Kalender mit Suche
+│   ├── events.dart               # Meetup-Liste (aus API)
+│   └── meetup_details.dart       # Meetup-Info (Termine, Links, Map)
+│
 └── services/
-    └── meetup_service.dart # API-Integration
+    ├── meetup_service.dart        # API: portal.einundzwanzig.space
+    ├── meetup_calendar_service.dart # ICS-Feed: Kalender
+    ├── mempool.dart               # API: mempool.space (Blockhöhe)
+    ├── badge_security.dart        # SHA-256 Signierung & Verifizierung
+    └── backup_service.dart        # JSON Backup/Restore
 ```
 
-### Datenpersistenz
+### Datenfluss
 
-**SharedPreferences (Mobile) / localStorage (Web):**
-
-```dart
-// User-Daten
-'nickname': String
-'telegramHandle': String
-'nostrNpub': String
-'homeMeetupId': String
-'isAdmin': bool
-'isAdminVerified': bool
-
-// Badges
-'badges': List<String> (JSON-Array)
+```
+Portal API ──→ MeetupService ──→ Meetup-Liste, Kalender-Events
+                                       │
+Mempool API ──→ MempoolService ──→ Blockhöhe für Badges
+                                       │
+NFC-Tag ──→ MeetupVerification ──→ BadgeSecurity.verify()
+                                       │
+                                 MeetupBadge ──→ SharedPreferences
+                                       │
+                              BadgeWalletScreen ──→ GenerativeArt
+                                       │
+                              ReputationQR ──→ QR-Code / JSON / Text
 ```
 
-**Session Management:**
+### Session-Management
 
-```dart
-// main.dart → SplashScreen
-1. App startet → Lade UserProfile
-2. Wenn nickname leer → IntroScreen
-3. Wenn isAdminVerified → DashboardScreen
-4. Sonst → VerificationGateScreen
+```
+App Start
+  │
+  ├─ Nickname leer? ──→ IntroScreen
+  │
+  ├─ Admin-verifiziert? ──→ DashboardScreen
+  │
+  └─ Sonst ──→ VerificationGateScreen
 ```
 
-### API-Integration
+---
 
-**Meetup-Daten:**
-- Endpoint: `https://portal.einundzwanzig.space/api/meetups`
-- Felder: name, country, city, telegram, logo, website, nostr, lat/lng
+## 🌐 API-Integration
 
-**Blockhöhe:**
-- Endpoint: `https://mempool.space/api/blocks/tip/height`
-- Für Badge-Zeitstempel
+### Meetup-Daten
 
-### NFC-Handling
-
-**Web (Simuliert):**
-```dart
-// Zeigt Input-Dialog für manuelle Tag-Eingabe
-Future<void> simulateNFCRead() {
-  showDialog(...);
-}
+```
+GET https://portal.einundzwanzig.space/api/meetups
 ```
 
-**Mobile (Echt):**
-```dart
-import 'package:nfc_manager/nfc_manager.dart';
+Liefert 200+ Meetups mit: `name`, `city`, `country`, `url` (Telegram), `latitude`, `longitude`, `twitter_username`, `nostr`, `website`, `logo`, `next_event`.
 
-NfcManager.instance.startSession(
-  onDiscovered: (NfcTag tag) async {
-    final ndef = Ndef.from(tag);
-    final message = await ndef.read();
-    // Parse Meetup-Daten
-  }
-);
+### Kalender-Feed
+
 ```
+GET https://portal.einundzwanzig.space/stream-calendar
+```
+
+ICS-Format, wird mit `icalendar_parser` geparst. Enthält alle kommenden Meetup-Termine im DACH-Raum und darüber hinaus.
+
+### Bitcoin-Blockhöhe
+
+```
+GET https://mempool.space/api/blocks/tip/height
+```
+
+Gibt die aktuelle Blockhöhe als Integer zurück (z.B. `885432`). Wird beim Badge-Erstellen und Badge-Scannen als unveränderlicher Zeitstempel verwendet.
 
 ---
 
 ## 🗺️ Roadmap
 
 ### v1.0 (Aktuell) ✅
-- [x] User & Admin Flows
-- [x] NFC Badge-Sammlung
-- [x] Reputation-Export
-- [x] QR-Code-Sharing
-- [x] Badge Verifier Tool
-- [x] Live API-Integration
-- [x] Session-Persistenz
+- [x] NFC Badge-Sammlung mit Signatur-Verifizierung
+- [x] Generative Art Badge-Hintergründe
+- [x] Kompakt-Ansicht für viele Badges
+- [x] Admin-Passwort als SHA-256 Hash (kein Klartext)
+- [x] Backup & Restore (JSON-Export/Import)
+- [x] Live-Kalender vom Einundzwanzig Portal
+- [x] QR-Code, Text- und JSON-Reputation-Export
+- [x] Badge-Verifier (standalone HTML-Tool)
+- [x] Profil mit Nostr, Telegram, Twitter/X
+- [x] 200+ Meetups aus der Portal-API
+- [x] Bitcoin-Blockhöhe als Zeitstempel
 
 ### v2.0 (Geplant)
-- [ ] **Nostr-Integration**: Badges als signed Events
-- [ ] **Admin-Signaturen**: Meetup-Admins signieren Badges
-- [ ] **Web-Verifier mit QR-Scanner**: Kamera-basierte Verifizierung
-- [ ] **Badge-NFTs**: Optional als ordinals/RGB
-- [ ] **Multi-Language**: EN, ES, FR
-- [ ] **Dark/Light Theme Toggle**
+- [ ] **Nostr-Integration** – Badges als signierte Nostr-Events
+- [ ] **Admin-Signaturen** – Meetup-Admins signieren Badges mit ihrem Nostr-Key
+- [ ] **Kamera-Scanner** – QR-basierte Verifizierung als Backup zu NFC
+- [ ] **iOS-Build** – optimierte iOS-Version mit CoreNFC
+- [ ] **Web-PWA** – abgespeckte Version ohne NFC zum Anzeigen der Reputation
+- [ ] **Multi-Language** – EN, ES, FR
 
 ### v3.0 (Vision)
-- [ ] **Reputation-Score**: Algorithmus basierend auf Badges
-- [ ] **Badge Marketplace**: Seltene Badges handeln
-- [ ] **Lightning-Integration**: Sats für Badges
-- [ ] **Meetup-Voting**: Community entscheidet über neue Features
+- [ ] **Reputation-Score** – gewichteter Algorithmus (Regelmäßigkeit, Diversität, Alter)
+- [ ] **Lightning-Integration** – Sats empfangen/senden bei Meetups
+- [ ] **Dezentraler Badge-Verifier** – Verifizierung über Nostr-Relays
+- [ ] **Badge-Rarity** – seltene Event-Badges (Konferenzen, Jubiläen)
 
 ---
 
 ## 🤝 Contributing
 
-Contributions sind willkommen! Bitte:
-
-1. Fork das Repository
-2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit deine Änderungen (`git commit -m 'Add AmazingFeature'`)
-4. Push zum Branch (`git push origin feature/AmazingFeature`)
-5. Öffne einen Pull Request
-
-### Development Setup
+Contributions sind willkommen!
 
 ```bash
-# Clone Repository
+# 1. Fork & Clone
 git clone https://github.com/louisthecat86/Einundzwanzig-Meetup-App.git
 cd Einundzwanzig-Meetup-App
 
-# Dependencies installieren
-./flutter/bin/flutter pub get
+# 2. Dependencies
+flutter pub get
 
-# App im Debug-Modus starten
-./flutter/bin/flutter run -d chrome  # Web
-./flutter/bin/flutter run            # Connected Device
+# 3. Auf Gerät testen (NFC braucht echtes Android-Gerät)
+flutter run
+
+# 4. Release-APK bauen
+flutter build apk --release
 ```
+
+### Branch-Strategie
+1. Fork das Repository
+2. Feature-Branch erstellen: `git checkout -b feature/mein-feature`
+3. Committen: `git commit -m 'Add: Mein neues Feature'`
+4. Pushen: `git push origin feature/mein-feature`
+5. Pull Request öffnen
 
 ---
 
 ## 📄 Lizenz
 
-MIT License - siehe [LICENSE](LICENSE) Datei
+MIT License – siehe [LICENSE](LICENSE)
 
 ---
 
 ## 🙏 Credits
 
-- **Einundzwanzig Network**: [einundzwanzig.space](https://einundzwanzig.space)
-- **API**: [portal.einundzwanzig.space](https://portal.einundzwanzig.space)
-- **Flutter**: Google
-- **Bitcoin**: Satoshi Nakamoto
+- **Einundzwanzig Community** – [einundzwanzig.space](https://einundzwanzig.space)
+- **Portal-API** – [portal.einundzwanzig.space](https://portal.einundzwanzig.space)
+- **Blockhöhe** – [mempool.space](https://mempool.space)
+- **Flutter** – Google
+- **Bitcoin** – Satoshi Nakamoto
 
 ---
 
-## 📞 Support & Kontakt
+## 📞 Support
 
 - **GitHub Issues**: [Bug Reports & Feature Requests](https://github.com/louisthecat86/Einundzwanzig-Meetup-App/issues)
-- **Telegram**: @einundzwanzig
-- **Nostr**: npub1einundzwanzig...
-
----
-
-## 🌟 Zeige deine Unterstützung
-
-Wenn dir die App gefällt:
-- ⭐ Gib dem Repo einen Star
-- 🐛 Melde Bugs
-- 💡 Schlage Features vor
-- 📱 Nutze die App bei Meetups!
+- **Telegram**: Einundzwanzig Community Gruppen
+- **Nostr**: Einundzwanzig Relays
 
 ---
 
 **Made with 🧡 for the Bitcoin Community**
+
+**Tick Tock, Next Block.**
