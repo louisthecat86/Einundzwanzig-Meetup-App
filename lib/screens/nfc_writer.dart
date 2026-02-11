@@ -140,7 +140,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               var formatable = NdefFormatableAndroid.from(tag);
               if (formatable != null) {
                 try {
-                  await formatable.format(message: message);
+                  await formatable.format(message);
                   await NfcManager.instance.stopSession();
                   _handleSuccessInUI();
                   return;
