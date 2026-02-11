@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
+// WICHTIG:
+import 'package:nfc_manager/platform_tags.dart';
+
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -111,7 +114,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
     
     String jsonData = jsonEncode(tagData);
-    
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
     final message = NdefMessage([
@@ -130,10 +132,9 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
           try {
             var ndef = Ndef.from(tag);
             
-            // Wenn Tag nicht NDEF ist, brechen wir in dieser Version ab, um Build-Fehler zu vermeiden.
             if (ndef == null) {
               await NfcManager.instance.stopSession(errorMessage: "Tag nicht kompatibel (Kein NDEF)");
-              _handleErrorInUI("Kein NDEF Format");
+              _handleErrorInUI("Kein NDEF Format (Bitte vorformatieren)");
               return;
             }
 
@@ -145,7 +146,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
 
             await ndef.write(message);
 
-            // iOS Success Feedback
             await NfcManager.instance.stopSession(alertMessage: "Erfolgreich geschrieben!");
             _handleSuccessInUI();
 
