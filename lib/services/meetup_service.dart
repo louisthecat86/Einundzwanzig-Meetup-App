@@ -12,6 +12,16 @@ class MeetupService {
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         return data.map((json) {
+          // Bestes verfügbares Bild auswählen (Cover > Image > Logo)
+          String image = "";
+          if (json['cover'] != null && json['cover'].toString().isNotEmpty) {
+            image = json['cover'];
+          } else if (json['image'] != null && json['image'].toString().isNotEmpty) {
+            image = json['image'];
+          } else if (json['logo'] != null && json['logo'].toString().isNotEmpty) {
+            image = json['logo'];
+          }
+
           return Meetup(
             id: json['id']?.toString() ?? json['name'] ?? "unknown",
             city: json['city'] ?? json['name'] ?? "Unbekannt",
@@ -25,6 +35,7 @@ class MeetupService {
             nostrNpub: json['nostr'] ?? "",
             lat: (json['latitude'] as num?)?.toDouble() ?? 0.0,
             lng: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+            coverImagePath: image,
           );
         }).toList();
       } else {

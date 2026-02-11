@@ -220,7 +220,7 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
                 
                 // Wir suchen das passende Meetup-Objekt für das Bild
                 final matchingMeetup = _allMeetups.where((m) => 
-                  m.city.toLowerCase() == badge.meetupName.toLowerCase()
+                  badge.meetupName.toLowerCase().contains(m.city.toLowerCase())
                 ).firstOrNull;
 
                 return _buildBadgeCard(context, badge, matchingMeetup);
