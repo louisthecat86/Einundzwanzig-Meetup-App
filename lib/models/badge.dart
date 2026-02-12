@@ -78,10 +78,23 @@ class MeetupBadge {
   }
 
   // Exportiert alle Badges als verifizierbares JSON
-  static String exportBadgesForReputation(List<MeetupBadge> badges, String userNpub) {
+  static String exportBadgesForReputation(
+    List<MeetupBadge> badges,
+    String userNpub, {
+    String nickname = '',
+    String telegram = '',
+    String twitter = '',
+  }) {
+    // Identitäts-Block: Alle verknüpften Accounts
+    final Map<String, dynamic> identity = {};
+    if (nickname.isNotEmpty) identity['nickname'] = nickname;
+    if (userNpub.isNotEmpty) identity['nostr_npub'] = userNpub;
+    if (telegram.isNotEmpty) identity['telegram'] = telegram;
+    if (twitter.isNotEmpty) identity['twitter'] = twitter;
+
     final data = {
-      'version': '1.0',
-      'user': userNpub.isNotEmpty ? userNpub : 'anonymous',
+      'version': '2.0',
+      'identity': identity.isNotEmpty ? identity : {'status': 'anonymous'},
       'total_badges': badges.length,
       'meetups_visited': badges.map((b) => b.meetupName).toSet().length,
       'badges': badges.map((b) => {
@@ -92,12 +105,13 @@ class MeetupBadge {
       }).toList(),
       'exported_at': DateTime.now().toIso8601String(),
     };
-    
+
+    // Checksum über Identität + Badges (nicht nur Badges!)
     final jsonString = jsonEncode(data);
     final checksum = sha256.convert(utf8.encode(jsonString)).toString().substring(0, 8);
-    
+
     data['checksum'] = checksum;
-    
+
     return const JsonEncoder.withIndent('  ').convert(data);
   }
 }

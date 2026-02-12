@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:crypto/crypto.dart'; // <--- WICHTIG: Für den Hash
-import 'dart:convert';             // <--- WICHTIG: Für utf8
+import 'package:dbcrypt/dbcrypt.dart';
+import '../services/admin_registry.dart';
+import '../services/nostr_service.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart'; 
@@ -16,10 +17,52 @@ class VerificationGateScreen extends StatefulWidget {
 
 class _VerificationGateScreenState extends State<VerificationGateScreen> {
   final TextEditingController _pwController = TextEditingController();
-  
-  // HIER IST DEIN NEUER HASH
-  // Das Klartext-Passwort steht nirgendwo mehr im Code!
-  static const String _adminPasswordHash = "5d3e17aa4120142e8ef1e124c1a164070654efafb29f3267e56d2e7ffa8aa441";
+  bool _isCheckingNostr = false;
+
+  // BCRYPT HASH – mit Salt + 4096 Iterationen, nicht per Brute-Force knackbar
+  static const String _adminPasswordHash = r"$2a$12$kq69Oonj6Fk13v7nq6YAmu2CGzivJWmjKN12.UVgnl08RTIEKxWQG";
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatischer Nostr Admin-Check beim Öffnen
+    _checkNostrAdmin();
+  }
+
+  // --- NOSTR AUTO-CHECK ---
+  void _checkNostrAdmin() async {
+    final user = await UserProfile.load();
+    if (!user.hasNostrKey || user.nostrNpub.isEmpty) return;
+
+    setState(() => _isCheckingNostr = true);
+
+    try {
+      final result = await AdminRegistry.checkAdmin(user.nostrNpub);
+      if (result.isAdmin && mounted) {
+        // Automatisch freischalten!
+        user.isAdmin = true;
+        user.isAdminVerified = true;
+        user.isNostrVerified = true;
+        await user.save();
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("⚡ Admin erkannt via Nostr${result.meetup != null ? ' (${result.meetup})' : ''}"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      print('[Gate] Nostr Admin-Check: $e');
+    }
+
+    if (mounted) setState(() => _isCheckingNostr = false);
+  }
 
   void _startVerification() async {
     // Dummy Meetup für Scan
@@ -48,11 +91,10 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
     }
   }
 
-  // Hilfsfunktion: Hasht einen String (Eingabe -> Fingerabdruck)
-  String _hashPassword(String password) {
-    final bytes = utf8.encode(password);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+  // Prüft Passwort gegen bcrypt Hash (sicher, mit Salt + Key-Stretching)
+  bool _verifyPassword(String password) {
+    final dBcrypt = DBCrypt();
+    return dBcrypt.checkpw(password, _adminPasswordHash);
   }
 
   // --- DIE HINTERTÜR FÜR ORGANISATOREN ---
@@ -88,11 +130,8 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
               // 1. Eingabe nehmen
               final input = _pwController.text;
               
-              // 2. Eingabe hashen (Fingerabdruck berechnen)
-              final inputHash = _hashPassword(input);
-
-              // 3. Hashes vergleichen
-              if (inputHash == _adminPasswordHash) {
+              // 2. Gegen bcrypt Hash prüfen (sicher!)
+              if (_verifyPassword(input)) {
                 
                 // SUCCESS: User wird Admin UND verifiziert
                 final user = await UserProfile.load();
@@ -125,6 +164,22 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingNostr) {
+      return Scaffold(
+        backgroundColor: cDark,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(color: cPurple),
+              SizedBox(height: 20),
+              Text("Prüfe Nostr-Identität...", style: TextStyle(color: cPurple, fontSize: 14)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: cDark,
       body: Padding(
@@ -159,7 +214,7 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
             TextButton(
               onPressed: _showAdminLogin, 
               child: const Text("Ich bin Organisator / Admin", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline))
-            )
+            ),
           ],
         ),
       ),

@@ -40,6 +40,8 @@ dependencies:
   shared_preferences: ^2.5.4
   js: ^0.7.2
   crypto: ^3.0.6
+  dbcrypt: ^2.0.0
+  nostr: ^1.5.0
   share_plus: ^10.1.4
   file_picker: ^8.0.0  # Zum Auswählen der Backup-Datei
   path_provider: ^2.1.2 # Um temporäre Dateien zu erstellen
