@@ -187,7 +187,13 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
 
     final user = await UserProfile.load();
     final json =
-        MeetupBadge.exportBadgesForReputation(myBadges, user.nostrNpub);
+        MeetupBadge.exportBadgesForReputation(
+          myBadges,
+          user.nostrNpub,
+          nickname: user.nickname,
+          telegram: user.telegramHandle,
+          twitter: user.twitterHandle,
+        );
 
     try {
       await Share.share(json, subject: 'Einundzwanzig Reputation (JSON)');
