@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:nfc_manager/nfc_manager.dart';            // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
-import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
+import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import '../theme.dart';
@@ -9,7 +10,8 @@ import '../models/meetup.dart';
 import '../models/user.dart'; 
 import '../services/mempool.dart';
 import '../services/badge_security.dart';
-import '../services/nostr_service.dart'; // NEU
+import '../services/nostr_service.dart';
+import '../services/rolling_qr_service.dart';
 import 'nfc_writer.dart'; 
 
 class MeetupVerificationScreen extends StatefulWidget {
@@ -200,6 +202,60 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     _processFoundTagData(tagData: tagData);
   }
 
+  // --- QR-CODE SCANNER (Alternative zu NFC) ---
+  void _startQRScan(String type) async {
+    setState(() => _statusText = "Kamera öffnet...");
+
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _QRScannerScreen(expectedType: type),
+      ),
+    );
+
+    if (result == null || !mounted) {
+      setState(() => _statusText = "Scan abgebrochen");
+      return;
+    }
+
+    try {
+      final Map<String, dynamic> tagData = json.decode(result);
+
+      // Signatur prüfen (gleich wie bei NFC)
+      final verifyResult = BadgeSecurity.verify(tagData);
+      if (!verifyResult.isValid) {
+        setState(() {
+          _statusText = "❌ FÄLSCHUNG ERKANNT!\nDieser QR-Code hat keine gültige Signatur.";
+          _success = false;
+        });
+        return;
+      }
+
+      // Rolling Nonce prüfen (Frische-Check)
+      if (tagData['qr_nonce'] != null) {
+        final nonceResult = await RollingQRService.validateNonce(tagData);
+        if (!nonceResult.isValid) {
+          setState(() {
+            _statusText = "❌ QR-CODE ABGELAUFEN!\n${nonceResult.message}\n\nBitte den aktuellen Code scannen.";
+            _success = false;
+          });
+          return;
+        }
+      }
+
+      // v2: Admin-Info merken
+      if (verifyResult.version == 2 && verifyResult.adminNpub.isNotEmpty) {
+        tagData['_verified_by'] = NostrService.shortenNpub(verifyResult.adminNpub);
+      }
+
+      _processFoundTagData(tagData: tagData);
+    } catch (e) {
+      setState(() {
+        _statusText = "❌ Ungültiger QR-Code\n$e";
+      });
+    }
+  }
+
   void _processFoundTagData({Map<String, dynamic>? tagData}) async {
     if (!mounted) return;
     
@@ -254,12 +310,21 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       );
 
       if (!alreadyCollected) {
+        // Signer-Info aus Tag-Daten extrahieren
+        final signerNpub = tagData['admin_npub'] as String? ?? '';
+        final delivery = tagData['delivery'] as String? ?? 'nfc';
+        final dateStr = DateTime.now().toIso8601String().substring(0, 10);
+        final meetupEventId = '${meetupName.toLowerCase().replaceAll(' ', '-')}-$dateStr';
+
         myBadges.add(MeetupBadge(
           id: meetupId, 
           meetupName: meetupCountry.isNotEmpty ? "$meetupName, $meetupCountry" : meetupName, 
           date: DateTime.now(), 
           iconPath: "assets/badge_icon.png",
           blockHeight: currentBlockHeight,
+          signerNpub: signerNpub,
+          meetupEventId: meetupEventId,
+          delivery: delivery,
         ));
         
         await MeetupBadge.saveBadges(myBadges);
@@ -482,10 +547,24 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               ] else ...[
                 SizedBox(
                   width: 250, height: 50,
-                  child: ElevatedButton(
+                  child: ElevatedButton.icon(
                     onPressed: () => _startNfcRead("BADGE"),
+                    icon: const Icon(Icons.nfc, color: Colors.white, size: 20),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.white12),
-                    child: const Text("BADGE EINSAMMELN", style: TextStyle(color: Colors.white)),
+                    label: const Text("NFC TAG SCANNEN", style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: 250, height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _startQRScan("BADGE"),
+                    icon: const Icon(Icons.qr_code_scanner, color: cOrange, size: 20),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white12,
+                      side: const BorderSide(color: cOrange, width: 1),
+                    ),
+                    label: const Text("QR-CODE SCANNEN", style: TextStyle(color: cOrange)),
                   ),
                 ),
               ],
@@ -502,6 +581,95 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ============================================
+// QR SCANNER SCREEN (für Rolling QR Check-In)
+// ============================================
+class _QRScannerScreen extends StatefulWidget {
+  final String expectedType;
+  const _QRScannerScreen({required this.expectedType});
+
+  @override
+  State<_QRScannerScreen> createState() => _QRScannerScreenState();
+}
+
+class _QRScannerScreenState extends State<_QRScannerScreen> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.normal,
+    facing: CameraFacing.back,
+  );
+  bool _hasScanned = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text("QR-CODE SCANNEN"),
+        backgroundColor: cOrange,
+      ),
+      body: Stack(
+        children: [
+          // Kamera
+          MobileScanner(
+            controller: _controller,
+            onDetect: (capture) {
+              if (_hasScanned) return;
+              final List<Barcode> barcodes = capture.barcodes;
+              for (final barcode in barcodes) {
+                final rawValue = barcode.rawValue;
+                if (rawValue != null && rawValue.contains('meetup_id')) {
+                  _hasScanned = true;
+                  Navigator.pop(context, rawValue);
+                  return;
+                }
+              }
+            },
+          ),
+
+          // Scan-Rahmen Overlay
+          Center(
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                border: Border.all(color: cOrange, width: 3),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+
+          // Anweisung unten
+          Positioned(
+            bottom: 60,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: const [
+                Text(
+                  "Halte die Kamera auf den\nRolling QR-Code des Meetups",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  "Der Code ändert sich alle 30 Sekunden",
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -6,6 +6,7 @@ import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
 import 'nfc_writer.dart';
 import 'admin_management.dart';
+import 'rolling_qr_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -111,18 +112,37 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             
             const SizedBox(height: 32),
             
-            // Option 1: Badge Tag erstellen
+            // Option 1: Badge Tag erstellen (NFC)
             _buildAdminTile(
               context: context,
-              icon: Icons.bookmark,
+              icon: Icons.nfc,
               color: cOrange,
-              title: "MEETUP TAG ERSTELLEN",
-              subtitle: "Teilnehmer können diesen Tag scannen um ein Badge zu erhalten",
+              title: "NFC TAG ERSTELLEN",
+              subtitle: "NFC-Tag auf den Tisch legen, Teilnehmer halten Handy dran",
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const NFCWriterScreen(mode: NFCWriteMode.badge),
+                  ),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 16),
+
+            // Option 2: Rolling QR-Code (NEU!)
+            _buildAdminTile(
+              context: context,
+              icon: Icons.qr_code_2,
+              color: cOrange,
+              title: "ROLLING QR-CODE",
+              subtitle: "QR-Code auf dem Handy anzeigen, ändert sich alle 30 Sekunden",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RollingQRScreen(),
                   ),
                 );
               },
