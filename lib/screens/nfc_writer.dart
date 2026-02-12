@@ -9,8 +9,9 @@ import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
 import '../services/meetup_service.dart';
-import '../services/badge_security.dart'; // NEU: Für die einfache Signatur
-import '../services/mempool.dart';        // NEU: Für Blockhöhe
+import '../services/badge_security.dart';
+import '../services/nostr_service.dart';     // NEU: Für Nostr-Signierung
+import '../services/mempool.dart';
 
 enum NFCWriteMode { badge, verify }
 
@@ -110,21 +111,53 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
 
     final meetupId = _homeMeetup?.id ?? "global";
 
-    // Hier entsteht die fälschungssichere Signatur basierend auf unserem App-Secret
-    final signature = BadgeSecurity.sign(meetupId, timestamp, blockHeight);
+    // --- SIGNIERUNG: Nostr (v2) oder Legacy (v1) ---
+    Map<String, dynamic> tagData;
+    final hasNostrKey = await NostrService.hasKey();
 
-    Map<String, dynamic> tagData = {
-      'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
-      'meetup_id': meetupId,
-      'timestamp': timestamp,
-      'block_height': blockHeight,
-      'sig': signature, // <--- Die Signatur kommt auf den Tag
-    };
-    
-    if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
-      tagData['meetup_name'] = _homeMeetup!.city;
-      tagData['meetup_country'] = _homeMeetup!.country;
-      tagData['meetup_date'] = DateTime.now().toIso8601String();
+    if (hasNostrKey) {
+      // v2: Nostr-Signierung (sicher, kein APP_SECRET)
+      try {
+        tagData = await BadgeSecurity.signWithNostr(
+          meetupId: meetupId,
+          timestamp: timestamp,
+          blockHeight: blockHeight,
+          meetupName: _homeMeetup?.city ?? 'Unknown',
+          meetupCountry: _homeMeetup?.country ?? '',
+          tagType: widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
+        );
+        setState(() => _statusText = "🔐 Nostr-Signatur erstellt...");
+      } catch (e) {
+        // Fallback zu Legacy bei Fehler
+        final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
+        tagData = {
+          'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
+          'meetup_id': meetupId,
+          'timestamp': timestamp,
+          'block_height': blockHeight,
+          'sig': signature,
+        };
+        if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
+          tagData['meetup_name'] = _homeMeetup!.city;
+          tagData['meetup_country'] = _homeMeetup!.country;
+          tagData['meetup_date'] = DateTime.now().toIso8601String();
+        }
+      }
+    } else {
+      // v1: Legacy-Signierung (APP_SECRET)
+      final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
+      tagData = {
+        'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
+        'meetup_id': meetupId,
+        'timestamp': timestamp,
+        'block_height': blockHeight,
+        'sig': signature,
+      };
+      if (widget.mode == NFCWriteMode.badge && _homeMeetup != null) {
+        tagData['meetup_name'] = _homeMeetup!.city;
+        tagData['meetup_country'] = _homeMeetup!.country;
+        tagData['meetup_date'] = DateTime.now().toIso8601String();
+      }
     }
     // ---------------------------------------------
 

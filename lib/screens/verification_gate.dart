@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:dbcrypt/dbcrypt.dart'; // Sichere Passwort-Prüfung
+import 'package:dbcrypt/dbcrypt.dart';
+import '../services/admin_registry.dart';
+import '../services/nostr_service.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart'; 
@@ -15,9 +17,52 @@ class VerificationGateScreen extends StatefulWidget {
 
 class _VerificationGateScreenState extends State<VerificationGateScreen> {
   final TextEditingController _pwController = TextEditingController();
-  
+  bool _isCheckingNostr = false;
+
   // BCRYPT HASH – mit Salt + 4096 Iterationen, nicht per Brute-Force knackbar
   static const String _adminPasswordHash = r"$2a$12$kq69Oonj6Fk13v7nq6YAmu2CGzivJWmjKN12.UVgnl08RTIEKxWQG";
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatischer Nostr Admin-Check beim Öffnen
+    _checkNostrAdmin();
+  }
+
+  // --- NOSTR AUTO-CHECK ---
+  void _checkNostrAdmin() async {
+    final user = await UserProfile.load();
+    if (!user.hasNostrKey || user.nostrNpub.isEmpty) return;
+
+    setState(() => _isCheckingNostr = true);
+
+    try {
+      final result = await AdminRegistry.checkAdmin(user.nostrNpub);
+      if (result.isAdmin && mounted) {
+        // Automatisch freischalten!
+        user.isAdmin = true;
+        user.isAdminVerified = true;
+        user.isNostrVerified = true;
+        await user.save();
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("⚡ Admin erkannt via Nostr${result.meetup != null ? ' (${result.meetup})' : ''}"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      print('[Gate] Nostr Admin-Check: $e');
+    }
+
+    if (mounted) setState(() => _isCheckingNostr = false);
+  }
 
   void _startVerification() async {
     // Dummy Meetup für Scan
@@ -119,6 +164,22 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingNostr) {
+      return Scaffold(
+        backgroundColor: cDark,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(color: cPurple),
+              SizedBox(height: 20),
+              Text("Prüfe Nostr-Identität...", style: TextStyle(color: cPurple, fontSize: 14)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: cDark,
       body: Padding(
@@ -153,7 +214,7 @@ class _VerificationGateScreenState extends State<VerificationGateScreen> {
             TextButton(
               onPressed: _showAdminLogin, 
               child: const Text("Ich bin Organisator / Admin", style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline))
-            )
+            ),
           ],
         ),
       ),

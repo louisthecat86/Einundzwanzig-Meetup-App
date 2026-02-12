@@ -1,10 +1,40 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models/meetup.dart';
+import '../models/user.dart';
+import '../services/admin_registry.dart';
+import '../services/nostr_service.dart';
 import 'nfc_writer.dart';
+import 'admin_management.dart';
+import 'rolling_qr_screen.dart';
 
-class AdminPanelScreen extends StatelessWidget {
+class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
+
+  @override
+  State<AdminPanelScreen> createState() => _AdminPanelScreenState();
+}
+
+class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  bool _isSuperAdmin = false;
+  String _adminNpub = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSuperAdmin();
+  }
+
+  void _checkSuperAdmin() async {
+    final user = await UserProfile.load();
+    final npub = await NostrService.getNpub();
+    if (mounted) {
+      setState(() {
+        _isSuperAdmin = npub == AdminRegistry.superAdminNpub;
+        _adminNpub = npub ?? '';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,24 +84,65 @@ class AdminPanelScreen extends StatelessWidget {
                     "Erstelle NFC Tags für dein Meetup und verifiziere neue Teilnehmer.",
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  // Nostr Admin Status
+                  if (_adminNpub.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: cPurple.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.key, color: cPurple, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            NostrService.shortenNpub(_adminNpub, chars: 6),
+                            style: const TextStyle(color: cPurple, fontFamily: 'monospace', fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             
             const SizedBox(height: 32),
             
-            // Option 1: Badge Tag erstellen
+            // Option 1: Badge Tag erstellen (NFC)
             _buildAdminTile(
               context: context,
-              icon: Icons.bookmark,
+              icon: Icons.nfc,
               color: cOrange,
-              title: "MEETUP TAG ERSTELLEN",
-              subtitle: "Teilnehmer können diesen Tag scannen um ein Badge zu erhalten",
+              title: "NFC TAG ERSTELLEN",
+              subtitle: "NFC-Tag auf den Tisch legen, Teilnehmer halten Handy dran",
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const NFCWriterScreen(mode: NFCWriteMode.badge),
+                  ),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 16),
+
+            // Option 2: Rolling QR-Code (NEU!)
+            _buildAdminTile(
+              context: context,
+              icon: Icons.qr_code_2,
+              color: cOrange,
+              title: "ROLLING QR-CODE",
+              subtitle: "QR-Code auf dem Handy anzeigen, ändert sich alle 30 Sekunden",
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RollingQRScreen(),
                   ),
                 );
               },
@@ -99,6 +170,30 @@ class AdminPanelScreen extends StatelessWidget {
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 24),
+
+            // Option 3: Admin-Verwaltung (nur Super-Admin)
+            if (_isSuperAdmin) ...[
+              _buildAdminTile(
+                context: context,
+                icon: Icons.group,
+                color: cPurple,
+                title: "ADMIN-VERWALTUNG",
+                subtitle: "Meetup-Organisatoren hinzufügen oder entfernen",
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminManagementScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 24),
+            ] else ...[
+              // Kein Super-Admin → trotzdem Divider
+            ],
             
             // Info Box
             Container(

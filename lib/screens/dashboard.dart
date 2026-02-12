@@ -12,7 +12,7 @@ import 'badge_wallet.dart';
 import 'profile_edit.dart'; 
 import 'intro.dart'; 
 import 'admin_panel.dart'; 
-import 'events.dart'; 
+
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
 import 'calendar_screen.dart';
