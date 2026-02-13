@@ -1,3 +1,10 @@
+// ============================================
+// NFC WRITER SCREEN (Vollversion)
+// ============================================
+// 
+// Dieser Screen kombiniert die umfangreiche UI und Nostr-Logik
+// mit der stabilen Formatierungs-Routine für neue NFC-Tags.
+
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -98,12 +105,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       _success = false;
     });
 
-    // --- NEU: DATEN VORBEREITEN & SIGNIEREN ---
+    // --- DATEN VORBEREITEN & SIGNIEREN ---
     final timestamp = DateTime.now().toIso8601String();
     int blockHeight = 0;
     
     try {
-      // Wir versuchen die Blockhöhe zu holen, bei Fehler nehmen wir 0
       blockHeight = await MempoolService.getBlockHeight();
     } catch (e) {
       print("Mempool Fehler: $e");
@@ -116,7 +122,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     final hasNostrKey = await NostrService.hasKey();
 
     if (hasNostrKey) {
-      // v2: Nostr-Signierung (sicher, kein APP_SECRET)
       try {
         tagData = await BadgeSecurity.signWithNostr(
           meetupId: meetupId,
@@ -128,7 +133,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         );
         setState(() => _statusText = "🔐 Nostr-Signatur erstellt...");
       } catch (e) {
-        // Fallback zu Legacy bei Fehler
         final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
         tagData = {
           'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
@@ -144,7 +148,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         }
       }
     } else {
-      // v1: Legacy-Signierung (APP_SECRET)
       final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
       tagData = {
         'type': widget.mode == NFCWriteMode.badge ? 'BADGE' : 'VERIFY',
@@ -159,9 +162,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         tagData['meetup_date'] = DateTime.now().toIso8601String();
       }
     }
-    // ---------------------------------------------
 
-    // v4.x: checkAvailability() statt isAvailable()
     final availability = await NfcManager.instance.checkAvailability();
     if (availability != NfcAvailability.enabled) {
       await _simulateWriteTag();
@@ -173,7 +174,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     String jsonData = jsonEncode(tagData);
     final payload = Uint8List.fromList([0x02, 0x65, 0x6e, ...utf8.encode(jsonData)]);
 
-    // v4.x: named parameter 'records:', TypeNameFormat.wellKnown
     final message = NdefMessage(records: [
       NdefRecord(
         typeNameFormat: TypeNameFormat.wellKnown,
@@ -188,14 +188,14 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
         pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
         onDiscovered: (NfcTag tag) async {
           try {
-            // v4.x: Ndef aus nfc_manager_ndef
             var ndef = Ndef.from(tag);
             
+            // --- FIX: Formatierung für leere Tags hinzugefügt ---
             if (ndef == null) {
-              // v4.x: NdefFormatableAndroid aus nfc_manager_android.dart
               var formatable = NdefFormatableAndroid.from(tag);
               if (formatable != null) {
                 try {
+                  setState(() => _statusText = "Formatiere leeren Tag...");
                   await formatable.format(message);
                   await NfcManager.instance.stopSession();
                   _handleSuccessInUI();
@@ -207,7 +207,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                 }
               }
               await NfcManager.instance.stopSession();
-              _handleErrorInUI("Kein NDEF Format");
+              _handleErrorInUI("Kein NDEF Format möglich");
               return;
             }
 
@@ -217,7 +217,6 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
               return;
             }
 
-            // v4.x: named parameter 'message:'
             await ndef.write(message: message);
             await NfcManager.instance.stopSession();
             _handleSuccessInUI();
