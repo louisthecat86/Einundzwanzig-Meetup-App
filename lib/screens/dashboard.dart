@@ -1,458 +1,255 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../theme.dart';
 import '../models/user.dart';
-import '../models/meetup.dart';
-import '../models/badge.dart';
-import '../services/meetup_service.dart';
-import 'meetup_verification.dart';
-import 'meetup_selection.dart'; 
-import 'badge_details.dart'; 
+import '../services/admin_registry.dart';
+import '../services/trust_score_service.dart';
+import '../services/nostr_service.dart';
 import 'badge_wallet.dart';
-import 'profile_edit.dart'; 
-import 'intro.dart'; 
-import 'admin_panel.dart'; 
-
-import 'meetup_details.dart'; 
-import 'reputation_qr.dart'; 
-import 'calendar_screen.dart';
-import '../services/backup_service.dart'; // Backup Service Import
+import 'profile_edit.dart';
+import 'meetup_verification.dart';
+import 'admin_panel.dart';
+import 'reputation_qr.dart';
+import 'verification_gate.dart'; // Importiert jetzt OrganisatorLoginScreen
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
-
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  UserProfile _user = UserProfile();
-  Meetup? _homeMeetup; 
-  
+  UserProfile? _user;
+  bool _isAdmin = false;
+  TrustScore? _trustScore;
+  String _bootstrapPhase = "Initial";
+
   @override
   void initState() {
     super.initState();
-    _loadUser();
-    _loadBadges();
+    _loadData();
   }
 
-  void _loadBadges() async {
-    final badges = await MeetupBadge.loadBadges();
-    setState(() {
-      myBadges.clear();
-      myBadges.addAll(badges);
-    });
-    print("[DEBUG Dashboard] ${badges.length} Badges geladen");
-  }
-
-  void _loadUser() async {
-    final u = await UserProfile.load();
+  Future<void> _loadData() async {
+    final user = await UserProfile.load();
+    final isAdminReg = await AdminRegistry().isAdmin(user?.nostrNpub);
     
-    Meetup? homeMeetup;
-    if (u.homeMeetupId.isNotEmpty) {
-      List<Meetup> meetups = await MeetupService.fetchMeetups();
-      if (meetups.isEmpty) {
-        meetups = allMeetups;
+    // Trust Score berechnen (mit Co-Attestor Daten)
+    TrustScore? score;
+    if (user != null) {
+      // Co-Attestor Daten laden
+      final nostr = NostrService();
+      Map<String, CoAttestorData> coData = {};
+      
+      for (var b in user.badges) {
+        if (b.meetupEventId != null) {
+          final info = await nostr.fetchCoAttestors(b.meetupEventId!);
+          coData[b.signature] = CoAttestorData(
+            meetupEventId: info.meetupEventId,
+            attendeeCount: info.attendeeCount,
+            attendeeNpubs: info.attendeeNpubs,
+            veteranCount: 0 // Vereinfachung für jetzt
+          );
+        }
       }
-      homeMeetup = meetups.where((m) => m.city == u.homeMeetupId).firstOrNull;
+      
+      score = await TrustScoreService().calculateScore(user, coData);
     }
-    
+
     setState(() {
-      _user = u;
-      _homeMeetup = homeMeetup;
+      _user = user;
+      _isAdmin = isAdminReg || (score?.meetsPromotionThreshold ?? false) || (user?.isAdmin ?? false);
+      _trustScore = score;
+      _bootstrapPhase = score?.phaseLabel ?? "Initial";
     });
   }
 
-  void _resetApp() async {
-    // Sicherheitsabfrage vor dem Löschen
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: cCard,
-        title: const Text("App zurücksetzen?", style: TextStyle(color: Colors.white)),
-        content: const Text("Alle Badges und dein Profil werden gelöscht. Stelle sicher, dass du ein Backup hast!"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbruch")),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            child: const Text("LÖSCHEN", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
-          ),
-        ],
-      )
-    ) ?? false;
-
-    if (!confirm) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); 
-    myBadges.clear();    
-    await MeetupBadge.saveBadges([]); 
-    
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const IntroScreen()), 
-        (route) => false
-      );
-    }
-  }
-
-  void _showSettings() {
-    showModalBottomSheet(
-      context: context, 
-      backgroundColor: cCard,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  void _scanAnyMeetup() {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (context) => MeetupVerificationScreen(
+        meetup: null, // Dummy, wird im Screen behandelt
+        initialChefMode: false,
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min, 
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40, height: 4, 
-                decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text("DATENSICHERUNG", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            const SizedBox(height: 10),
-            
-            // --- BACKUP EXPORT (Nur Erstellen) ---
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.blue.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.upload, color: Colors.blue),
-              ),
-              title: const Text("Backup erstellen", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Sichere deinen Account extern als Datei.", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () async {
-                Navigator.pop(context); 
-                await BackupService.createBackup(context);
-              },
-            ),
-
-            const SizedBox(height: 20),
-            const Divider(color: Colors.white10),
-            const SizedBox(height: 10),
-            
-            const Text("ACCOUNT", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            const SizedBox(height: 10),
-
-            // --- RESET ---
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.red.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.delete_forever, color: Colors.red),
-              ),
-              title: const Text("App zurücksetzen", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Löscht Profil und Badges vom Gerät.", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(context);
-                _resetApp();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _scanAnyMeetup() async {
-    final dummy = Meetup(id: "global", city: "GLOBAL", country: "", telegramLink: "", lat: 0, lng: 0);
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => MeetupVerificationScreen(meetup: dummy)),
-    );
-    _loadBadges(); // Sicherstellen, dass Badges nach Scan neu geladen werden
-  }
-
-  void _selectHomeMeetup() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => const MeetupSelectionScreen()));
-    _loadUser();
+    )).then((_) => _loadData());
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_user == null) return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.orange)));
+
     return Scaffold(
-      backgroundColor: cDark,
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text("DASHBOARD"),
-        automaticallyImplyLeading: false, 
+        backgroundColor: Colors.black,
+        title: const Text("EINUNDZWANZIG", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _showSettings,
+            icon: const Icon(Icons.settings, color: Colors.white70),
+            onPressed: () => _showSettings(context),
           )
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        color: Colors.orange,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
-            Text(
-              "Hallo, ${_user.nickname}!",
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                color: cText,
-                fontWeight: FontWeight.w800,
-              ),
+            _buildGreeting(),
+            const SizedBox(height: 24),
+            _buildTile(
+              "STEMPEL SAMMELN", "NFC oder QR scannen", Icons.nfc, 
+              Colors.orange, () => _scanAnyMeetup()
             ),
-            const SizedBox(height: 4),
-            Text(
-              "Willkommen zurück in der Community.",
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: cTextSecondary,
-              ),
+            const SizedBox(height: 16),
+            _buildTile(
+              "MEIN WALLET", "${_user!.badges.length} Stempel", Icons.collections_bookmark, 
+              Colors.blueGrey, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BadgeWalletScreen()))
             ),
-            const SizedBox(height: 32),
-            _buildHomeMeetupCard(),
-            const SizedBox(height: 20),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 15,
-              mainAxisSpacing: 15,
-              children: [
-                _buildTile(
-                  icon: Icons.military_tech,
-                  color: cOrange,
-                  title: "BADGES",
-                  subtitle: "Jetzt scannen",
-                  onTap: _scanAnyMeetup, 
-                ),
-                _buildTile(
-                  icon: Icons.collections_bookmark, 
-                  color: cPurple, 
-                  title: "WALLET", 
-                  subtitle: "${myBadges.length} Badges", 
-                  onTap: () async {
-                    await Navigator.push(
-                      context, 
-                      MaterialPageRoute(builder: (context) => BadgeWalletScreen()),
-                    );
-                    _loadBadges(); // Reload nach Rückkehr aus Wallet
-                  }
-                ),
-                _buildTile(
-                  icon: Icons.event,
-                  color: cCyan,
-                  title: "TERMINE",
-                  subtitle: "Kalender & Events",
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const CalendarScreen()),
-                    );
-                  },
-                ),
-                _buildTile(
-                  icon: Icons.person, color: Colors.grey, title: "PROFIL", subtitle: "Identität", 
-                  onTap: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileEditScreen()));
-                    _loadUser();
-                  }
-                ),
-                if (myBadges.isNotEmpty) 
-                  _buildTile(
-                    icon: Icons.workspace_premium,
-                    color: Colors.amber,
-                    title: "REPUTATION",
-                    subtitle: "Badges teilen",
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ReputationQRScreen()),
-                      );
-                    },
-                  ),
-                if (_user.isAdmin) 
-                  _buildTile(
-                    icon: Icons.admin_panel_settings,
-                    color: Colors.redAccent,
-                    title: "ADMIN",
-                    subtitle: "Tags erstellen",
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AdminPanelScreen()),
-                      );
-                    }
-                  ),
-              ],
-            )
+            const SizedBox(height: 16),
+            _buildTile(
+              "REPUTATION ZEIGEN", "Dein QR-Code", Icons.qr_code, 
+              Colors.white, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ReputationQRScreen()))
+            ),
+            const SizedBox(height: 16),
+            
+            // Trust Score oder Admin
+            if (_isAdmin)
+              _buildTile(
+                "ORGANISATOR", "Meetups verwalten", Icons.vpn_key, 
+                Colors.purpleAccent, () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPanelScreen()))
+              )
+            else if (_user!.badges.length >= 2)
+              _buildTrustTile(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHomeMeetupCard() {
-    bool hasHome = _user.homeMeetupId.isNotEmpty;
-    
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: hasHome && _homeMeetup != null ? () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CalendarScreen(
-                initialSearch: _homeMeetup!.city 
-              ),
+  Widget _buildGreeting() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Hallo ${_user!.nickname},", style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+        Text("Reputations-Status: $_bootstrapPhase", style: const TextStyle(color: Colors.white54, fontSize: 14)),
+      ],
+    );
+  }
+
+  Widget _buildTile(String title, String sub, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(backgroundColor: color.withOpacity(0.2), radius: 24, child: Icon(icon, color: color)),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
             ),
-          );
-        } : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cCard,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasHome ? cOrange.withOpacity(0.4) : cBorder,
-              width: 1.5,
-            ),
-            boxShadow: hasHome ? [
-              BoxShadow(
-                color: cOrange.withOpacity(0.1),
-                blurRadius: 20,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              )
-            ] : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cOrange.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.home_filled, color: cOrange, size: 24),
-                  ),
-                  if (hasHome) 
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: cOrange,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        "DEIN MEETUP",
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    )
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _homeMeetup != null ? _homeMeetup!.city.toUpperCase() : (_user.homeMeetupId.isNotEmpty ? "Lade..." : "KEIN HOME MEETUP"),
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _homeMeetup != null ? "${_homeMeetup!.country} • Regelmäßige Treffen" : (_user.homeMeetupId.isNotEmpty ? "ID: ${_user.homeMeetupId}" : "Wähle dein Stammtisch-Meetup aus"), 
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _selectHomeMeetup,
-                      child: Text(hasHome ? "ÄNDERN" : "AUSWÄHLEN"),
-                    ),
-                  ),
-                  if (hasHome) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (_homeMeetup != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => MeetupDetailsScreen(meetup: _homeMeetup!),
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text("DETAILS"),
-                      ),
-                    ),
-                  ],
-                ],
-              )
-            ],
-          ),
+            const Spacer(),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white24, size: 16),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTile({required IconData icon, required Color color, required String title, required String subtitle, required VoidCallback onTap}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: cCard,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cBorder, width: 1),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
+  Widget _buildTrustTile() {
+    final progress = (_trustScore?.score ?? 0) / (_trustScore?.activeThreshold ?? 15.0);
+    return InkWell(
+      onTap: () => _showTrustInfo(),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.trending_up, color: Colors.green),
+                const SizedBox(width: 12),
+                const Text("TRUST SCORE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Text("${_trustScore?.score.toStringAsFixed(1)} / ${_trustScore?.activeThreshold}", style: const TextStyle(color: Colors.white)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: progress.clamp(0.0, 1.0), backgroundColor: Colors.white12, color: Colors.green),
+            const SizedBox(height: 8),
+            const Text("Sammle weiter Stempel um Organisator zu werden.", style: TextStyle(color: Colors.white38, fontSize: 10)),
+          ],
         ),
       ),
+    );
+  }
+
+  void _showTrustInfo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text("Dein Trust Score", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Das Netzwerk bewertet deine Aktivität lokal:", style: TextStyle(color: Colors.white70)),
+            const SizedBox(height: 16),
+            _scoreRow("Anzahl Stempel", "${_user!.badges.length}"),
+            _scoreRow("Verschiedene Meetups", "${_trustScore?.uniqueMeetups ?? 0}"),
+            _scoreRow("Verschiedene Signer", "${_trustScore?.uniqueSigners ?? 0}"),
+            const Divider(color: Colors.white24),
+            _scoreRow("Aktueller Score", _trustScore?.score.toStringAsFixed(1) ?? "0"),
+            _scoreRow("Benötigt", "${_trustScore?.activeThreshold ?? 15}"),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
+      ),
+    );
+  }
+
+  Widget _scoreRow(String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: const TextStyle(color: Colors.white54)),
+        Text(val, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+
+  void _showSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.person, color: Colors.white),
+            title: const Text("Profil bearbeiten", style: TextStyle(color: Colors.white)),
+            onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileEditScreen())); }
+          ),
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings, color: Colors.white54),
+            title: const Text("Ich bin bereits Organisator", style: TextStyle(color: Colors.white54)),
+            subtitle: const Text("Login mit Passwort", style: TextStyle(color: Colors.white24, fontSize: 10)),
+            onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (context) => const OrganisatorLoginScreen())); }
+          ),
+          const SizedBox(height: 24),
+        ],
+      )
     );
   }
 }

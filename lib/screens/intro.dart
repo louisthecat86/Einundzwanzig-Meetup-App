@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/user.dart'; 
-import '../theme.dart'; 
-import 'profile_edit.dart'; 
-import 'dashboard.dart'; 
-import 'verification_gate.dart'; 
-import '../services/admin_registry.dart';
+import '../models/user.dart';
 import '../services/nostr_service.dart';
-import '../services/backup_service.dart';
+import 'dashboard.dart';
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -16,199 +11,87 @@ class IntroScreen extends StatefulWidget {
 }
 
 class _IntroScreenState extends State<IntroScreen> {
-  bool _showLogo = false;
-  bool _showSlogan = false;
-  bool _showButton = false;
+  final TextEditingController _nicknameController = TextEditingController();
   bool _isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _startAnimation();
-  }
+  void _finishSetup() async {
+    if (_nicknameController.text.isEmpty) return;
 
-  void _startAnimation() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    setState(() => _showLogo = true);
-
-    await Future.delayed(const Duration(milliseconds: 800));
-    setState(() => _showSlogan = true);
-
-    await Future.delayed(const Duration(milliseconds: 500));
-    setState(() => _showButton = true);
-  }
-
-  // --- BACKUP LOGIK ---
-  void _restoreAccount() async {
-    bool success = await BackupService.restoreBackup(context);
-    if (success && mounted) {
-      // Wenn das Backup erfolgreich war, springen wir direkt zum Dashboard,
-      // da alle Daten (Name, Verifizierung, Badges) nun im Speicher sind.
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const DashboardScreen(), 
-          transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
-        ),
-      );
-    }
-  }
-
-  void _enterCommunity() async {
     setState(() => _isLoading = true);
 
-    UserProfile user = await UserProfile.load();
+    // 1. Heimlich Nostr Key generieren, falls noch keiner da ist
+    final nostr = NostrService();
+    if (!await nostr.hasKey()) {
+      await nostr.generatePrivateKey();
+    }
+    
+    // 2. User anlegen
+    final newUser = UserProfile(
+      nickname: _nicknameController.text,
+      homeMeetup: "Global", 
+    );
+    await newUser.save();
 
     if (!mounted) return;
-
-    if (user.nickname == "Anon" && !user.isVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Bitte lege zuerst deine Identität fest. 🕵️"),
-          backgroundColor: cOrange,
-          duration: Duration(seconds: 3),
-        )
-      );
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
-      );
-
-      user = await UserProfile.load();
-    }
-
-    if (!mounted) return;
-
-    // --- NOSTR ADMIN-CHECK ---
-    // Wenn User einen Nostr-Key hat, prüfe ob er in der Admin-Registry steht
-    if (user.hasNostrKey && user.nostrNpub.isNotEmpty && !user.isAdmin) {
-      try {
-        final adminResult = await AdminRegistry.checkAdmin(user.nostrNpub);
-        if (adminResult.isAdmin) {
-          // Automatisch als Admin freischalten!
-          user.isAdmin = true;
-          user.isAdminVerified = true;
-          user.isNostrVerified = true;
-          await user.save();
-        }
-      } catch (e) {
-        print('[Intro] Admin-Check fehlgeschlagen: $e');
-      }
-    }
-    // -------------------------
-
-    if (user.isAdminVerified) {
-       Navigator.pushReplacement(
-         context,
-         PageRouteBuilder(
-           pageBuilder: (_, __, ___) => const DashboardScreen(), 
-           transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
-         ),
-       );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const VerificationGateScreen(),
-          transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
-        ),
-      );
-    }
+    
+    // 3. Direkt ins Dashboard
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: cDark, 
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // LOGO
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 1000),
-              curve: Curves.easeOutExpo,
-              opacity: _showLogo ? 1.0 : 0.0,
-              child: Transform.translate(
-                offset: _showLogo ? const Offset(0, 0) : const Offset(0, 50),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  width: 280,
-                  fit: BoxFit.contain,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.qr_code_2, size: 80, color: Colors.orange),
+              const SizedBox(height: 24),
+              const Text(
+                "Willkommen",
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Sammle Stempel bei Einundzwanzig Meetups und baue deine Reputation auf.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 48),
+              TextField(
+                controller: _nicknameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: "Dein Nickname",
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(12)),
+                  focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.orange), borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white10,
                 ),
               ),
-            ),
-
-            const SizedBox(height: 50),
-
-            // SLOGAN
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 800),
-              opacity: _showSlogan ? 1.0 : 0.0,
-              child: Column(
-                children: [
-                  Text(
-                    "DEINE BITCOIN COMMUNITY",
-                    style: TextStyle(
-                      fontSize: 13, 
-                      letterSpacing: 3.0, 
-                      color: cTextSecondary,
-                      fontWeight: FontWeight.w700,
-                    ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _finishSetup,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  const SizedBox(height: 15),
-                  const Icon(Icons.keyboard_arrow_down, color: cOrange, size: 28),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 60),
-
-            // BUTTONS
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 500),
-              opacity: _showButton ? 1.0 : 0.0,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _enterCommunity,
-                        child: _isLoading 
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.black,
-                                strokeWidth: 2.5,
-                              ),
-                            )
-                          : const Text("COMMUNITY BETRETEN"),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // NEU: Backup Button
-                    TextButton.icon(
-                      onPressed: _isLoading ? null : _restoreAccount,
-                      icon: const Icon(Icons.restore, color: Colors.orange, size: 20),
-                      label: const Text(
-                        "BACKUP LADEN",
-                        style: TextStyle(
-                          color: Colors.orange, 
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                  ],
+                  child: _isLoading 
+                    ? const CircularProgressIndicator(color: Colors.black) 
+                    : const Text("LOS GEHT'S", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
