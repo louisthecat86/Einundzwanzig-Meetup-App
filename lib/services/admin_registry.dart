@@ -69,7 +69,7 @@ class AdminRegistry {
   // Das ist die EINZIGE hardcoded Konstante.
   // Wer diesen npub kontrolliert, kontrolliert die Admin-Liste.
   // =============================================
-  static const String superAdminNpub = "DEIN_NPUB_HIER"; // ← DEINEN npub hier einsetzen!
+  static const String superAdminNpub = "npub1lf0rga7j66uj6enae2mxezamz5nsz3vechhvmh25tcarn4u8qf5q534jzc"; // ← DEINEN npub hier einsetzen!
 
   // Nostr Relays (die App versucht alle der Reihe nach)
   static const List<String> _relays = [
