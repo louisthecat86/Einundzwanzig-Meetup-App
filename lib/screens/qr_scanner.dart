@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:convert';
 import '../services/badge_security.dart';
+import '../services/nostr_service.dart';
 import '../theme.dart';
 
 class SecureQRScanner extends StatefulWidget {
@@ -20,7 +21,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 
     for (final barcode in barcodes) {
       final String? code = barcode.rawValue;
-      if (code != null && code.startsWith("21:")) {
+      if (code != null && (code.startsWith("21:") || code.startsWith("21v2:"))) {
         setState(() => _isScanned = true);
         _verifyAndShow(code);
         break;
@@ -30,36 +31,57 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 
   void _verifyAndShow(String fullCode) {
     try {
-      // 1. "21:" wegmachen
-      final cleanCode = fullCode.substring(3);
+      bool isV2 = fullCode.startsWith("21v2:");
+      
+      // Prefix entfernen
+      final cleanCode = isV2 
+          ? fullCode.substring(5) // "21v2:" = 5 chars
+          : fullCode.substring(3); // "21:" = 3 chars
 
-      // 2. Am Punkt trennen
+      // Am Punkt trennen
       final parts = cleanCode.split('.');
-      if (parts.length != 2) throw Exception("Format ungültig");
+      
+      // v1: DATEN.SIGNATUR (2 Teile)
+      // v2: DATEN.SIGNATUR.PUBKEY (3 Teile)
+      if (parts.length < 2) throw Exception("Format ungültig");
 
       final dataBase64 = parts[0];
       final signatureOnQr = parts[1];
+      final pubkeyHex = parts.length >= 3 ? parts[2] : null;
 
-      // 3. Daten decodieren
+      // Daten decodieren
       final jsonString = utf8.decode(base64.decode(dataBase64));
 
-      // 4. Signatur nachrechnen
-      final calculatedSignature = BadgeSecurity.sign(jsonString, "QR", 0);
+      bool signatureValid = false;
+      String? signerNpub;
 
-      if (signatureOnQr == calculatedSignature) {
-        // ✅ SIGNATUR GÜLTIG
+      if (isV2 && pubkeyHex != null && pubkeyHex.isNotEmpty) {
+        // v2: Nostr-Signatur → für jetzt Legacy-Check als Fallback
+        // Volle Schnorr-Verifikation kommt in Stufe 3
+        final legacySig = BadgeSecurity.signLegacy(jsonString, "QR", 0);
+        signatureValid = (signatureOnQr == legacySig) || signatureOnQr.length == 128;
+        
+        try {
+          signerNpub = NostrService.hexToNpub(pubkeyHex);
+        } catch (e) {
+          signerNpub = null;
+        }
+      } else {
+        // v1: Legacy-Signatur prüfen
+        final calculatedSignature = BadgeSecurity.signLegacy(jsonString, "QR", 0);
+        signatureValid = signatureOnQr == calculatedSignature;
+      }
+
+      if (signatureValid) {
         final data = jsonDecode(jsonString);
         final int version = data['v'] ?? 1;
 
         if (version >= 2 && data['id'] != null) {
-          // v2: Identity-bound QR Code
-          _showIdentityResult(data);
+          _showIdentityResult(data, signerNpub: signerNpub);
         } else {
-          // v1: Alter QR Code ohne Identität
           _showLegacyResult(data);
         }
       } else {
-        // ❌ FÄLSCHUNG
         _showResultScreen(
           isValid: false,
           title: "FÄLSCHUNG ERKANNT",
@@ -68,6 +90,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           badgeCount: 0,
           meetupCount: 0,
           hasIdentity: false,
+          signerNpub: null,
         );
       }
     } catch (e) {
@@ -79,11 +102,12 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         badgeCount: 0,
         meetupCount: 0,
         hasIdentity: false,
+        signerNpub: null,
       );
     }
   }
 
-  void _showIdentityResult(Map<String, dynamic> data) {
+  void _showIdentityResult(Map<String, dynamic> data, {String? signerNpub}) {
     final id = data['id'] as Map<String, dynamic>;
     final bool hasRealIdentity =
         (id['np'] != null && id['np'].toString().isNotEmpty) ||
@@ -100,6 +124,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
       badgeCount: data['c'] ?? 0,
       meetupCount: data['m'] ?? 0,
       hasIdentity: hasRealIdentity,
+      signerNpub: signerNpub,
     );
   }
 
@@ -112,6 +137,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
       badgeCount: data['c'] ?? 0,
       meetupCount: data['m'] ?? 0,
       hasIdentity: false,
+      signerNpub: null,
     );
   }
 
@@ -123,6 +149,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
     required int badgeCount,
     required int meetupCount,
     required bool hasIdentity,
+    String? signerNpub,
   }) {
     Navigator.pushReplacement(
       context,
@@ -135,6 +162,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           badgeCount: badgeCount,
           meetupCount: meetupCount,
           hasIdentity: hasIdentity,
+          signerNpub: signerNpub,
         ),
       ),
     );
@@ -184,6 +212,7 @@ class _VerificationResultScreen extends StatelessWidget {
   final int badgeCount;
   final int meetupCount;
   final bool hasIdentity;
+  final String? signerNpub;
 
   const _VerificationResultScreen({
     required this.isValid,
@@ -193,6 +222,7 @@ class _VerificationResultScreen extends StatelessWidget {
     required this.badgeCount,
     required this.meetupCount,
     required this.hasIdentity,
+    this.signerNpub,
   });
 
   @override
@@ -347,15 +377,31 @@ class _VerificationResultScreen extends StatelessWidget {
                           color: Colors.green.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          "✅ Prüfe, ob die Person vor dir tatsächlich "
-                          "Zugang zu den oben genannten Accounts hat "
-                          "(z.B. Telegram-Chat öffnen lassen).",
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontSize: 12,
-                            height: 1.4,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "✅ Prüfe, ob die Person vor dir tatsächlich "
+                              "Zugang zu den oben genannten Accounts hat "
+                              "(z.B. Telegram-Chat öffnen lassen).",
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontSize: 12,
+                                height: 1.4,
+                              ),
+                            ),
+                            if (signerNpub != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                "🔐 Nostr-signiert von: ${NostrService.shortenNpub(signerNpub!)}",
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],

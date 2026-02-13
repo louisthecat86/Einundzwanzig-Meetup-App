@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../models/badge.dart';
 import '../models/user.dart';
 import '../services/badge_security.dart';
+import '../services/nostr_service.dart';
 import 'qr_scanner.dart';
 
 class ReputationQRScreen extends StatefulWidget {
@@ -53,13 +54,28 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
 
     final jsonString = jsonEncode(qrPayload);
 
-    // 3. Signatur deckt ALLE Daten inkl. Identität ab
-    //    → Änderung der Identität = ungültige Signatur
-    final signature = BadgeSecurity.sign(jsonString, "QR", 0);
+    // 3. Signatur: Nostr (wenn Key vorhanden) oder Legacy
+    String signature;
+    String? signerPubkey;
+    final hasKey = await NostrService.hasKey();
+    
+    if (hasKey) {
+      signature = await BadgeSecurity.signQR(jsonString);
+      final keys = await NostrService.loadKeys();
+      signerPubkey = keys?['npub'];
+    } else {
+      signature = BadgeSecurity.signLegacy(jsonString, "QR", 0);
+    }
 
-    // 4. Format: "21:BASE64_DATEN.SIGNATUR"
+    // 4. Format: "21:BASE64_DATEN.SIGNATUR" (optional .PUBKEY für v2)
     final base64Json = base64Encode(utf8.encode(jsonString));
-    final secureQrData = "21:$base64Json.$signature";
+    String secureQrData;
+    if (signerPubkey != null) {
+      // v2: Pubkey mit einbauen für Verifikation
+      secureQrData = "21v2:$base64Json.$signature.${NostrService.npubToHex(signerPubkey)}";
+    } else {
+      secureQrData = "21:$base64Json.$signature";
+    }
 
     // Vollständiges JSON für manuellen Export (ebenfalls mit Identität)
     final fullJsonExport = MeetupBadge.exportBadgesForReputation(

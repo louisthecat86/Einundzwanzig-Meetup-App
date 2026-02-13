@@ -8,6 +8,9 @@ class MeetupBadge {
   final DateTime date;
   final String iconPath;
   final int blockHeight;
+  final String signerNpub;      // NEU: Wer hat den Tag erstellt?
+  final String meetupEventId;   // NEU: Eindeutige Event-ID (meetup-datum)
+  final String delivery;        // NEU: 'nfc' oder 'rolling_qr'
 
   MeetupBadge({
     required this.id,
@@ -15,6 +18,9 @@ class MeetupBadge {
     required this.date,
     required this.iconPath,
     this.blockHeight = 0,
+    this.signerNpub = '',
+    this.meetupEventId = '',
+    this.delivery = 'nfc',
   });
 
   // Serialisierung
@@ -25,6 +31,9 @@ class MeetupBadge {
       'date': date.toIso8601String(),
       'iconPath': iconPath,
       'blockHeight': blockHeight,
+      'signerNpub': signerNpub,
+      'meetupEventId': meetupEventId,
+      'delivery': delivery,
     };
   }
 
@@ -36,6 +45,9 @@ class MeetupBadge {
       date: DateTime.parse(json['date'] as String),
       iconPath: json['iconPath'] as String,
       blockHeight: json['blockHeight'] as int? ?? 0,
+      signerNpub: json['signerNpub'] as String? ?? '',
+      meetupEventId: json['meetupEventId'] as String? ?? '',
+      delivery: json['delivery'] as String? ?? 'nfc',
     );
   }
 

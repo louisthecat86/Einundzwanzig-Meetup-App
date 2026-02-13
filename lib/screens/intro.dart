@@ -4,7 +4,9 @@ import '../theme.dart';
 import 'profile_edit.dart'; 
 import 'dashboard.dart'; 
 import 'verification_gate.dart'; 
-import '../services/backup_service.dart'; // NEU: Backup Service Import
+import '../services/admin_registry.dart';
+import '../services/nostr_service.dart';
+import '../services/backup_service.dart';
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -77,6 +79,24 @@ class _IntroScreenState extends State<IntroScreen> {
     }
 
     if (!mounted) return;
+
+    // --- NOSTR ADMIN-CHECK ---
+    // Wenn User einen Nostr-Key hat, prüfe ob er in der Admin-Registry steht
+    if (user.hasNostrKey && user.nostrNpub.isNotEmpty && !user.isAdmin) {
+      try {
+        final adminResult = await AdminRegistry.checkAdmin(user.nostrNpub);
+        if (adminResult.isAdmin) {
+          // Automatisch als Admin freischalten!
+          user.isAdmin = true;
+          user.isAdminVerified = true;
+          user.isNostrVerified = true;
+          await user.save();
+        }
+      } catch (e) {
+        print('[Intro] Admin-Check fehlgeschlagen: $e');
+      }
+    }
+    // -------------------------
 
     if (user.isAdminVerified) {
        Navigator.pushReplacement(
