@@ -8,8 +8,8 @@
 //   nonce = HMAC-SHA256(secret, floor(time / interval))
 //   QR    = meetup_data + nonce + timestamp
 //
-// Der QR-Code ändert sich alle 30 Sekunden.
-// Ein Screenshot ist nach 30s wertlos.
+// Der QR-Code ändert sich alle 10 Sekunden.
+// Ein Screenshot ist nach 10s wertlos.
 // Die Validierung akzeptiert ±1 Intervall (Toleranz).
 //
 // Secret = SHA256(organizer_privkey + meetup_id + datum)
@@ -25,7 +25,7 @@ import 'badge_security.dart';
 
 class RollingQRService {
   // Intervall in Sekunden (wie oft der QR-Code sich ändert)
-  static const int intervalSeconds = 30;
+  static const int intervalSeconds = 10;
 
   // Toleranz: akzeptiere auch das vorherige und nächste Intervall
   static const int toleranceSteps = 1;
@@ -60,7 +60,7 @@ class RollingQRService {
 
   // =============================================
   // QR-PAYLOAD ERSTELLEN (Organizer-Seite)
-  // Wird alle 30 Sekunden neu aufgerufen
+  // Wird alle 10 Sekunden neu aufgerufen
   // =============================================
   static Future<Map<String, dynamic>> generatePayload({
     required String meetupId,
@@ -131,7 +131,7 @@ class RollingQRService {
 
   // =============================================
   // NONCE VALIDIEREN (Scanner-Seite)
-  // Prüft ob der QR-Code frisch ist (±30 Sek)
+  // Prüft ob der QR-Code frisch ist (±10 Sek)
   // =============================================
   static Future<NonceValidation> validateNonce(Map<String, dynamic> payload) async {
     final nonce = payload['qr_nonce'] as String?;

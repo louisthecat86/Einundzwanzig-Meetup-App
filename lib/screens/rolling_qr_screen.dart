@@ -4,14 +4,14 @@
 // 
 // Der Organisator legt sein Handy auf den Tisch.
 // Auf dem Screen wird ein QR-Code angezeigt der sich
-// alle 30 Sekunden ändert.
+// alle 10 Sekunden ändert.
 //
 // Teilnehmer scannen den QR-Code mit ihrer App.
 // → Gleicher Effekt wie NFC-Tag scannen.
 // → Aber kein NFC-Tag nötig!
 //
 // Die Rolling Nonce verhindert:
-// - Screenshots weiterleiten (nach 30s ungültig)
+// - Screenshots weiterleiten (nach 10s ungültig)
 // - Remote-Scan von der Couch (Code ändert sich)
 // ============================================
 
@@ -38,7 +38,7 @@ class _RollingQRScreenState extends State<RollingQRScreen> {
   String _meetupInfo = '';
   Meetup? _homeMeetup;
   int _blockHeight = 0;
-  int _secondsLeft = 30;
+  int _secondsLeft = 10;
   int _scanCount = 0;
   bool _isActive = false;
   bool _isLoading = true;
@@ -101,7 +101,7 @@ class _RollingQRScreenState extends State<RollingQRScreen> {
     // Sofort ersten QR generieren
     await _refreshQR();
 
-    // Timer: QR alle 30 Sekunden neu generieren
+    // Timer: QR alle 10 Sekunden neu generieren
     _refreshTimer = Timer.periodic(
       Duration(seconds: RollingQRService.intervalSeconds),
       (_) => _refreshQR(),
@@ -225,8 +225,8 @@ class _RollingQRScreenState extends State<RollingQRScreen> {
                     "1. Starte den QR-Code\n"
                     "2. Lege dein Handy auf den Tisch\n"
                     "3. Teilnehmer scannen mit ihrer App\n"
-                    "4. Der Code ändert sich alle 30 Sekunden\n\n"
-                    "⚡ Screenshots sind nach 30s ungültig\n"
+                    "4. Der Code ändert sich alle 10 Sekunden\n\n"
+                    "⚡ Screenshots sind nach 10s ungültig\n"
                     "🔐 Signiert mit deinem Nostr-Key",
                     style: TextStyle(color: Colors.white70, height: 1.6, fontSize: 13),
                   ),
