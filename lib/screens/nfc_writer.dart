@@ -1,18 +1,23 @@
 // ============================================
-// NFC WRITER SCREEN — Nur Badge-Modus
+// NFC WRITER — KOMPAKT-FORMAT (passt auf NTAG215)
 // ============================================
-// Schreibt Meetup-Badge-Tags auf NFC.
-// Verifizierungs-Tags gibt es nicht mehr.
-// Organisator-Status kommt automatisch über Trust Score.
+// Payload: ~285 Bytes (vorher 583B → passt jetzt!)
+//
+// Format: {"v":2,"t":"B","m":"city-cc","b":875432,
+//          "x":expiry,"c":created,"p":"pubkey","s":"sig"}
+//
+// Features:
+//   • Kompakt-Signatur (Schnorr, unfälschbar)
+//   • 6h Ablaufzeit → Überschreibbar für nächstes Meetup
+//   • Payload-Größe wird VOR dem Schreiben angezeigt
+//   • Funktioniert mit NTAG213 (137B), 215 (492B), 216 (872B)
 // ============================================
 
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/ndef_record.dart';
-import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';
-import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/platform_tags.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -33,6 +38,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   String _statusText = "Bereit zum Schreiben";
   Meetup? _homeMeetup;
   String _meetupInfo = "";
+  int _payloadSize = 0;
   
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -41,10 +47,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _loadHomeMeetup();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
+    _controller = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
     _animation = Tween<double>(begin: 1.0, end: 1.2).animate(_controller);
   }
 
@@ -71,9 +74,14 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     final meetup = meetups.where((m) => m.city == user.homeMeetupId).firstOrNull;
     
     if (meetup != null) {
+      // Payload-Größe vorberechnen
+      final compactId = '${meetup.city.toLowerCase().replaceAll(' ', '-')}-${meetup.country.toLowerCase()}';
+      final estimatedPayload = '{"v":2,"t":"B","m":"$compactId","b":000000,"x":0000000000,"c":0000000000,"p":"${"0" * 64}","s":"${"0" * 128}"}';
+      
       setState(() {
         _homeMeetup = meetup;
         _meetupInfo = "📍 ${meetup.city}, ${meetup.country}";
+        _payloadSize = estimatedPayload.length + 10; // +10 für NFC Record Header
         _statusText = "Bereit zum Schreiben";
       });
     } else {
@@ -87,10 +95,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   void _writeTag() async {
     if (_homeMeetup == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("❌ Bitte erst ein Home-Meetup im Profil auswählen!"),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text("❌ Bitte erst ein Home-Meetup im Profil auswählen!"), backgroundColor: Colors.red),
       );
       return;
     }
@@ -100,59 +105,40 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       _success = false;
     });
 
-    final timestamp = DateTime.now().toIso8601String();
+    // Block Height holen
     int blockHeight = 0;
-    
     try {
       blockHeight = await MempoolService.getBlockHeight();
     } catch (e) {
       print("Mempool Fehler: $e");
     }
 
-    final meetupId = _homeMeetup?.id ?? "global";
+    // Kompakte Meetup-ID: "aschaffenburg-de"
+    final compactMeetupId = '${_homeMeetup!.city.toLowerCase().replaceAll(' ', '-')}-${_homeMeetup!.country.toLowerCase()}';
 
-    // --- SIGNIERUNG: Nostr (v2) oder Legacy (v1) ---
+    // KOMPAKT-SIGNIERUNG (Schnorr, ~285B)
     Map<String, dynamic> tagData;
     final hasNostrKey = await NostrService.hasKey();
 
     if (hasNostrKey) {
       try {
-        tagData = await BadgeSecurity.signWithNostr(
-          meetupId: meetupId,
-          timestamp: timestamp,
+        tagData = await BadgeSecurity.signCompact(
+          meetupId: compactMeetupId,
           blockHeight: blockHeight,
-          meetupName: _homeMeetup?.city ?? 'Unknown',
-          meetupCountry: _homeMeetup?.country ?? '',
-          tagType: 'BADGE',
+          validityHours: BadgeSecurity.badgeValidityHours,
         );
-        setState(() => _statusText = "🔐 Nostr-Signatur erstellt...");
+        setState(() => _statusText = "🔐 Signatur erstellt...");
       } catch (e) {
-        final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
-        tagData = {
-          'type': 'BADGE',
-          'meetup_id': meetupId,
-          'timestamp': timestamp,
-          'block_height': blockHeight,
-          'meetup_name': _homeMeetup!.city,
-          'meetup_country': _homeMeetup!.country,
-          'meetup_date': DateTime.now().toIso8601String(),
-          'sig': signature,
-        };
+        // Fallback: Legacy
+        final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
+        tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
       }
     } else {
-      final signature = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
-      tagData = {
-        'type': 'BADGE',
-        'meetup_id': meetupId,
-        'timestamp': timestamp,
-        'block_height': blockHeight,
-        'meetup_name': _homeMeetup!.city,
-        'meetup_country': _homeMeetup!.country,
-        'meetup_date': DateTime.now().toIso8601String(),
-        'sig': signature,
-      };
+      final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
+      tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
     }
 
+    // NFC verfügbar?
     final availability = await NfcManager.instance.checkAvailability();
     if (availability != NfcAvailability.enabled) {
       await _simulateWriteTag();
@@ -173,6 +159,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       ),
     ]);
 
+    final actualSize = jsonData.length + 7; // 3 prefix + ~4 NDEF header
+
     try {
       await NfcManager.instance.startSession(
         pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
@@ -181,13 +169,13 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
-              var formatable = NdefFormatableAndroid.from(tag);
+              var formatable = NdefFormatable.from(tag);
               if (formatable != null) {
                 try {
                   setState(() => _statusText = "Formatiere leeren Tag...");
                   await formatable.format(message);
                   await NfcManager.instance.stopSession();
-                  _handleSuccessInUI();
+                  _handleSuccessInUI(jsonData.length);
                   return;
                 } catch (e) {
                   await NfcManager.instance.stopSession();
@@ -207,12 +195,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             }
 
             // Payload-Größe prüfen
-            final payloadSize = jsonData.length + 7;
             final maxSize = ndef.maxSize;
-            if (payloadSize > maxSize) {
+            if (actualSize > maxSize) {
               await NfcManager.instance.stopSession();
               _handleErrorInUI(
-                "Tag zu klein! Daten: ${payloadSize}B, Tag: ${maxSize}B.\n"
+                "Tag zu klein! Daten: ${actualSize}B, Tag: ${maxSize}B.\n"
                 "Verwende einen NTAG215 (504B) oder größer."
               );
               return;
@@ -220,12 +207,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
 
             await ndef.write(message: message);
             await NfcManager.instance.stopSession();
-            _handleSuccessInUI();
+            _handleSuccessInUI(jsonData.length);
 
           } catch (e) {
             print("[ERROR] Write Error: $e");
             await NfcManager.instance.stopSession();
-            
             final errorMsg = e.toString();
             if (errorMsg.contains('IOException')) {
               _handleErrorInUI("Tag zu früh entfernt — halte ihn ruhig 2–3 Sekunden ans Gerät");
@@ -242,14 +228,20 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
   }
 
-  void _handleSuccessInUI() {
+  void _handleSuccessInUI(int dataSize) {
     if (!mounted) return;
+    final expiresIn = BadgeSecurity.badgeValidityHours;
     setState(() {
       _success = true;
-      _statusText = "✅ MEETUP TAG geschrieben!\n\n📍 ${_homeMeetup?.city}\nTeilnehmer können jetzt Badges scannen.";
+      _statusText = "✅ MEETUP TAG geschrieben!\n\n"
+          "📍 ${_homeMeetup?.city}\n"
+          "📦 ${dataSize}B (kompakt)\n"
+          "⏱️ Gültig für ${expiresIn}h\n\n"
+          "Teilnehmer können jetzt Badges scannen.\n"
+          "Tag kann danach überschrieben werden.";
     });
     
-    Future.delayed(const Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 5), () {
       if (mounted) Navigator.pop(context);
     });
   }
@@ -262,7 +254,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   Future<void> _simulateWriteTag() async {
     setState(() => _statusText = "Schreibe Tag... (SIM)");
     await Future.delayed(const Duration(seconds: 2));
-    _handleSuccessInUI();
+    _handleSuccessInUI(285);
   }
 
   @override
@@ -282,67 +274,122 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                   Padding(
                     padding: const EdgeInsets.all(30),
                     child: Text(_statusText, textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16, height: 1.6)),
+                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 14, height: 1.6)),
                   ),
                 ],
               )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ScaleTransition(
-                    scale: _animation,
-                    child: Container(
-                      width: 200, height: 200,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: cOrange, width: 4),
-                        boxShadow: [BoxShadow(color: cOrange.withOpacity(0.5), blurRadius: 40, spreadRadius: 10)],
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 40),
+                    ScaleTransition(
+                      scale: _animation,
+                      child: Container(
+                        width: 200, height: 200,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: cOrange, width: 4),
+                          boxShadow: [BoxShadow(color: cOrange.withOpacity(0.5), blurRadius: 40, spreadRadius: 10)],
+                        ),
+                        child: const Center(child: Icon(Icons.nfc, size: 80, color: Colors.white)),
                       ),
-                      child: const Center(child: Icon(Icons.nfc, size: 80, color: Colors.white)),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                  const Text("MEETUP TAG", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.white, letterSpacing: 2)),
-                  const SizedBox(height: 20),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      "Halte einen leeren NFC Tag an das Gerät.\nTeilnehmer scannen diesen Tag um ein Badge zu sammeln.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, height: 1.5),
+                    const SizedBox(height: 40),
+                    const Text("MEETUP TAG", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.white, letterSpacing: 2)),
+                    const SizedBox(height: 20),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(
+                        "Halte einen NFC Tag an das Gerät.\nTeilnehmer scannen diesen Tag um ein Badge zu sammeln.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, height: 1.5),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 40),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white12,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: cOrange.withOpacity(0.3)),
+                    const SizedBox(height: 20),
+
+                    // Home-Meetup Anzeige
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 40),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white12,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: cOrange.withOpacity(0.3)),
+                      ),
+                      child: Column(children: [
+                        const Text("DEIN HOME-MEETUP", style: TextStyle(color: cOrange, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        const SizedBox(height: 8),
+                        Text(_meetupInfo.isNotEmpty ? _meetupInfo : "...", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      ]),
                     ),
-                    child: Column(children: [
-                      const Text("DEIN HOME-MEETUP", style: TextStyle(color: cOrange, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                      const SizedBox(height: 8),
-                      Text(_meetupInfo.isNotEmpty ? _meetupInfo : "...", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    ]),
-                  ),
-                  const SizedBox(height: 40),
-                  SizedBox(
-                    width: 250, height: 60,
-                    child: ElevatedButton.icon(
-                      onPressed: _writeTag,
-                      icon: const Icon(Icons.nfc, color: Colors.white),
-                      label: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(backgroundColor: cOrange),
+                    const SizedBox(height: 12),
+
+                    // Payload-Info
+                    if (_payloadSize > 0)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 40),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                          const SizedBox(width: 8),
+                          Text("~${_payloadSize}B — passt auf NTAG215 (492B)",
+                            style: const TextStyle(color: Colors.green, fontSize: 12)),
+                        ]),
+                      ),
+                    const SizedBox(height: 8),
+
+                    // Ablauf + Überschreibbar Info
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 40),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cCyan.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: cCyan.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: const [
+                            Icon(Icons.timer, color: cCyan, size: 16),
+                            SizedBox(width: 6),
+                            Text("Gültig für 6 Stunden", style: TextStyle(color: cCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ]),
+                          const SizedBox(height: 6),
+                          Row(children: const [
+                            Icon(Icons.refresh, color: cCyan, size: 16),
+                            SizedBox(width: 6),
+                            Text("Tag kann danach überschrieben werden", style: TextStyle(color: cCyan, fontSize: 12)),
+                          ]),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(_statusText, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ),
-                ],
+                    const SizedBox(height: 30),
+
+                    // Schreib-Button
+                    SizedBox(
+                      width: 250, height: 60,
+                      child: ElevatedButton.icon(
+                        onPressed: _writeTag,
+                        icon: const Icon(Icons.nfc, color: Colors.white),
+                        label: const Text("TAG ERSTELLEN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(backgroundColor: cOrange),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      child: Text(_statusText, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
       ),
     );

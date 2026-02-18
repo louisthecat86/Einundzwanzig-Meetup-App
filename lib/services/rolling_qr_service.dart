@@ -1,20 +1,29 @@
 // ============================================
-// ROLLING QR SERVICE
+// ROLLING QR SERVICE v2 — SESSION + ROLLING
 // ============================================
-// 
-// Wie TOTP (Google Authenticator), aber für Meetup Check-In.
 //
-// Prinzip:
-//   nonce = HMAC-SHA256(secret, floor(time / interval))
-//   QR    = meetup_data + nonce + timestamp
+// Kombiniert zwei Sicherheitskonzepte:
 //
-// Der QR-Code ändert sich alle 10 Sekunden.
-// Ein Screenshot ist nach 10s wertlos.
-// Die Validierung akzeptiert ±1 Intervall (Toleranz).
+// 1. SESSION (6h gültig, überlebt App-Neustart)
+//    → Wird in SharedPreferences gespeichert
+//    → Gleicher Seed für die gesamte Meetup-Dauer
+//    → Nachzügler nach 1h → kein Problem
 //
-// Secret = SHA256(organizer_privkey + meetup_id + datum)
-// → Jeder Organisator, jedes Meetup, jeder Tag hat ein anderes Secret
-// → Ohne den privkey kann niemand gültige QR-Codes erzeugen
+// 2. ROLLING NONCE (alle 10s neu, Screenshot = wertlos)
+//    → nonce = HMAC(sessionSeed, zeitschritt)
+//    → Code ändert sich → Foto weiterleiten unmöglich
+//    → Scanner prüft: ist der Zeitschritt aktuell?
+//
+// Krypto-Kette:
+//   sessionSeed = SHA256(privkey + meetupId + startTime)
+//   nonce       = HMAC(sessionSeed, floor(now / 10))
+//   payload     = signCompact(meetup) + nonce + timeStep
+//   
+// Scanner-Seite:
+//   1. BadgeSecurity.verify() → Schnorr-Check
+//   2. validateNonce() → Zeitschritt aktuell? (±1 Toleranz)
+//   3. isExpired() → Session noch gültig?
+//
 // ============================================
 
 import 'dart:convert';
@@ -24,132 +33,217 @@ import 'nostr_service.dart';
 import 'badge_security.dart';
 
 class RollingQRService {
-  // Intervall in Sekunden (wie oft der QR-Code sich ändert)
+  // Wie oft sich der QR ändert
   static const int intervalSeconds = 10;
 
-  // Toleranz: akzeptiere auch das vorherige und nächste Intervall
+  // Toleranz: akzeptiere ±1 Intervall (also bis 20s alt)
   static const int toleranceSteps = 1;
 
-  // =============================================
-  // NONCE GENERIEREN (für Anzeige)
-  // =============================================
-  static String _generateNonce(String secret, int timeStep) {
-    final key = utf8.encode(secret);
-    final data = utf8.encode(timeStep.toString());
-    final hmac = Hmac(sha256, key);
-    final digest = hmac.convert(data);
-    // 8 Zeichen Hex-Nonce (kompakt genug für QR)
-    return digest.toString().substring(0, 16);
-  }
+  // Session-Gültigkeit
+  static const int sessionValidityHours = 6;
 
-  // Aktueller Time-Step
-  static int _currentTimeStep() {
-    return DateTime.now().millisecondsSinceEpoch ~/ 1000 ~/ intervalSeconds;
-  }
-
-  // Secret aus Organizer-Key + Meetup + Datum ableiten
-  static Future<String> _deriveSecret(String meetupId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex') ?? '';
-    final dateKey = DateTime.now().toIso8601String().substring(0, 10); // YYYY-MM-DD
-    
-    final raw = '$privHex:$meetupId:$dateKey';
-    final hash = sha256.convert(utf8.encode(raw));
-    return hash.toString();
-  }
+  // SharedPreferences Keys
+  static const String _keySessionSeed = 'rqr_session_seed';
+  static const String _keySessionStart = 'rqr_session_start';
+  static const String _keySessionExpires = 'rqr_session_expires';
+  static const String _keySessionMeetupId = 'rqr_session_meetup_id';
+  static const String _keySessionMeetupName = 'rqr_session_meetup_name';
+  static const String _keySessionMeetupCountry = 'rqr_session_meetup_country';
+  static const String _keySessionBlockHeight = 'rqr_session_block_height';
+  static const String _keySessionPubkey = 'rqr_session_pubkey';
 
   // =============================================
-  // QR-PAYLOAD ERSTELLEN (Organizer-Seite)
-  // Wird alle 10 Sekunden neu aufgerufen
+  // SESSION MANAGEMENT
   // =============================================
-  static Future<Map<String, dynamic>> generatePayload({
+
+  /// Startet eine neue 6h-Session oder lädt eine bestehende
+  static Future<MeetupSession?> getOrCreateSession({
     required String meetupId,
     required String meetupName,
     required String meetupCountry,
     required int blockHeight,
   }) async {
-    final secret = await _deriveSecret(meetupId);
-    final timeStep = _currentTimeStep();
-    final nonce = _generateNonce(secret, timeStep);
-    final timestamp = DateTime.now().toIso8601String();
-    final npub = await NostrService.getNpub();
+    final prefs = await SharedPreferences.getInstance();
 
-    // Signatur über die Daten (Nostr Schnorr)
-    Map<String, dynamic> payload;
-    final hasKey = await NostrService.hasKey();
-
-    if (hasKey) {
-      // v2: Nostr-signiert
-      payload = await BadgeSecurity.signWithNostr(
-        meetupId: meetupId,
-        timestamp: timestamp,
-        blockHeight: blockHeight,
-        meetupName: meetupName,
-        meetupCountry: meetupCountry,
-        tagType: 'BADGE',
-      );
-    } else {
-      // v1: Legacy
-      final sig = BadgeSecurity.signLegacy(meetupId, timestamp, blockHeight);
-      payload = {
-        'type': 'BADGE',
-        'meetup_id': meetupId,
-        'timestamp': timestamp,
-        'block_height': blockHeight,
-        'meetup_name': meetupName,
-        'meetup_country': meetupCountry,
-        'sig': sig,
-      };
+    // Bestehende Session prüfen
+    final existing = await loadSession();
+    if (existing != null && !existing.isExpired && existing.meetupId == meetupId) {
+      return existing;
     }
 
-    // Rolling Nonce hinzufügen
-    payload['qr_nonce'] = nonce;
-    payload['qr_time_step'] = timeStep;
-    payload['qr_interval'] = intervalSeconds;
-    payload['delivery'] = 'rolling_qr'; // Damit Scanner weiß: das kam per QR
-
-    return payload;
-  }
-
-  // =============================================
-  // QR-STRING ERSTELLEN (zum Anzeigen)
-  // =============================================
-  static Future<String> generateQRString({
-    required String meetupId,
-    required String meetupName,
-    required String meetupCountry,
-    required int blockHeight,
-  }) async {
-    final payload = await generatePayload(
+    // Neue Session erstellen
+    return await _createSession(
+      prefs: prefs,
       meetupId: meetupId,
       meetupName: meetupName,
       meetupCountry: meetupCountry,
       blockHeight: blockHeight,
     );
+  }
+
+  /// Lädt bestehende Session aus SharedPreferences
+  static Future<MeetupSession?> loadSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seed = prefs.getString(_keySessionSeed);
+    final start = prefs.getInt(_keySessionStart);
+    final expires = prefs.getInt(_keySessionExpires);
+    final meetupId = prefs.getString(_keySessionMeetupId);
+
+    if (seed == null || start == null || expires == null || meetupId == null) {
+      return null;
+    }
+
+    return MeetupSession(
+      seed: seed,
+      startedAt: start,
+      expiresAt: expires,
+      meetupId: meetupId,
+      meetupName: prefs.getString(_keySessionMeetupName) ?? '',
+      meetupCountry: prefs.getString(_keySessionMeetupCountry) ?? '',
+      blockHeight: prefs.getInt(_keySessionBlockHeight) ?? 0,
+      pubkey: prefs.getString(_keySessionPubkey) ?? '',
+    );
+  }
+
+  /// Neue Session erstellen und speichern
+  static Future<MeetupSession> _createSession({
+    required SharedPreferences prefs,
+    required String meetupId,
+    required String meetupName,
+    required String meetupCountry,
+    required int blockHeight,
+  }) async {
+    final privHex = prefs.getString('nostr_priv_hex') ?? '';
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final expiresAt = now + (sessionValidityHours * 3600);
+
+    // Session-Seed: deterministisch aus privkey + meetup + startzeit
+    // → Gleicher Organisator, gleiches Meetup = gleicher Seed pro Session
+    final seedInput = '$privHex:$meetupId:$now';
+    final seed = sha256.convert(utf8.encode(seedInput)).toString();
+
+    // Pubkey für Signatur
+    String pubkey = '';
+    try {
+      final npub = await NostrService.getNpub();
+      pubkey = npub ?? '';
+    } catch (_) {}
+
+    final session = MeetupSession(
+      seed: seed,
+      startedAt: now,
+      expiresAt: expiresAt,
+      meetupId: meetupId,
+      meetupName: meetupName,
+      meetupCountry: meetupCountry,
+      blockHeight: blockHeight,
+      pubkey: pubkey,
+    );
+
+    // In SharedPreferences speichern
+    await prefs.setString(_keySessionSeed, seed);
+    await prefs.setInt(_keySessionStart, now);
+    await prefs.setInt(_keySessionExpires, expiresAt);
+    await prefs.setString(_keySessionMeetupId, meetupId);
+    await prefs.setString(_keySessionMeetupName, meetupName);
+    await prefs.setString(_keySessionMeetupCountry, meetupCountry);
+    await prefs.setInt(_keySessionBlockHeight, blockHeight);
+    await prefs.setString(_keySessionPubkey, pubkey);
+
+    return session;
+  }
+
+  /// Session beenden (manuell oder bei Ablauf)
+  static Future<void> endSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keySessionSeed);
+    await prefs.remove(_keySessionStart);
+    await prefs.remove(_keySessionExpires);
+    await prefs.remove(_keySessionMeetupId);
+    await prefs.remove(_keySessionMeetupName);
+    await prefs.remove(_keySessionMeetupCountry);
+    await prefs.remove(_keySessionBlockHeight);
+    await prefs.remove(_keySessionPubkey);
+  }
+
+  // =============================================
+  // ROLLING NONCE (Anti-Screenshot)
+  // =============================================
+
+  static String _generateNonce(String seed, int timeStep) {
+    final key = utf8.encode(seed);
+    final data = utf8.encode(timeStep.toString());
+    final hmac = Hmac(sha256, key);
+    final digest = hmac.convert(data);
+    return digest.toString().substring(0, 16); // 16 hex = 8 Bytes
+  }
+
+  static int _currentTimeStep() {
+    return DateTime.now().millisecondsSinceEpoch ~/ 1000 ~/ intervalSeconds;
+  }
+
+  // =============================================
+  // QR-PAYLOAD GENERIEREN (Organisator-Seite)
+  // Wird alle 10 Sekunden aufgerufen
+  // =============================================
+
+  static Future<String> generateQRString(MeetupSession session) async {
+    final timeStep = _currentTimeStep();
+    final nonce = _generateNonce(session.seed, timeStep);
+
+    // Kompakt-Format: Badge-Daten + Rolling-Felder
+    // Signiert mit signCompact (Schnorr)
+    Map<String, dynamic> payload;
+
+    final hasKey = await NostrService.hasKey();
+    if (hasKey) {
+      try {
+        payload = await BadgeSecurity.signCompact(
+          meetupId: session.meetupId,
+          blockHeight: session.blockHeight,
+          validityHours: sessionValidityHours,
+        );
+      } catch (e) {
+        // Fallback Legacy
+        payload = _legacyPayload(session);
+      }
+    } else {
+      payload = _legacyPayload(session);
+    }
+
+    // Rolling-Felder anhängen
+    payload['n'] = nonce;       // Rolling Nonce (16 hex)
+    payload['ts'] = timeStep;   // Time-Step (für Validierung)
+    payload['d'] = 'qr';       // delivery = rolling_qr
+
     return jsonEncode(payload);
+  }
+
+  static Map<String, dynamic> _legacyPayload(MeetupSession session) {
+    final sig = BadgeSecurity.signLegacy(session.meetupId, DateTime.now().toIso8601String(), session.blockHeight);
+    return {
+      'v': 1,
+      't': 'B',
+      'm': session.meetupId,
+      'b': session.blockHeight,
+      'sig': sig,
+    };
   }
 
   // =============================================
   // NONCE VALIDIEREN (Scanner-Seite)
-  // Prüft ob der QR-Code frisch ist (±10 Sek)
   // =============================================
-  static Future<NonceValidation> validateNonce(Map<String, dynamic> payload) async {
-    final nonce = payload['qr_nonce'] as String?;
-    final timeStep = payload['qr_time_step'] as int?;
-    final meetupId = payload['meetup_id'] as String?;
 
-    if (nonce == null || timeStep == null || meetupId == null) {
-      return NonceValidation(
-        isValid: false,
-        message: 'QR-Code enthält keine Nonce-Daten',
-        ageSeconds: -1,
-      );
+  static NonceValidation validateNonce(Map<String, dynamic> payload) {
+    // Neue kompakte Felder
+    final nonce = payload['n'] as String? ?? payload['qr_nonce'] as String?;
+    final timeStep = payload['ts'] as int? ?? payload['qr_time_step'] as int?;
+
+    if (nonce == null || timeStep == null) {
+      // Kein Rolling QR — normaler NFC-Scan, das ist OK
+      return NonceValidation(isValid: true, message: 'Kein Rolling-QR (NFC/Static)', ageSeconds: 0);
     }
 
-    // Wir können das Secret nicht ableiten (wir haben nicht den privkey
-    // des Organisators). ABER: Wir können die ZEIT prüfen.
-    // Wenn der timeStep zu weit von unserem aktuellen entfernt ist,
-    // ist der QR-Code abgelaufen.
     final currentStep = _currentTimeStep();
     final diff = (currentStep - timeStep).abs();
 
@@ -157,17 +251,15 @@ class RollingQRService {
       final ageSeconds = diff * intervalSeconds;
       return NonceValidation(
         isValid: false,
-        message: 'QR-Code abgelaufen (${ageSeconds}s alt)',
+        message: 'QR-Code abgelaufen (${ageSeconds}s alt). Bitte direkt am Bildschirm scannen.',
         ageSeconds: ageSeconds,
       );
     }
 
-    // Zeit ist OK. Die kryptographische Validierung passiert
-    // über die Schnorr-Signatur im BadgeSecurity.verify()
     final ageSeconds = diff * intervalSeconds;
     return NonceValidation(
       isValid: true,
-      message: ageSeconds == 0 ? 'Frisch (aktuell)' : 'Gültig (${ageSeconds}s alt)',
+      message: ageSeconds == 0 ? 'Frisch ✓' : 'Gültig (${ageSeconds}s)',
       ageSeconds: ageSeconds,
     );
   }
@@ -176,18 +268,63 @@ class RollingQRService {
   // HILFSFUNKTIONEN
   // =============================================
 
-  /// Sekunden bis zum nächsten QR-Wechsel
   static int secondsUntilNextChange() {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final elapsed = now % intervalSeconds;
-    return intervalSeconds - elapsed;
+    return intervalSeconds - (now % intervalSeconds);
   }
 
-  /// Fortschritt im aktuellen Intervall (0.0 bis 1.0)
   static double currentProgress() {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final elapsed = now % intervalSeconds;
-    return elapsed / intervalSeconds;
+    return (now % intervalSeconds) / intervalSeconds;
+  }
+}
+
+// =============================================
+// DATENKLASSEN
+// =============================================
+
+class MeetupSession {
+  final String seed;
+  final int startedAt;
+  final int expiresAt;
+  final String meetupId;
+  final String meetupName;
+  final String meetupCountry;
+  final int blockHeight;
+  final String pubkey;
+
+  MeetupSession({
+    required this.seed,
+    required this.startedAt,
+    required this.expiresAt,
+    required this.meetupId,
+    required this.meetupName,
+    required this.meetupCountry,
+    required this.blockHeight,
+    required this.pubkey,
+  });
+
+  bool get isExpired {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return now > expiresAt;
+  }
+
+  Duration get remainingTime {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final diff = expiresAt - now;
+    return Duration(seconds: diff > 0 ? diff : 0);
+  }
+
+  String get remainingTimeString {
+    final r = remainingTime;
+    if (r.inSeconds <= 0) return 'Abgelaufen';
+    if (r.inHours > 0) return '${r.inHours}h ${r.inMinutes % 60}min';
+    return '${r.inMinutes}min';
+  }
+
+  Duration get elapsedTime {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    return Duration(seconds: now - startedAt);
   }
 }
 
