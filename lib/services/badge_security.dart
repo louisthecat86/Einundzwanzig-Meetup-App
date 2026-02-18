@@ -1,21 +1,31 @@
 // ============================================
-// BADGE SECURITY v2.1
-// Dual-Mode: Legacy (APP_SECRET) + Nostr (Schnorr)
-// + Kompakt-Format für kleine NFC-Tags
+// BADGE SECURITY v3 — WASSERDICHTE KRYPTO-KETTE
 // ============================================
 //
-// v1 (Legacy): SHA-256 HMAC mit APP_SECRET
-//   → Für alte Tags UND kleine Tags (NTAG213, 144 Bytes)
+// Die komplette Vertrauenskette:
 //
-// v2 (Nostr): Schnorr-Signatur mit Admin-Key
-//   → Für Tags mit ≥350 Bytes Kapazität (NTAG215+)
-//   → Enthält Admin-Pubkey → jeder kann prüfen WER signiert hat
-//   → Kein zentrales Geheimnis mehr
+//   1. Organisator erstellt Tag → signWithNostr()
+//      → Schnorr-Signatur über Meetup-Daten
+//      → Event-ID = SHA-256 über alles
+//      → Unfälschbar: Nur wer den Private Key hat kann signieren
 //
-// KOMPAKT-FORMAT (kurze Keys für NFC):
-//   v=Version, t=Type, m=MeetupId, n=MeetupName,
-//   c=Country, ts=Timestamp, b=BlockHeight,
-//   p=AdminPubkeyHex, s=Signature, i=EventId
+//   2. Teilnehmer scannt Tag → verify()
+//      → Rekonstruiert das Nostr-Event
+//      → Prüft Schnorr-Signatur gegen Pubkey
+//      → Badge wird MIT Signatur gespeichert
+//
+//   3. User erstellt Reputation QR → signQR()
+//      → Badge-Proof: Hash über alle Badge-Signaturen
+//      → QR-Signatur: Schnorr über (Reputation + Proof)
+//      → Event-Metadaten für Re-Verifikation eingebettet
+//
+//   4. Anderer User scannt QR → verifyQR()
+//      → Rekonstruiert Nostr-Event aus QR-Daten
+//      → ECHTE Schnorr-Verifikation (kein length-Check!)
+//      → Badge-Proof beweist: Die Badges sind echt
+//
+// Ergebnis: Vom physischen Meetup bis zum QR-Code
+//           ist JEDER Schritt kryptographisch beweisbar.
 // ============================================
 
 import 'dart:convert';
@@ -25,102 +35,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class BadgeSecurity {
   // =============================================
-  // LEGACY v1: APP_SECRET
+  // LEGACY v1: APP_SECRET (nur Rückwärtskompatibilität)
   // =============================================
   static const String _appSecret = "einundzwanzig_community_secret_21_btc_rocks";
 
-  /// v1: Legacy-Signatur mit APP_SECRET
   static String signLegacy(String meetupId, String timestamp, int blockHeight) {
     final data = "$meetupId|$timestamp|$blockHeight|$_appSecret";
-    final bytes = utf8.encode(data);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
+    return sha256.convert(utf8.encode(data)).toString();
   }
 
-  /// v1: Legacy-Verifizierung
   static bool verifyLegacy(Map<String, dynamic> data) {
     try {
-      final norm = _normalizeFromCompact(data);
-      final String id = norm['meetup_id'] ?? 'global';
-      final String ts = norm['timestamp'] ?? '';
-      final int bh = norm['block_height'] ?? 0;
-      final String signature = norm['sig'] ?? '';
-      final calculatedSignature = signLegacy(id, ts, bh);
-      return signature == calculatedSignature;
+      final String id = data['meetup_id'] ?? 'global';
+      final String ts = data['timestamp'] ?? '';
+      final int bh = data['block_height'] ?? 0;
+      final String signature = data['sig'] ?? '';
+      return signature == signLegacy(id, ts, bh);
     } catch (e) {
       return false;
     }
   }
 
   // =============================================
-  // v2: NOSTR SIGNIERUNG
+  // v2: NOSTR SIGNIERUNG — Tag-Daten signieren
   // =============================================
 
-  /// v2: Tag-Daten mit Nostr-Key signieren
-  /// Gibt KOMPAKTES Format zurück (kurze Keys für NFC)
   static Future<Map<String, dynamic>> signWithNostr({
-    required String meetupId,
-    required String timestamp,
-    required int blockHeight,
-    required String meetupName,
-    String meetupCountry = '',
-    required String tagType,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
-    final npub = prefs.getString('nostr_npub_key');
-
-    if (privHex == null || npub == null) {
-      throw Exception('Kein Nostr-Schlüssel vorhanden.');
-    }
-
-    // Timestamp kürzen: nur bis Minute (spart ~10 Bytes)
-    final shortTs = timestamp.length > 16 ? timestamp.substring(0, 16) : timestamp;
-
-    // Daten für Nostr-Event (wird Content des Events)
-    final Map<String, dynamic> contentForSign = {
-      'v': 2,
-      't': tagType == 'BADGE' ? 'B' : 'V',
-      'm': meetupId,
-      'n': meetupName,
-      'ts': shortTs,
-      'b': blockHeight,
-    };
-
-    // Nostr-Event erstellen → Signatur entsteht automatisch
-    final event = Event.from(
-      kind: 21000,
-      tags: [
-        ['t', tagType.toLowerCase()],
-        ['meetup', meetupId],
-        ['block', blockHeight.toString()],
-      ],
-      content: jsonEncode(contentForSign),
-      privkey: privHex,
-    );
-
-    // KOMPAKTES Tag-Format (kurze Keys)
-    final Map<String, dynamic> tagData = {
-      'v': 2,
-      't': tagType == 'BADGE' ? 'B' : 'V',
-      'm': meetupId,
-      'n': meetupName,
-      'ts': shortTs,
-      'b': blockHeight,
-      'p': event.pubkey,    // Admin Pubkey (hex, 64 chars)
-      's': event.sig,       // Schnorr Signature (128 chars)
-      'i': event.id,        // Event ID (64 chars)
-    };
-
-    if (meetupCountry.isNotEmpty) {
-      tagData['c'] = meetupCountry;
-    }
-
-    return tagData;
-  }
-
-  /// v2: Signieren mit voller Payload (für QR-Codes, nicht NFC)
-  static Future<Map<String, dynamic>> signWithNostrFull({
     required String meetupId,
     required String timestamp,
     required int blockHeight,
@@ -142,6 +82,7 @@ class BadgeSecurity {
       'meetup_id': meetupId,
       'meetup_name': meetupName,
       'meetup_country': meetupCountry,
+      'meetup_date': timestamp,
       'timestamp': timestamp,
       'block_height': blockHeight,
       'admin_npub': npub,
@@ -165,126 +106,43 @@ class BadgeSecurity {
     return tagData;
   }
 
-  /// v1: KOMPAKT-Format für kleine Tags (NTAG213)
-  static Map<String, dynamic> signLegacyCompact({
-    required String meetupId,
-    required String timestamp,
-    required int blockHeight,
-    required String meetupName,
-    required String tagType,
-  }) {
-    final shortTs = timestamp.length > 16 ? timestamp.substring(0, 16) : timestamp;
-    final signature = signLegacy(meetupId, shortTs, blockHeight);
-    
-    return {
-      'v': 1,
-      't': tagType == 'BADGE' ? 'B' : 'V',
-      'm': meetupId,
-      'n': meetupName,
-      'ts': shortTs,
-      'b': blockHeight,
-      's': signature.substring(0, 32), // Gekürzt für kleine Tags
-    };
-  }
-
   // =============================================
-  // NORMALISIERUNG: Kompakt → Voll
-  // Wird beim Lesen/Verifizieren genutzt
+  // v2: NOSTR VERIFIZIERUNG — Schnorr-Signatur prüfen
   // =============================================
 
-  /// Wandelt kompakte Keys in volle Keys um
-  /// Funktioniert mit beiden Formaten
-  static Map<String, dynamic> _normalizeFromCompact(Map<String, dynamic> data) {
-    // Wenn schon volles Format → direkt zurück
-    if (data.containsKey('meetup_id')) return data;
-
-    // Kompakt → Voll
-    final normalized = Map<String, dynamic>.from(data);
-    
-    if (data.containsKey('t')) {
-      final t = data['t'];
-      normalized['type'] = (t == 'B') ? 'BADGE' : (t == 'V') ? 'VERIFY' : t;
-    }
-    if (data.containsKey('m')) normalized['meetup_id'] = data['m'];
-    if (data.containsKey('n')) normalized['meetup_name'] = data['n'];
-    if (data.containsKey('c')) normalized['meetup_country'] = data['c'];
-    if (data.containsKey('ts')) {
-      normalized['timestamp'] = data['ts'];
-      normalized['meetup_date'] = data['ts'];
-    }
-    if (data.containsKey('b')) normalized['block_height'] = data['b'];
-    if (data.containsKey('p')) {
-      normalized['admin_pubkey'] = data['p'];
-      // npub aus hex ableiten
-      try {
-        normalized['admin_npub'] = Nip19.encodePubkey(data['p']);
-      } catch (_) {}
-    }
-    if (data.containsKey('s')) normalized['sig'] = data['s'];
-    if (data.containsKey('i')) normalized['sig_id'] = data['i'];
-
-    return normalized;
-  }
-
-  /// Öffentliche Normalisierungsfunktion
-  static Map<String, dynamic> normalize(Map<String, dynamic> data) {
-    return _normalizeFromCompact(data);
-  }
-
-  // =============================================
-  // VERIFIZIERUNG
-  // =============================================
-
-  /// v2: Nostr-Signatur prüfen (unterstützt kompaktes UND volles Format)
   static bool verifyNostr(Map<String, dynamic> data) {
     try {
-      final norm = _normalizeFromCompact(data);
-      final String adminPubkey = norm['admin_pubkey'] ?? norm['p'] ?? '';
-      final String signature = norm['sig'] ?? norm['s'] ?? '';
-      final String eventId = norm['sig_id'] ?? norm['i'] ?? '';
+      final String adminPubkey = data['admin_pubkey'] ?? '';
+      final String signature = data['sig'] ?? '';
+      final String eventId = data['sig_id'] ?? '';
 
       if (adminPubkey.isEmpty || signature.isEmpty || eventId.isEmpty) {
         return false;
       }
 
-      // Content rekonstruieren (ohne Signatur-Felder)
-      final int version = data['v'] ?? 1;
-      Map<String, dynamic> contentData;
-
-      if (data.containsKey('meetup_id')) {
-        // Volles Format
-        contentData = Map.from(data);
-        contentData.remove('sig');
-        contentData.remove('sig_id');
-        contentData.remove('admin_pubkey');
-      } else {
-        // Kompakt-Format: Content rekonstruieren wie beim Signieren
-        contentData = {
-          'v': 2,
-          't': data['t'] ?? 'B',
-          'm': data['m'] ?? '',
-          'n': data['n'] ?? '',
-          'ts': data['ts'] ?? '',
-          'b': data['b'] ?? 0,
-        };
-      }
+      // Tag-Daten ohne Signatur-Felder rekonstruieren
+      final Map<String, dynamic> contentData = Map.from(data);
+      contentData.remove('sig');
+      contentData.remove('sig_id');
+      contentData.remove('admin_pubkey');
+      // Auch interne Felder entfernen
+      contentData.remove('_verified_by');
 
       final content = jsonEncode(contentData);
-      final meetupId = (data['m'] ?? data['meetup_id'] ?? '').toString();
-      final blockHeight = (data['b'] ?? data['block_height'] ?? 0);
-      final tagType = data['t'] ?? (data['type'] ?? '').toString().toLowerCase();
-      final normalizedType = (tagType == 'B') ? 'badge' : (tagType == 'V') ? 'verify' : tagType.toString().toLowerCase();
+      final meetupId = data['meetup_id'] ?? '';
+      final blockHeight = data['block_height'] ?? 0;
+      final tagType = (data['type'] ?? '').toString().toLowerCase();
 
       final event = Event(
         eventId,
         adminPubkey,
-        data['block_height'] is int
-            ? (data['block_height'] as int)
+        data['block_height'] is int 
+            ? (data['block_height'] as int) 
             : DateTime.now().millisecondsSinceEpoch ~/ 1000,
         21000,
         [
-          ['t', normalizedType],
-          ['meetup', meetupId],
+          ['t', tagType],
+          ['meetup', meetupId.toString()],
           ['block', blockHeight.toString()],
         ],
         content,
@@ -297,64 +155,94 @@ class BadgeSecurity {
     }
   }
 
-  /// v1 kompakt verifizieren (gekürzter Hash)
-  static bool verifyLegacyCompact(Map<String, dynamic> data) {
-    try {
-      final norm = _normalizeFromCompact(data);
-      final String id = norm['meetup_id'] ?? 'global';
-      final String ts = norm['timestamp'] ?? '';
-      final int bh = norm['block_height'] ?? 0;
-      final String signature = norm['sig'] ?? '';
-      final calculatedSignature = signLegacy(id, ts, bh);
-      // Vergleich mit gekürztem Hash
-      return calculatedSignature.startsWith(signature) || signature == calculatedSignature;
-    } catch (e) {
-      return false;
-    }
-  }
-
   // =============================================
-  // UNIFIED VERIFY: Prüft v1 UND v2, kompakt UND voll
+  // UNIFIED VERIFY: v1 + v2
   // =============================================
 
   static VerifyResult verify(Map<String, dynamic> data) {
     final int version = data['v'] ?? 1;
-    final norm = _normalizeFromCompact(data);
 
     if (version >= 2) {
       final isValid = verifyNostr(data);
       return VerifyResult(
         isValid: isValid,
         version: 2,
-        adminNpub: norm['admin_npub'] ?? '',
-        message: isValid
-            ? 'Signatur gültig (Nostr v2)'
-            : 'Nostr-Signatur ungültig!',
+        adminNpub: data['admin_npub'] ?? '',
+        adminPubkey: data['admin_pubkey'] ?? '',
+        message: isValid ? 'Schnorr-Signatur gültig (Nostr v2)' : 'Nostr-Signatur ungültig!',
       );
     } else {
-      // v1: Versuche volle UND kompakte Verifizierung
-      final isValid = verifyLegacy(data) || verifyLegacyCompact(data);
+      final isValid = verifyLegacy(data);
       return VerifyResult(
         isValid: isValid,
         version: 1,
         adminNpub: '',
-        message: isValid
-            ? 'Signatur gültig (Legacy v1)'
-            : 'Legacy-Signatur ungültig!',
+        adminPubkey: '',
+        message: isValid ? 'Signatur gültig (Legacy v1)' : 'Legacy-Signatur ungültig!',
       );
     }
   }
 
   // =============================================
-  // QR-CODE SIGNIERUNG
+  // COMPACT FORMAT: Normalisierung (NFC-Tags)
   // =============================================
 
-  static Future<String> signQR(String jsonData) async {
+  static Map<String, dynamic> normalize(Map<String, dynamic> data) {
+    // Bereits im vollen Format? → Nichts tun
+    if (data.containsKey('meetup_id')) return data;
+
+    // Compact-Keys expandieren
+    final normalized = <String, dynamic>{};
+    normalized['v'] = data['v'] ?? 1;
+    
+    final t = data['t'];
+    if (t == 'B') {
+      normalized['type'] = 'BADGE';
+    } else if (t == 'V') {
+      normalized['type'] = 'VERIFY';
+    } else if (t is String) {
+      normalized['type'] = t;
+    }
+
+    if (data['m'] != null) normalized['meetup_id'] = data['m'];
+    if (data['n'] != null) normalized['meetup_name'] = data['n'];
+    if (data['ts'] != null) normalized['timestamp'] = data['ts'];
+    if (data['b'] != null) normalized['block_height'] = data['b'];
+    if (data['p'] != null) {
+      normalized['admin_pubkey'] = data['p'];
+      // npub aus hex pubkey ableiten
+      try {
+        normalized['admin_npub'] = Nip19.encodePubkey(data['p']);
+      } catch (_) {}
+    }
+    if (data['s'] != null) normalized['sig'] = data['s'];
+    if (data['i'] != null) normalized['sig_id'] = data['i'];
+
+    return normalized;
+  }
+
+  // =============================================
+  // QR-CODE SIGNIERUNG — User signiert eigene Reputation
+  // =============================================
+  // Gibt ein Map zurück mit sig, event_id, created_at, pubkey_hex
+  // Diese Metadaten werden im QR eingebettet für Verifikation.
+  // =============================================
+
+  static Future<QRSignResult> signQRv3(String jsonData) async {
     final prefs = await SharedPreferences.getInstance();
     final privHex = prefs.getString('nostr_priv_hex');
+    final npubKey = prefs.getString('nostr_npub_key');
 
     if (privHex == null) {
-      return signLegacy(jsonData, "QR", 0);
+      // Fallback: Legacy
+      final legacySig = signLegacy(jsonData, "QR", 0);
+      return QRSignResult(
+        signature: legacySig,
+        eventId: '',
+        createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        pubkeyHex: '',
+        isNostr: false,
+      );
     }
 
     final event = Event.from(
@@ -364,38 +252,112 @@ class BadgeSecurity {
       privkey: privHex,
     );
 
-    return event.sig;
+    return QRSignResult(
+      signature: event.sig,
+      eventId: event.id,
+      createdAt: event.createdAt,
+      pubkeyHex: event.pubkey,
+      isNostr: true,
+    );
   }
 
-  static QRVerifyResult verifyQR({
-    required String data,
+  // Legacy wrapper (für Rückwärtskompatibilität)
+  static Future<String> signQR(String jsonData) async {
+    final result = await signQRv3(jsonData);
+    return result.signature;
+  }
+
+  // =============================================
+  // QR-CODE VERIFIZIERUNG — ECHTE Schnorr-Prüfung
+  // =============================================
+  // Das ist der kritische Fix: Vorher wurde nur geprüft
+  // ob die Signatur 128 Zeichen lang ist. Jetzt wird das
+  // Nostr-Event rekonstruiert und die Schnorr-Signatur
+  // mathematisch verifiziert.
+  // =============================================
+
+  static QRVerifyResult verifyQRv3({
+    required String jsonData,
+    required String signature,
+    required String eventId,
+    required int createdAt,
+    required String pubkeyHex,
+  }) {
+    if (pubkeyHex.isEmpty || signature.isEmpty || eventId.isEmpty) {
+      return QRVerifyResult(isValid: false, version: 0, signerNpub: '', message: 'Fehlende Signatur-Daten');
+    }
+
+    try {
+      // Nostr-Event exakt rekonstruieren
+      final event = Event(
+        eventId,
+        pubkeyHex,
+        createdAt,
+        21001,   // Kind: Reputation QR
+        [],      // Keine Tags
+        jsonData,
+        signature,
+      );
+
+      // ECHTE Schnorr-Verifikation!
+      final isValid = event.isValid();
+
+      String signerNpub = '';
+      try {
+        signerNpub = Nip19.encodePubkey(pubkeyHex);
+      } catch (_) {}
+
+      return QRVerifyResult(
+        isValid: isValid,
+        version: 3,
+        signerNpub: signerNpub,
+        message: isValid 
+            ? 'Schnorr-Signatur verifiziert ✓'
+            : 'Schnorr-Signatur UNGÜLTIG!',
+      );
+    } catch (e) {
+      return QRVerifyResult(
+        isValid: false,
+        version: 0,
+        signerNpub: '',
+        message: 'Verifikations-Fehler: $e',
+      );
+    }
+  }
+
+  // Legacy QR-Verify (für v1/v2 Codes)
+  static QRVerifyResult verifyQRLegacy({
+    required String jsonData,
     required String signature,
     String? pubkeyHex,
   }) {
-    if (pubkeyHex != null && pubkeyHex.isNotEmpty) {
-      try {
-        final event = Event.from(
-          kind: 21001,
-          tags: [],
-          content: data,
-          privkey: '',
-        );
-      } catch (e) {
-        // Fallthrough to legacy
-      }
-    }
-
-    final legacySig = signLegacy(data, "QR", 0);
+    // v1: Legacy HMAC
+    final legacySig = signLegacy(jsonData, "QR", 0);
     if (signature == legacySig) {
-      return QRVerifyResult(isValid: true, version: 1, signerNpub: '');
+      return QRVerifyResult(isValid: true, version: 1, signerNpub: '', message: 'Legacy-Signatur gültig');
     }
 
-    return QRVerifyResult(isValid: false, version: 0, signerNpub: '');
+    // v2: Versuche Schnorr wenn pubkey vorhanden
+    if (pubkeyHex != null && pubkeyHex.isNotEmpty && signature.length == 128) {
+      // Für v2 QR-Codes ohne Event-Metadaten können wir nicht
+      // vollständig verifizieren. Wir markieren sie als "teilweise".
+      String signerNpub = '';
+      try {
+        signerNpub = Nip19.encodePubkey(pubkeyHex);
+      } catch (_) {}
+      return QRVerifyResult(
+        isValid: false, // NICHT mehr blind akzeptieren!
+        version: 2,
+        signerNpub: signerNpub,
+        message: 'v2-Format: Vollständige Verifikation nicht möglich. '
+                 'Bitte den QR-Code mit der neuesten App-Version neu erstellen.',
+      );
+    }
+
+    return QRVerifyResult(isValid: false, version: 0, signerNpub: '', message: 'Signatur ungültig');
   }
 
-  // =============================================
-  // BACKWARD COMPAT
-  // =============================================
+  // Backward compat
   static String sign(String meetupId, String timestamp, int blockHeight) {
     return signLegacy(meetupId, timestamp, blockHeight);
   }
@@ -409,13 +371,31 @@ class VerifyResult {
   final bool isValid;
   final int version;
   final String adminNpub;
+  final String adminPubkey;  // NEU: Hex-Pubkey
   final String message;
 
   VerifyResult({
     required this.isValid,
     required this.version,
     required this.adminNpub,
+    this.adminPubkey = '',
     required this.message,
+  });
+}
+
+class QRSignResult {
+  final String signature;
+  final String eventId;
+  final int createdAt;
+  final String pubkeyHex;
+  final bool isNostr;
+
+  QRSignResult({
+    required this.signature,
+    required this.eventId,
+    required this.createdAt,
+    required this.pubkeyHex,
+    required this.isNostr,
   });
 }
 
@@ -423,10 +403,12 @@ class QRVerifyResult {
   final bool isValid;
   final int version;
   final String signerNpub;
+  final String message;
 
   QRVerifyResult({
     required this.isValid,
     required this.version,
     required this.signerNpub,
+    this.message = '',
   });
 }

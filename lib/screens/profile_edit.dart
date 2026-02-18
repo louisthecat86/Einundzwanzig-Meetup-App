@@ -5,7 +5,7 @@ import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/nostr_service.dart';
 import '../theme.dart';
-import 'verification_gate.dart';
+import 'dashboard.dart';
 import 'profile_review.dart';
 
 class ProfileEditScreen extends StatefulWidget {
@@ -363,7 +363,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             onConfirm: () {
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (context) => const VerificationGateScreen()),
+                MaterialPageRoute(builder: (context) => const DashboardScreen()),
                 (route) => false,
               );
             },

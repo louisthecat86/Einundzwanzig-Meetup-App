@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
-import '../models/meetup.dart';
 import '../models/user.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
@@ -18,20 +17,22 @@ class AdminPanelScreen extends StatefulWidget {
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
   bool _isSuperAdmin = false;
   String _adminNpub = '';
+  String _promotionSource = '';
 
   @override
   void initState() {
     super.initState();
-    _checkSuperAdmin();
+    _loadAdminInfo();
   }
 
-  void _checkSuperAdmin() async {
+  void _loadAdminInfo() async {
     final user = await UserProfile.load();
     final npub = await NostrService.getNpub();
     if (mounted) {
       setState(() {
         _isSuperAdmin = npub == AdminRegistry.superAdminNpub;
         _adminNpub = npub ?? '';
+        _promotionSource = user.promotionSource;
       });
     }
   }
@@ -40,9 +41,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: cDark,
-      appBar: AppBar(
-        title: const Text("ADMIN BEREICH"),
-      ),
+      appBar: AppBar(title: const Text("ORGANISATOR")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -55,7 +54,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               decoration: BoxDecoration(
                 color: cCard,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -63,56 +62,52 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.15),
+                      color: Colors.green.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
-                      Icons.admin_panel_settings,
-                      size: 40,
-                      color: Colors.redAccent,
-                    ),
+                    child: const Icon(Icons.verified, size: 40, color: Colors.green),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     "ORGANISATOR TOOLS",
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                    style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Erstelle NFC Tags für dein Meetup und verifiziere neue Teilnehmer.",
+                    "Erstelle NFC Tags und Rolling QR-Codes für dein Meetup. "
+                    "Teilnehmer scannen diese um Badges zu sammeln.",
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  // Nostr Admin Status
-                  if (_adminNpub.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: cPurple.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
+                  // Status-Badges
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (_adminNpub.isNotEmpty)
+                        _buildStatusChip(
+                          icon: Icons.key,
+                          label: NostrService.shortenNpub(_adminNpub, chars: 6),
+                          color: cPurple,
+                        ),
+                      _buildStatusChip(
+                        icon: _promotionSource == 'trust_score' ? Icons.trending_up : Icons.star,
+                        label: _promotionSource == 'trust_score' 
+                            ? 'Via Trust Score'
+                            : _promotionSource == 'seed_admin'
+                                ? 'Seed Admin'
+                                : 'Organisator',
+                        color: _promotionSource == 'trust_score' ? Colors.green : cOrange,
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.key, color: cPurple, size: 14),
-                          const SizedBox(width: 6),
-                          Text(
-                            NostrService.shortenNpub(_adminNpub, chars: 6),
-                            style: const TextStyle(color: cPurple, fontFamily: 'monospace', fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ],
               ),
             ),
             
             const SizedBox(height: 32),
             
-            // Option 1: Badge Tag erstellen (NFC)
+            // NFC Tag erstellen
             _buildAdminTile(
               context: context,
               icon: Icons.nfc,
@@ -122,16 +117,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const NFCWriterScreen(mode: NFCWriteMode.badge),
-                  ),
+                  MaterialPageRoute(builder: (context) => const NFCWriterScreen()),
                 );
               },
             ),
             
             const SizedBox(height: 16),
 
-            // Option 2: Rolling QR-Code (NEU!)
+            // Rolling QR-Code
             _buildAdminTile(
               context: context,
               icon: Icons.qr_code_2,
@@ -141,59 +134,50 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const RollingQRScreen(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const RollingQRScreen()),
                 );
               },
             ),
-            
-            const SizedBox(height: 20),
-            
-            // Option 2: Verifizierungs-Tag erstellen
-            _buildAdminTile(
-              context: context,
-              icon: Icons.verified_user,
-              color: cCyan,
-              title: "VERIFIZIERUNGS-TAG ERSTELLEN",
-              subtitle: "Neue Nutzer scannen diesen Tag zur Identitätsbestätigung",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const NFCWriterScreen(mode: NFCWriteMode.verify),
-                  ),
-                );
-              },
-            ),
-            
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 24),
 
-            // Option 3: Admin-Verwaltung (nur Super-Admin)
+            // Admin-Verwaltung (nur Super-Admin)
             if (_isSuperAdmin) ...[
+              const SizedBox(height: 32),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 24),
+              
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: cPurple.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.bolt, color: cPurple, size: 16),
+                    SizedBox(width: 6),
+                    Text("SEED ADMIN", style: TextStyle(color: cPurple, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              
               _buildAdminTile(
                 context: context,
-                icon: Icons.group,
+                icon: Icons.group_add,
                 color: cPurple,
-                title: "ADMIN-VERWALTUNG",
-                subtitle: "Meetup-Organisatoren hinzufügen oder entfernen",
+                title: "ORGANISATOREN DELEGIEREN",
+                subtitle: "Neue Organisatoren in anderen Städten per Nostr-Event ernennen",
                 onTap: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminManagementScreen(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const AdminManagementScreen()),
                   );
                 },
               ),
-              const SizedBox(height: 24),
-              const Divider(),
-              const SizedBox(height: 24),
-            ] else ...[
-              // Kein Super-Admin → trotzdem Divider
             ],
+
+            const SizedBox(height: 32),
             
             // Info Box
             Container(
@@ -206,36 +190,42 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.info_outline, color: cOrange, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        "HINWEIS",
-                        style: TextStyle(
-                          color: cOrange,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Row(children: const [
+                    Icon(Icons.info_outline, color: cOrange, size: 20),
+                    SizedBox(width: 8),
+                    Text("SO FUNKTIONIERT'S", style: TextStyle(color: cOrange, fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.5)),
+                  ]),
                   const SizedBox(height: 12),
                   Text(
-                    "• Der Meetup Tag kann von allen Teilnehmern gescannt werden\n"
-                    "• Der Verifizierungs-Tag ist nur für neue Nutzer gedacht\n"
-                    "• Nach erfolgreicher Verifizierung verschwindet diese Funktion beim Nutzer",
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      height: 1.6,
-                      color: cTextSecondary,
-                    ),
+                    "1. Erstelle einen NFC Tag oder starte den Rolling QR-Code\n"
+                    "2. Teilnehmer scannen mit ihrer App\n"
+                    "3. Jeder Scan = ein Badge für den Teilnehmer\n"
+                    "4. Badges bauen Reputation auf → mehr Reputation = neue Organisatoren",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.6, color: cTextSecondary),
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip({required IconData icon, required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontFamily: 'monospace', fontSize: 11)),
+        ],
       ),
     );
   }
@@ -261,40 +251,23 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: cBorder, width: 1),
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 32),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, color: cTextTertiary, size: 18),
-            ],
-          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
+              ],
+            )),
+            const Icon(Icons.arrow_forward_ios, color: cTextTertiary, size: 18),
+          ]),
         ),
       ),
     );
