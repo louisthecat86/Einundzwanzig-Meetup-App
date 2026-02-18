@@ -106,8 +106,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             final jsonString = utf8.decode(payload.sublist(textStart));
             
             try {
-              final Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
+              Map<String, dynamic> tagData = json.decode(jsonString) as Map<String, dynamic>;
               await NfcManager.instance.stopSession();
+
+              // KOMPAKT-FORMAT NORMALISIEREN (v2.1)
+              tagData = BadgeSecurity.normalize(tagData);
 
               // --- SICHERHEITS-CHECK (v1 + v2) ---
               final result = BadgeSecurity.verify(tagData);
@@ -199,7 +202,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       tagData['type'] = 'VERIFY';
     }
 
-    _processFoundTagData(tagData: tagData);
+    _processFoundTagData(tagData: BadgeSecurity.normalize(tagData));
   }
 
   // --- QR-CODE SCANNER (Alternative zu NFC) ---
@@ -219,7 +222,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     }
 
     try {
-      final Map<String, dynamic> tagData = json.decode(result);
+      final Map<String, dynamic> rawData = json.decode(result);
+      final Map<String, dynamic> tagData = BadgeSecurity.normalize(rawData);
 
       // Signatur prüfen (gleich wie bei NFC)
       final verifyResult = BadgeSecurity.verify(tagData);

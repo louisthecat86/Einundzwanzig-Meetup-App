@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 import 'screens/intro.dart'; 
 import 'screens/dashboard.dart';
-import 'screens/verification_gate.dart';
 import 'models/user.dart';
 
 void main() {
@@ -53,13 +52,14 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     
+    // VEREINFACHT: Entweder Intro (neuer User) oder direkt Dashboard
+    // Kein VerificationGate mehr im Hauptfluss!
+    // Admin-Status kommt automatisch über Trust Score.
     Widget nextScreen;
     if (user.nickname == "Anon" || user.nickname.isEmpty) {
       nextScreen = const IntroScreen();
-    } else if (user.isAdminVerified) {
-      nextScreen = DashboardScreen();
     } else {
-      nextScreen = VerificationGateScreen();
+      nextScreen = const DashboardScreen();
     }
     
     Navigator.pushReplacement(

@@ -10,7 +10,8 @@ class UserProfile {
   bool isAdminVerified;
   bool isAdmin;
   String homeMeetupId;
-  bool hasNostrKey;       // NEU: Hat der User ein Keypair in der App?
+  bool hasNostrKey;       // Hat der User ein Keypair in der App?
+  String promotionSource; // NEU: Wie wurde Admin? 'trust_score', 'seed_admin', 'password', ''
 
   UserProfile({
     this.nickname = "Anon",
@@ -23,6 +24,7 @@ class UserProfile {
     this.isAdmin = false,
     this.homeMeetupId = "",
     this.hasNostrKey = false,
+    this.promotionSource = "",
   });
 
   static Future<UserProfile> load() async {
@@ -51,6 +53,7 @@ class UserProfile {
       isAdmin: prefs.getBool('is_admin') ?? false,
       homeMeetupId: prefs.getString('home_meetup') ?? "",
       hasNostrKey: hasKey,
+      promotionSource: prefs.getString('promotion_source') ?? "",
     );
   }
 
@@ -65,6 +68,7 @@ class UserProfile {
     await prefs.setBool('admin_verified', isAdminVerified);
     await prefs.setBool('is_admin', isAdmin);
     await prefs.setString('home_meetup', homeMeetupId);
+    await prefs.setString('promotion_source', promotionSource);
   }
 
   bool get isVerified => isNostrVerified || isAdminVerified;

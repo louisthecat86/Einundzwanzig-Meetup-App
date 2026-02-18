@@ -3,8 +3,6 @@ import '../models/user.dart';
 import '../theme.dart'; 
 import 'profile_edit.dart'; 
 import 'dashboard.dart'; 
-import 'verification_gate.dart'; 
-import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
 import '../services/backup_service.dart';
 
@@ -42,8 +40,6 @@ class _IntroScreenState extends State<IntroScreen> {
   void _restoreAccount() async {
     bool success = await BackupService.restoreBackup(context);
     if (success && mounted) {
-      // Wenn das Backup erfolgreich war, springen wir direkt zum Dashboard,
-      // da alle Daten (Name, Verifizierung, Badges) nun im Speicher sind.
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -61,6 +57,7 @@ class _IntroScreenState extends State<IntroScreen> {
 
     if (!mounted) return;
 
+    // Profil noch leer? → Erst Profil bearbeiten
     if (user.nickname == "Anon" && !user.isVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -80,41 +77,40 @@ class _IntroScreenState extends State<IntroScreen> {
 
     if (!mounted) return;
 
-    // --- NOSTR ADMIN-CHECK ---
-    // Wenn User einen Nostr-Key hat, prüfe ob er in der Admin-Registry steht
-    if (user.hasNostrKey && user.nostrNpub.isNotEmpty && !user.isAdmin) {
+    // =============================================
+    // NOSTR KEY: Automatisch im Hintergrund erstellen
+    // Der User bekommt davon nichts mit.
+    // =============================================
+    if (!user.hasNostrKey) {
       try {
-        final adminResult = await AdminRegistry.checkAdmin(user.nostrNpub);
-        if (adminResult.isAdmin) {
-          // Automatisch als Admin freischalten!
-          user.isAdmin = true;
-          user.isAdminVerified = true;
+        final keys = await NostrService.generateKeyPair();
+        if (keys['npub'] != null) {
+          user.nostrNpub = keys['npub']!;
+          user.hasNostrKey = true;
           user.isNostrVerified = true;
           await user.save();
+          print('[Intro] Nostr-Key automatisch erstellt: ${NostrService.shortenNpub(keys['npub']!)}');
         }
       } catch (e) {
-        print('[Intro] Admin-Check fehlgeschlagen: $e');
+        print('[Intro] Nostr-Key-Erstellung fehlgeschlagen: $e');
+        // Kein Problem — App funktioniert auch ohne
       }
     }
-    // -------------------------
 
-    if (user.isAdminVerified) {
-       Navigator.pushReplacement(
-         context,
-         PageRouteBuilder(
-           pageBuilder: (_, __, ___) => const DashboardScreen(), 
-           transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
-         ),
-       );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const VerificationGateScreen(),
-          transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
-        ),
-      );
-    }
+    if (!mounted) return;
+
+    // =============================================
+    // DIREKT ZUM DASHBOARD
+    // Kein VerificationGate mehr!
+    // Admin-Status kommt automatisch über Trust Score.
+    // =============================================
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const DashboardScreen(), 
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
+      ),
+    );
   }
 
   @override
@@ -191,7 +187,6 @@ class _IntroScreenState extends State<IntroScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // NEU: Backup Button
                     TextButton.icon(
                       onPressed: _isLoading ? null : _restoreAccount,
                       icon: const Icon(Icons.restore, color: Colors.orange, size: 20),

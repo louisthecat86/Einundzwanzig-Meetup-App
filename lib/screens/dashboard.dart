@@ -5,6 +5,9 @@ import '../models/user.dart';
 import '../models/meetup.dart';
 import '../models/badge.dart';
 import '../services/meetup_service.dart';
+import '../services/trust_score_service.dart';
+import '../services/admin_registry.dart';
+import '../services/nostr_service.dart';
 import 'meetup_verification.dart';
 import 'meetup_selection.dart'; 
 import 'badge_details.dart'; 
@@ -16,7 +19,7 @@ import 'admin_panel.dart';
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
 import 'calendar_screen.dart';
-import '../services/backup_service.dart'; // Backup Service Import
+import '../services/backup_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,43 +31,121 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   UserProfile _user = UserProfile();
   Meetup? _homeMeetup; 
+  TrustScore? _trustScore;
+  bool _justPromoted = false;
   
   @override
   void initState() {
     super.initState();
-    _loadUser();
-    _loadBadges();
+    _loadAll();
   }
 
-  void _loadBadges() async {
+  void _loadAll() async {
+    await _loadUser();
+    await _loadBadges();
+    await _calculateTrustScore();
+  }
+
+  Future<void> _loadBadges() async {
     final badges = await MeetupBadge.loadBadges();
     setState(() {
       myBadges.clear();
       myBadges.addAll(badges);
     });
-    print("[DEBUG Dashboard] ${badges.length} Badges geladen");
   }
 
-  void _loadUser() async {
+  Future<void> _loadUser() async {
     final u = await UserProfile.load();
     
     Meetup? homeMeetup;
     if (u.homeMeetupId.isNotEmpty) {
       List<Meetup> meetups = await MeetupService.fetchMeetups();
-      if (meetups.isEmpty) {
-        meetups = allMeetups;
-      }
+      if (meetups.isEmpty) meetups = allMeetups;
       homeMeetup = meetups.where((m) => m.city == u.homeMeetupId).firstOrNull;
     }
     
-    setState(() {
-      _user = u;
-      _homeMeetup = homeMeetup;
-    });
+    // --- SEED ADMIN CHECK (nur beim ersten Laden) ---
+    // Prüfe ob User ein Seed-Admin ist (z.B. der Gründer)
+    if (!u.isAdmin && u.hasNostrKey && u.nostrNpub.isNotEmpty) {
+      try {
+        final result = await AdminRegistry.checkAdmin(u.nostrNpub);
+        if (result.isAdmin) {
+          u.isAdmin = true;
+          u.isAdminVerified = true;
+          u.promotionSource = 'seed_admin';
+          await u.save();
+          print('[Dashboard] Seed-Admin erkannt: ${result.source}');
+        }
+      } catch (e) {
+        print('[Dashboard] Admin-Check fehlgeschlagen: $e');
+      }
+    }
+    
+    if (mounted) {
+      setState(() {
+        _user = u;
+        _homeMeetup = homeMeetup;
+      });
+    }
+  }
+
+  // =============================================
+  // TRUST SCORE BERECHNEN + AUTO-PROMOTION
+  // =============================================
+  Future<void> _calculateTrustScore() async {
+    if (myBadges.isEmpty) {
+      setState(() {
+        _trustScore = TrustScoreService.calculateScore(
+          badges: [],
+          firstBadgeDate: null,
+        );
+      });
+      return;
+    }
+
+    // Ältestes Badge = Account-Alter
+    final sortedByDate = List<MeetupBadge>.from(myBadges)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final firstBadgeDate = sortedByDate.first.date;
+
+    // TODO: Co-Attestor-Daten von Nostr Relays laden
+    // Für jetzt: null (lokale Berechnung ohne Relay-Daten)
+    final score = TrustScoreService.calculateScore(
+      badges: myBadges,
+      firstBadgeDate: firstBadgeDate,
+      coAttestorMap: null,
+    );
+
+    setState(() => _trustScore = score);
+
+    // =============================================
+    // AUTO-PROMOTION: Trust Score → Organisator
+    // =============================================
+    if (score.meetsPromotionThreshold && !_user.isAdmin) {
+      _user.isAdmin = true;
+      _user.isAdminVerified = true;
+      _user.promotionSource = 'trust_score';
+      await _user.save();
+      
+      if (mounted) {
+        setState(() {
+          _justPromoted = true;
+        });
+        
+        // Celebration!
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("🎉 Du bist jetzt ORGANISATOR! Du kannst Meetup-Tags erstellen."),
+            backgroundColor: Colors.green.shade700,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   void _resetApp() async {
-    // Sicherheitsabfrage vor dem Löschen
     bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -120,7 +201,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Text("DATENSICHERUNG", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 10),
             
-            // --- BACKUP EXPORT (Nur Erstellen) ---
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(8),
@@ -142,7 +222,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Text("ACCOUNT", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 10),
 
-            // --- RESET ---
             ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(8),
@@ -168,7 +247,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context,
       MaterialPageRoute(builder: (context) => MeetupVerificationScreen(meetup: dummy)),
     );
-    _loadBadges(); // Sicherstellen, dass Badges nach Scan neu geladen werden
+    _loadBadges();
+    _calculateTrustScore(); // Trust Score nach neuem Badge aktualisieren
   }
 
   void _selectHomeMeetup() async {
@@ -212,6 +292,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 32),
             _buildHomeMeetupCard(),
             const SizedBox(height: 20),
+            
+            // --- TRUST SCORE CARD ---
+            if (_trustScore != null) ...[
+              _buildTrustScoreCard(),
+              const SizedBox(height: 20),
+            ],
+
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -236,7 +323,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       context, 
                       MaterialPageRoute(builder: (context) => BadgeWalletScreen()),
                     );
-                    _loadBadges(); // Reload nach Rückkehr aus Wallet
+                    _loadBadges();
+                    _calculateTrustScore();
                   }
                 ),
                 _buildTile(
@@ -271,12 +359,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   ),
+                // ORGANISATOR-TILE: Erscheint automatisch via Trust Score!
                 if (_user.isAdmin) 
                   _buildTile(
                     icon: Icons.admin_panel_settings,
-                    color: Colors.redAccent,
-                    title: "ADMIN",
-                    subtitle: "Tags erstellen",
+                    color: _justPromoted ? Colors.green : Colors.redAccent,
+                    title: "ORGANISATOR",
+                    subtitle: _justPromoted 
+                        ? "✓ Via Trust Score!" 
+                        : _user.promotionSource == 'trust_score' 
+                            ? "✓ Trust Score" 
+                            : _user.promotionSource == 'seed_admin'
+                                ? "✓ Seed Admin"
+                                : "Tags erstellen",
                     onTap: () async {
                       await Navigator.push(
                         context,
@@ -292,6 +387,246 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // =============================================
+  // TRUST SCORE CARD
+  // =============================================
+  Widget _buildTrustScoreCard() {
+    final score = _trustScore!;
+    final phase = score.activeThresholds;
+    
+    // Farbe basierend auf Level
+    Color levelColor;
+    switch (score.level) {
+      case 'VETERAN': levelColor = Colors.amber; break;
+      case 'ETABLIERT': levelColor = Colors.green; break;
+      case 'AKTIV': levelColor = cCyan; break;
+      case 'STARTER': levelColor = cOrange; break;
+      default: levelColor = Colors.grey;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: score.meetsPromotionThreshold 
+              ? Colors.green.withOpacity(0.5)
+              : levelColor.withOpacity(0.3),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(score.levelEmoji, style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "TRUST SCORE",
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      Text(
+                        score.level,
+                        style: TextStyle(
+                          color: levelColor,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              // Score-Zahl
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: levelColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  score.totalScore.toStringAsFixed(1),
+                  style: TextStyle(
+                    color: levelColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Phase-Info
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(phase.emoji, style: const TextStyle(fontSize: 14)),
+                const SizedBox(width: 6),
+                Text(
+                  "Netzwerk: ${phase.name}",
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "${score.uniqueSigners} Ersteller aktiv",
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Fortschrittsbalken (wenn noch nicht Organisator)
+          if (!score.meetsPromotionThreshold) ...[
+            // Gesamtfortschritt
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: score.promotionProgress,
+                backgroundColor: Colors.white.withOpacity(0.1),
+                valueColor: AlwaysStoppedAnimation(levelColor),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Einzelne Kriterien
+            ...score.progress.entries.map((entry) {
+              final p = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      p.met ? Icons.check_circle : Icons.radio_button_unchecked,
+                      color: p.met ? Colors.green : Colors.grey.shade600,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "${p.label}: ${p.current}/${p.required}",
+                        style: TextStyle(
+                          color: p.met ? Colors.green.shade300 : Colors.grey.shade500,
+                          fontSize: 12,
+                          fontWeight: p.met ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 8),
+            Text(
+              score.promotionReason,
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ] else ...[
+            // Organisator Status
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.verified, color: Colors.green, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Du bist Organisator! Du kannst NFC-Tags und Rolling-QR-Codes erstellen.",
+                      style: TextStyle(
+                        color: Colors.green.shade300,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Stats
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStat("${score.totalBadges}", "Badges"),
+              _buildStat("${score.uniqueMeetups}", "Meetups"),
+              _buildStat("${score.uniqueSigners}", "Ersteller"),
+              _buildStat("${score.accountAgeDays}d", "Alter"),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStat(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            fontFamily: 'monospace',
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+        ),
+      ],
+    );
+  }
+
+  // =============================================
+  // HOME MEETUP CARD (unverändert)
+  // =============================================
   Widget _buildHomeMeetupCard() {
     bool hasHome = _user.homeMeetupId.isNotEmpty;
     
