@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
+import 'secure_key_store.dart';
 
 class BackupService {
 
@@ -17,12 +18,11 @@ class BackupService {
     try {
       final user = await UserProfile.load();
       final badges = await MeetupBadge.loadBadges();
-      final prefs = await SharedPreferences.getInstance();
 
-      // Nostr Keys laden (wenn vorhanden)
-      final nsec = prefs.getString('nostr_nsec_key');
-      final npub = prefs.getString('nostr_npub_key');
-      final privHex = prefs.getString('nostr_priv_hex');
+      // Nostr Keys aus SecureKeyStore laden (nicht mehr aus SharedPreferences)
+      final nsec = await SecureKeyStore.getNsec();
+      final npub = await SecureKeyStore.getNpub();
+      final privHex = await SecureKeyStore.getPrivHex();
 
       // Admin-Registry laden
       final adminList = await AdminRegistry.getAdminList();
@@ -142,15 +142,17 @@ class BackupService {
           final hasKey = nostrData['has_key'] ?? false;
 
           if (hasKey) {
-            final prefs = await SharedPreferences.getInstance();
             final nsec = nostrData['nsec'] ?? '';
             final npub = nostrData['npub'] ?? '';
             final privHex = nostrData['priv_hex'] ?? '';
 
             if (nsec.isNotEmpty && npub.isNotEmpty && privHex.isNotEmpty) {
-              await prefs.setString('nostr_nsec_key', nsec);
-              await prefs.setString('nostr_npub_key', npub);
-              await prefs.setString('nostr_priv_hex', privHex);
+              // In SecureKeyStore speichern (nicht mehr in SharedPreferences)
+              await SecureKeyStore.saveKeys(
+                nsec: nsec,
+                npub: npub,
+                privHex: privHex,
+              );
 
               // npub auch im User-Profil aktualisieren
               user.nostrNpub = npub;

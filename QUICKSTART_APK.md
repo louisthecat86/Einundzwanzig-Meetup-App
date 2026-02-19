@@ -65,7 +65,7 @@ chmod +x build-apk.sh
 
 ### Als **Admin**:
 1. App öffnen → Profil erstellen
-2. "Admin werden" → Passwort: `#21AdminTag21#`
+2. "Admin werden" → Passwort:
 3. **ADMIN**-Kachel erscheint ✅
 4. **NFC Tag beschreiben** (braucht NFC-Karten von Amazon)
 

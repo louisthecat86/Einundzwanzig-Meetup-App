@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'nostr_service.dart';
+import 'secure_key_store.dart';
 
 class AdminEntry {
   final String npub;
@@ -142,6 +143,38 @@ class AdminRegistry {
     }
 
     return AdminCheckResult(isAdmin: false, source: 'not_found');
+  }
+
+  // =============================================
+  // ADMIN-CHECK PER PUBKEY HEX
+  // Für den Scanner: Prüft ob ein Signer-Pubkey
+  // ein bekannter Admin ist.
+  // =============================================
+  static Future<AdminCheckResult> checkAdminByPubkey(String pubkeyHex) async {
+    if (pubkeyHex.isEmpty) {
+      return AdminCheckResult(isAdmin: false, source: 'no_key');
+    }
+
+    // Super-Admin Pubkey Hex prüfen
+    try {
+      final superAdminHex = Nip19.decodePubkey(superAdminNpub);
+      if (pubkeyHex == superAdminHex) {
+        return AdminCheckResult(
+          isAdmin: true,
+          meetup: 'Alle Meetups',
+          name: 'Super-Admin',
+          source: 'super_admin',
+        );
+      }
+    } catch (_) {}
+
+    // Pubkey Hex → npub konvertieren und regulär prüfen
+    try {
+      final npub = Nip19.encodePubkey(pubkeyHex);
+      return await checkAdmin(npub);
+    } catch (e) {
+      return AdminCheckResult(isAdmin: false, source: 'invalid_key');
+    }
   }
 
   // =============================================
@@ -382,8 +415,7 @@ class AdminRegistry {
   // Erstellt das signierte Event UND sendet es an Relays
   // =============================================
   static Future<String> createAndPublishAdminListEvent() async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
+    final privHex = await SecureKeyStore.getPrivHex();
 
     if (privHex == null) {
       throw Exception('Kein Nostr-Key vorhanden.');
@@ -460,8 +492,7 @@ class AdminRegistry {
 
   // Legacy: Nur Event JSON erzeugen ohne zu publishen
   static Future<String> createAdminListEvent() async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
+    final privHex = await SecureKeyStore.getPrivHex();
 
     if (privHex == null) {
       throw Exception('Kein Nostr-Key vorhanden.');

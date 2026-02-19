@@ -13,18 +13,48 @@
 //   2. verifyCompact() → Event rekonstruiert → Schnorr-Check
 //   3. Ablauf-Check: x > now() sonst "Tag abgelaufen"
 //
+// SICHERHEIT:
+//   - Private Keys werden über SecureKeyStore geladen
+//     (Android Keystore / iOS Keychain)
+//   - JSON-Content wird vor dem Signieren kanonisiert
+//     (alphabetisch sortierte Keys) → deterministische Hashes
+//   - Legacy v1 (shared secret) ist als UNSICHER markiert
+//
 // ============================================
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:nostr/nostr.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'secure_key_store.dart';
 
 class BadgeSecurity {
   static const int badgeValidityHours = 6;
 
   // =============================================
-  // LEGACY v1
+  // JSON KANONISIERUNG
+  // Sortiert Keys alphabetisch → deterministischer Hash
+  // =============================================
+  static String canonicalJsonEncode(Map<String, dynamic> data) {
+    final sortedKeys = data.keys.toList()..sort();
+    final sortedMap = <String, dynamic>{};
+    for (final key in sortedKeys) {
+      sortedMap[key] = data[key];
+    }
+    return jsonEncode(sortedMap);
+  }
+
+  // =============================================
+  // LEGACY v1 — VERALTET / UNSICHER
+  // =============================================
+  //
+  // WARNUNG: Legacy v1 nutzt ein Shared Secret das im
+  // Source Code steht. Sobald der Code öffentlich ist,
+  // kann JEDER gültige v1-Signaturen erstellen.
+  // Legacy-Badges werden in der UI als "⚠️ Legacy —
+  // nicht vertrauenswürdig" angezeigt.
+  //
+  // Nur noch für Rückwärtskompatibilität vorhanden.
+  // NICHT für neue Badges verwenden!
   // =============================================
   static const String _appSecret = "einundzwanzig_community_secret_21_btc_rocks";
 
@@ -54,8 +84,7 @@ class BadgeSecurity {
     required int blockHeight,
     int validityHours = 6,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
+    final privHex = await SecureKeyStore.getPrivHex();
     if (privHex == null) throw Exception('Kein Nostr-Schlüssel vorhanden.');
 
     final int expiresAt = DateTime.now().millisecondsSinceEpoch ~/ 1000 + (validityHours * 3600);
@@ -69,7 +98,8 @@ class BadgeSecurity {
       'x': expiresAt,
     };
 
-    final contentJson = jsonEncode(content);
+    // KANONISIERT: Alphabetisch sortierte Keys → deterministischer Hash
+    final contentJson = canonicalJsonEncode(content);
     final tags = [['t', 'badge'], ['m', meetupId]];
 
     final event = Event.from(
@@ -112,14 +142,14 @@ class BadgeSecurity {
         }
       }
 
-      // Content rekonstruieren (OHNE c, p, s)
+      // Content rekonstruieren (OHNE c, p, s) — KANONISIERT
       final Map<String, dynamic> content = {};
       for (final key in data.keys) {
         if (key != 'c' && key != 'p' && key != 's') {
           content[key] = data[key];
         }
       }
-      final contentJson = jsonEncode(content);
+      final contentJson = canonicalJsonEncode(content);
       final meetupId = data['m'] ?? '';
       final tags = [['t', 'badge'], ['m', meetupId.toString()]];
 
@@ -156,9 +186,8 @@ class BadgeSecurity {
     String meetupCountry = '',
     required String tagType,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
-    final npub = prefs.getString('nostr_npub_key');
+    final privHex = await SecureKeyStore.getPrivHex();
+    final npub = await SecureKeyStore.getNpub();
     if (privHex == null || npub == null) throw Exception('Kein Nostr-Schlüssel vorhanden.');
 
     final Map<String, dynamic> tagData = {
@@ -168,10 +197,13 @@ class BadgeSecurity {
       'block_height': blockHeight, 'admin_npub': npub,
     };
 
+    // KANONISIERT für Signierung
+    final contentJson = canonicalJsonEncode(tagData);
+
     final event = Event.from(
       kind: 21000,
       tags: [['t', tagType.toLowerCase()], ['meetup', meetupId], ['block', blockHeight.toString()]],
-      content: jsonEncode(tagData),
+      content: contentJson,
       privkey: privHex,
     );
 
@@ -194,7 +226,8 @@ class BadgeSecurity {
       contentData.remove('admin_pubkey');
       contentData.remove('_verified_by');
 
-      final content = jsonEncode(contentData);
+      // KANONISIERT für konsistente Verifikation
+      final content = canonicalJsonEncode(contentData);
       final meetupId = data['meetup_id'] ?? '';
       final blockHeight = data['block_height'] ?? 0;
       final tagType = (data['type'] ?? '').toString().toLowerCase();
@@ -234,9 +267,12 @@ class BadgeSecurity {
         message: isValid ? 'Schnorr-Signatur gültig (Legacy-Format)' : 'Signatur ungültig!');
     }
 
+    // ⚠️ Legacy v1 — Shared Secret, nicht vertrauenswürdig
     final isValid = verifyLegacy(data);
     return VerifyResult(isValid: isValid, version: 1, adminNpub: '', adminPubkey: '',
-      message: isValid ? 'Signatur gültig (Legacy v1)' : 'Legacy-Signatur ungültig!');
+      message: isValid
+        ? '⚠️ Legacy-Signatur (v1) — nicht vertrauenswürdig'
+        : 'Legacy-Signatur ungültig!');
   }
 
   // =============================================
@@ -339,8 +375,7 @@ class BadgeSecurity {
   // =============================================
 
   static Future<QRSignResult> signQRv3(String jsonData) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString('nostr_priv_hex');
+    final privHex = await SecureKeyStore.getPrivHex();
     if (privHex == null) {
       final legacySig = signLegacy(jsonData, "QR", 0);
       return QRSignResult(signature: legacySig, eventId: '', createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000, pubkeyHex: '', isNostr: false);
@@ -376,7 +411,8 @@ class BadgeSecurity {
   static QRVerifyResult verifyQRLegacy({required String jsonData, required String signature, String? pubkeyHex}) {
     final legacySig = signLegacy(jsonData, "QR", 0);
     if (signature == legacySig) {
-      return QRVerifyResult(isValid: true, version: 1, signerNpub: '', message: 'Legacy-Signatur gültig');
+      return QRVerifyResult(isValid: true, version: 1, signerNpub: '',
+        message: '⚠️ Legacy-Signatur (v1) — nicht vertrauenswürdig');
     }
     return QRVerifyResult(isValid: false, version: 0, signerNpub: '', message: 'Signatur ungültig');
   }

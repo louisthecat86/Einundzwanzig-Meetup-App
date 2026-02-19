@@ -24,6 +24,11 @@
 //   2. validateNonce() → Zeitschritt aktuell? (±1 Toleranz)
 //   3. isExpired() → Session noch gültig?
 //
+// SICHERHEIT:
+//   - Private Key wird über SecureKeyStore geladen
+//   - Session-Seed ist ein SHA256 Derivat → kein Rückschluss
+//     auf den privaten Schlüssel möglich
+//
 // ============================================
 
 import 'dart:convert';
@@ -31,6 +36,7 @@ import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'nostr_service.dart';
 import 'badge_security.dart';
+import 'secure_key_store.dart';
 
 class RollingQRService {
   // Wie oft sich der QR ändert
@@ -42,7 +48,8 @@ class RollingQRService {
   // Session-Gültigkeit
   static const int sessionValidityHours = 6;
 
-  // SharedPreferences Keys
+  // SharedPreferences Keys (Session-Daten sind nicht geheim,
+  // nur der Seed wird aus dem privKey abgeleitet)
   static const String _keySessionSeed = 'rqr_session_seed';
   static const String _keySessionStart = 'rqr_session_start';
   static const String _keySessionExpires = 'rqr_session_expires';
@@ -113,12 +120,14 @@ class RollingQRService {
     required String meetupCountry,
     required int blockHeight,
   }) async {
-    final privHex = prefs.getString('nostr_priv_hex') ?? '';
+    // Private Key aus SecureKeyStore laden (nicht mehr aus SharedPreferences)
+    final privHex = await SecureKeyStore.getPrivHex() ?? '';
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final expiresAt = now + (sessionValidityHours * 3600);
 
     // Session-Seed: deterministisch aus privkey + meetup + startzeit
     // → Gleicher Organisator, gleiches Meetup = gleicher Seed pro Session
+    // Der SHA256-Hash lässt keinen Rückschluss auf den privKey zu.
     final seedInput = '$privHex:$meetupId:$now';
     final seed = sha256.convert(utf8.encode(seedInput)).toString();
 
@@ -141,6 +150,7 @@ class RollingQRService {
     );
 
     // In SharedPreferences speichern
+    // (Session-Seed ist ein Hash-Derivat, kein Schlüssel)
     await prefs.setString(_keySessionSeed, seed);
     await prefs.setInt(_keySessionStart, now);
     await prefs.setInt(_keySessionExpires, expiresAt);

@@ -14,18 +14,19 @@
 // - secp256k1 für Schlüsselpaare
 // - Schnorr-Signaturen (BIP-340)
 // - Bech32 für npub/nsec Encoding
+//
+// SICHERHEIT:
+// - Alle privaten Schlüssel werden über SecureKeyStore
+//   gespeichert (Android Keystore / iOS Keychain).
+// - Keine Klartextspeicherung in SharedPreferences.
 // ============================================
 
 import 'package:nostr/nostr.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'secure_key_store.dart';
 
 class NostrService {
-  // SharedPreferences Keys
-  static const String _nsecKey = 'nostr_nsec_key';  // Privater Schlüssel
-  static const String _npubKey = 'nostr_npub_key';  // Öffentlicher Schlüssel (abgeleitet)
-  static const String _privHexKey = 'nostr_priv_hex'; // Private Key als Hex (für schnellen Zugriff)
 
   // =============================================
   // SCHLÜSSEL GENERIEREN
@@ -39,8 +40,8 @@ class NostrService {
     final npub = Nip19.encodePubkey(keychain.public);
     final nsec = Nip19.encodePrivkey(keychain.private);
 
-    // 3. Lokal speichern
-    await _saveKeys(
+    // 3. Sicher speichern (SecureKeyStore → Android Keystore / iOS Keychain)
+    await SecureKeyStore.saveKeys(
       nsec: nsec,
       npub: npub,
       privHex: keychain.private,
@@ -74,8 +75,8 @@ class NostrService {
       final keychain = Keychain(privateKeyHex);
       final npub = Nip19.encodePubkey(keychain.public);
 
-      // 3. Lokal speichern
-      await _saveKeys(
+      // 3. Sicher speichern
+      await SecureKeyStore.saveKeys(
         nsec: nsec,
         npub: npub,
         privHex: privateKeyHex,
@@ -96,32 +97,21 @@ class NostrService {
   // Gibt gespeichertes Keypair zurück (oder null)
   // =============================================
   static Future<Map<String, String>?> loadKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    final nsec = prefs.getString(_nsecKey);
-    final npub = prefs.getString(_npubKey);
-
-    if (nsec == null || npub == null) return null;
-
-    return {
-      'nsec': nsec,
-      'npub': npub,
-    };
+    return await SecureKeyStore.loadKeys();
   }
 
   // =============================================
   // HAT DER USER EINEN KEY?
   // =============================================
   static Future<bool> hasKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_nsecKey) != null;
+    return await SecureKeyStore.hasKey();
   }
 
   // =============================================
   // NPUB LADEN (ohne nsec preiszugeben)
   // =============================================
   static Future<String?> getNpub() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_npubKey);
+    return await SecureKeyStore.getNpub();
   }
 
   // =============================================
@@ -129,8 +119,7 @@ class NostrService {
   // Erzeugt eine Schnorr-Signatur über beliebige Daten
   // =============================================
   static Future<String> sign(String data) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString(_privHexKey);
+    final privHex = await SecureKeyStore.getPrivHex();
 
     if (privHex == null) {
       throw Exception('Kein Nostr-Schlüssel vorhanden. Bitte erst Key generieren oder importieren.');
@@ -150,35 +139,28 @@ class NostrService {
 
   // =============================================
   // SIGNATUR PRÜFEN
-  // Verifiziert ob eine Signatur zu einem npub passt
+  // Verifiziert ob eine Signatur zu einem pubkey passt
+  //
+  // WICHTIG: createdAt und eventId müssen vom
+  // Original-Event übernommen werden, NICHT neu
+  // generiert — sonst stimmt der Hash nicht!
   // =============================================
   static bool verify({
     required String data,
     required String signature,
     required String pubkeyHex,
+    required String eventId,
+    required int createdAt,
+    List<List<String>> tags = const [],
+    int kind = 21000,
   }) {
     try {
-      // Wir bauen das Event nach und prüfen die Signatur
-      // Das nostr-Package verifiziert intern mit BIP-340 Schnorr
-      final createdAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-      // Event-ID nachrechnen (SHA-256 über serialisierte Daten)
-      final serialized = jsonEncode([
-        0,
-        pubkeyHex,
-        createdAt,
-        21000,
-        [],
-        data,
-      ]);
-      final id = sha256.convert(utf8.encode(serialized)).toString();
-
       final event = Event(
-        id,
+        eventId,
         pubkeyHex,
         createdAt,
-        21000,
-        [],
+        kind,
+        tags,
         data,
         signature,
       );
@@ -200,9 +182,8 @@ class NostrService {
     required String date,
     required int blockHeight,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final privHex = prefs.getString(_privHexKey);
-    final npub = prefs.getString(_npubKey);
+    final privHex = await SecureKeyStore.getPrivHex();
+    final npub = await SecureKeyStore.getNpub();
 
     if (privHex == null || npub == null) {
       throw Exception('Kein Nostr-Schlüssel vorhanden.');
@@ -290,23 +271,6 @@ class NostrService {
   // SCHLÜSSEL LÖSCHEN (GEFÄHRLICH!)
   // =============================================
   static Future<void> deleteKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_nsecKey);
-    await prefs.remove(_npubKey);
-    await prefs.remove(_privHexKey);
-  }
-
-  // =============================================
-  // INTERNES: Keys speichern
-  // =============================================
-  static Future<void> _saveKeys({
-    required String nsec,
-    required String npub,
-    required String privHex,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_nsecKey, nsec);
-    await prefs.setString(_npubKey, npub);
-    await prefs.setString(_privHexKey, privHex);
+    await SecureKeyStore.deleteKeys();
   }
 }

@@ -3,6 +3,7 @@ import 'theme.dart';
 import 'screens/intro.dart'; 
 import 'screens/dashboard.dart';
 import 'models/user.dart';
+import 'services/secure_key_store.dart';
 
 void main() {
   runApp(const MyApp());
@@ -48,6 +49,11 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkSession() async {
+    // MIGRATION: Beim ersten Start nach dem Update werden
+    // Nostr-Keys aus SharedPreferences in SecureStorage migriert.
+    // Danach werden die Klartext-Keys aus SharedPreferences gelöscht.
+    await SecureKeyStore.ensureMigrated();
+
     final user = await UserProfile.load();
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;

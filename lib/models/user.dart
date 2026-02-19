@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/secure_key_store.dart';
 
 class UserProfile {
   String nickname;
@@ -11,7 +12,7 @@ class UserProfile {
   bool isAdmin;
   String homeMeetupId;
   bool hasNostrKey;       // Hat der User ein Keypair in der App?
-  String promotionSource; // NEU: Wie wurde Admin? 'trust_score', 'seed_admin', 'password', ''
+  String promotionSource; // Wie wurde Admin? 'trust_score', 'seed_admin', ''
 
   UserProfile({
     this.nickname = "Anon",
@@ -30,13 +31,13 @@ class UserProfile {
   static Future<UserProfile> load() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Prüfe ob ein Nostr-Keypair existiert
-    final hasKey = prefs.getString('nostr_nsec_key') != null;
+    // Prüfe ob ein Nostr-Keypair existiert (über SecureKeyStore)
+    final hasKey = await SecureKeyStore.hasKey();
 
-    // Wenn Keypair vorhanden, npub vom Key nehmen (hat Vorrang)
+    // Wenn Keypair vorhanden, npub aus SecureKeyStore nehmen (hat Vorrang)
     String npub = prefs.getString('nostr') ?? "";
     if (hasKey) {
-      final keyNpub = prefs.getString('nostr_npub_key');
+      final keyNpub = await SecureKeyStore.getNpub();
       if (keyNpub != null && keyNpub.isNotEmpty) {
         npub = keyNpub;
       }

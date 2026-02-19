@@ -8,8 +8,15 @@
 //   1. NFC oder QR lesen
 //   2. Format erkennen (kompakt vs. legacy)
 //   3. BadgeSecurity.verify() → Schnorr-Check + Ablauf
-//   4. Normalisieren (kompakt → volle Feldnamen)
-//   5. Badge MIT kryptographischem Beweis speichern
+//   4. AdminRegistry.checkAdminByPubkey() → Signer bekannt?
+//   5. Normalisieren (kompakt → volle Feldnamen)
+//   6. Badge MIT kryptographischem Beweis speichern
+//
+// SICHERHEIT:
+//   - Signatur allein reicht NICHT — der Signer-Pubkey
+//     wird gegen die Admin Registry geprüft.
+//   - Unbekannte Signer werden deutlich als ❌ markiert.
+//   - Legacy v1 Badges werden als unsicher gekennzeichnet.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -26,6 +33,7 @@ import '../services/badge_security.dart';
 import '../services/nostr_service.dart';
 import '../services/mempool.dart';
 import '../services/rolling_qr_service.dart';
+import '../services/admin_registry.dart';
 
 class MeetupVerificationScreen extends StatefulWidget {
   final Meetup meetup;
@@ -37,6 +45,7 @@ class MeetupVerificationScreen extends StatefulWidget {
 
 class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> with SingleTickerProviderStateMixin {
   bool _success = false;
+  bool _isUnknownSigner = false; // NEU: Flag für unbekannten Signer
   String _statusText = "Bereit zum Scannen";
 
   late AnimationController _controller;
@@ -230,6 +239,31 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       final adminPubkey = normalized['admin_pubkey'] as String? ?? tagData['p'] as String? ?? '';
       final sigVersion = sig.length == 128 ? 2 : (sig.isNotEmpty ? 1 : 0);
 
+      // =============================================
+      // ADMIN-REGISTRY CHECK — Ist der Signer bekannt?
+      // =============================================
+      bool isKnownAdmin = false;
+      String adminCheckInfo = '';
+
+      if (verifyResult != null && verifyResult.version >= 2 && adminPubkey.isNotEmpty) {
+        try {
+          final adminResult = await AdminRegistry.checkAdminByPubkey(adminPubkey);
+          isKnownAdmin = adminResult.isAdmin;
+          if (isKnownAdmin) {
+            final adminName = adminResult.name ?? adminResult.meetup ?? 'Verifizierter Admin';
+            adminCheckInfo = '✅ Bekannter Organisator: $adminName';
+          } else {
+            adminCheckInfo = '❌ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.';
+          }
+        } catch (e) {
+          // Offline: Cache-Miss → Warnung anzeigen
+          adminCheckInfo = '⚠️ Admin-Status konnte nicht geprüft werden (offline?)';
+        }
+      } else if (verifyResult != null && verifyResult.version == 1) {
+        // Legacy v1: Shared Secret, per Definition nicht vertrauenswürdig
+        adminCheckInfo = '⚠️ Legacy-Badge (v1) — Signer nicht prüfbar';
+      }
+
       // Originalen signierten Content für Re-Verifikation
       final contentData = Map<String, dynamic>.from(tagData);
       contentData.remove('_verified_by');
@@ -259,9 +293,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       if (tagData['_verified_by'] != null) msg += "\n🔐 Signiert von: ${tagData['_verified_by']}";
       if (sigVersion == 2) msg += "\n✅ Schnorr-Beweis gespeichert";
 
+      // Admin-Registry Ergebnis anzeigen
+      if (adminCheckInfo.isNotEmpty) {
+        msg += "\n\n$adminCheckInfo";
+      }
+
       // Ablauf-Info anzeigen
       final expiryStr = BadgeSecurity.expiryInfo(tagData);
       if (expiryStr != 'Kein Ablauf') msg += "\n⏱️ Tag: $expiryStr";
+
+      // Flag setzen für UI (Farbe des Icons)
+      if (!isKnownAdmin && verifyResult != null && verifyResult.version >= 2 && adminPubkey.isNotEmpty) {
+        _isUnknownSigner = true;
+      }
 
     } else {
       msg = "✅ Badge bereits gesammelt\n\n📍 $fullName";
@@ -311,7 +355,12 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.check_circle, size: 100, color: Colors.green),
+                    // Icon-Farbe abhängig vom Signer-Status
+                    Icon(
+                      _isUnknownSigner ? Icons.warning_amber_rounded : Icons.check_circle,
+                      size: 100,
+                      color: _isUnknownSigner ? Colors.orange : Colors.green,
+                    ),
                     const SizedBox(height: 20),
                     Text(_statusText, textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, height: 1.6)),

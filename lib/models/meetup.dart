@@ -11,8 +11,7 @@ class Meetup {
   final String portalLink;
   final String twitterUsername;
   final String nostrNpub;
-  final String adminSecret;
-  final String coverImagePath; // <--- NEU: Das Hintergrundbild für den Badge
+  final String coverImagePath;
 
   Meetup({
     required this.id, 
@@ -27,8 +26,7 @@ class Meetup {
     this.portalLink = "",
     this.twitterUsername = "",
     this.nostrNpub = "",
-    this.adminSecret = "21",
-    this.coverImagePath = "", // <--- NEU: Standardwert leer
+    this.coverImagePath = "",
   });
 
   factory Meetup.fromJson(Map<String, dynamic> json) {
@@ -52,7 +50,7 @@ class Meetup {
       nostrNpub: json['nostr'] ?? '',
       lat: (json['lat'] ?? 0).toDouble(),
       lng: (json['lon'] ?? 0).toDouble(),
-      coverImagePath: image, // <--- NEU: Hier weisen wir das gefundene Bild zu
+      coverImagePath: image,
     );
   }
 
@@ -65,12 +63,3 @@ class Meetup {
     return 'DE';
   }
 }
-
-// Fallback Daten (nur für Offline-Tests relevant)
-List<Meetup> allMeetups = [
-  Meetup(id: "m_muc", city: "München", country: "DE", telegramLink: "t.me/einundzwanzig_muc", lat: 48.1351, lng: 11.5820),
-  Meetup(id: "m_hh", city: "Hambmurg", country: "DE", telegramLink: "t.me/einundzwanzig_hh", lat: 53.5511, lng: 9.9937),
-  Meetup(id: "m_b", city: "Berlin", country: "DE", telegramLink: "t.me/einundzwanzig_berlin", lat: 52.5200, lng: 13.4050),
-];
-
-List<Meetup> fallbackMeetups = allMeetups;
