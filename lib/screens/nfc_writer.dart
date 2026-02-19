@@ -16,8 +16,10 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:nfc_manager/nfc_manager.dart';
-import 'package:nfc_manager/platform_tags.dart';
+import 'package:nfc_manager/nfc_manager.dart';            // NfcManager, NfcTag, NfcPollingOption, NfcAvailability
+import 'package:nfc_manager/ndef_record.dart';              // NdefRecord, NdefMessage, TypeNameFormat
+import 'package:nfc_manager/nfc_manager_android.dart';      // NdefFormatableAndroid
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -169,7 +171,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             var ndef = Ndef.from(tag);
             
             if (ndef == null) {
-              var formatable = NdefFormatable.from(tag);
+              var formatable = NdefFormatableAndroid.from(tag);
               if (formatable != null) {
                 try {
                   setState(() => _statusText = "Formatiere leeren Tag...");

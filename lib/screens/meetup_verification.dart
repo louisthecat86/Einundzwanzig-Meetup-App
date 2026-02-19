@@ -14,10 +14,13 @@
 
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../theme.dart';
 import '../models/badge.dart';
+import '../models/meetup.dart';
 import '../models/user.dart';
 import '../services/badge_security.dart';
 import '../services/nostr_service.dart';
@@ -25,7 +28,8 @@ import '../services/mempool.dart';
 import '../services/rolling_qr_service.dart';
 
 class MeetupVerificationScreen extends StatefulWidget {
-  const MeetupVerificationScreen({super.key});
+  final Meetup meetup;
+  const MeetupVerificationScreen({super.key, required this.meetup});
 
   @override
   State<MeetupVerificationScreen> createState() => _MeetupVerificationScreenState();
