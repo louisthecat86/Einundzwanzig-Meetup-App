@@ -63,3 +63,14 @@ class Meetup {
     return 'DE';
   }
 }
+
+// =============================================
+// FALLBACK-MEETUPS (Offline-Betrieb)
+// =============================================
+List<Meetup> allMeetups = [
+  Meetup(id: "m_muc", city: "München", country: "DE", telegramLink: "t.me/einundzwanzig_muc", lat: 48.1351, lng: 11.5820),
+  Meetup(id: "m_hh", city: "Hambmurg", country: "DE", telegramLink: "t.me/einundzwanzig_hh", lat: 53.5511, lng: 9.9937),
+  Meetup(id: "m_b", city: "Berlin", country: "DE", telegramLink: "t.me/einundzwanzig_berlin", lat: 52.5200, lng: 13.4050),
+];
+
+List<Meetup> fallbackMeetups = allMeetups;
