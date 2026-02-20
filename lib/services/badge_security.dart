@@ -142,10 +142,13 @@ class BadgeSecurity {
         }
       }
 
-      // Content rekonstruieren (OHNE c, p, s) — KANONISIERT
+      // Content rekonstruieren — NUR die Felder die signiert wurden.
+      // Ausgeschlossen: Signatur-Felder (c, p, s) UND Rolling-QR-Felder (n, ts, d)
+      // die NACH dem Signieren angehängt werden.
+      static const _nonContentKeys = {'c', 'p', 's', 'n', 'ts', 'd'};
       final Map<String, dynamic> content = {};
       for (final key in data.keys) {
-        if (key != 'c' && key != 'p' && key != 's') {
+        if (!_nonContentKeys.contains(key)) {
           content[key] = data[key];
         }
       }

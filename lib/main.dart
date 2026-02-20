@@ -4,6 +4,7 @@ import 'screens/intro.dart';
 import 'screens/dashboard.dart';
 import 'models/user.dart';
 import 'services/secure_key_store.dart';
+import 'services/promotion_claim_service.dart';
 
 void main() {
   runApp(const MyApp());

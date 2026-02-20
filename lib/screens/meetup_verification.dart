@@ -174,7 +174,17 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
 
       // Sicherheits-Check
-      final verifyResult = BadgeSecurity.verify(result);
+      // WICHTIG: Rolling-QR-Felder (n, ts, d) werden vor dem Signatur-Check
+      // entfernt, da sie NACH dem Signieren angehängt werden und sonst
+      // den Hash verfälschen würden ("Invalid event").
+      final dataToVerify = Map<String, dynamic>.from(result);
+      dataToVerify.remove('n');
+      dataToVerify.remove('ts');
+      dataToVerify.remove('d');
+      dataToVerify.remove('qr_nonce');
+      dataToVerify.remove('qr_time_step');
+
+      final verifyResult = BadgeSecurity.verify(dataToVerify);
       if (!verifyResult.isValid) {
         setState(() {
           _statusText = "❌ ${verifyResult.message}";

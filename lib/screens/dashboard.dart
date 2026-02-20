@@ -20,6 +20,7 @@ import 'meetup_details.dart';
 import 'reputation_qr.dart'; 
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
+import '../services/promotion_claim_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -44,6 +45,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadUser();
     await _loadBadges();
     await _calculateTrustScore();
+    // Organic Admins von Nostr laden und verifizieren
+    _syncOrganicAdminsInBackground();
+  }
+
+  /// Lädt Admin Claims von Nostr Relays und verifiziert sie.
+  /// Gültige Claims werden in die lokale Admin-Registry aufgenommen.
+  void _syncOrganicAdminsInBackground() async {
+    try {
+      final verified = await PromotionClaimService.syncOrganicAdmins();
+      if (verified.isNotEmpty) {
+        print('[Dashboard] ${verified.length} organische Admins verifiziert');
+      }
+    } catch (e) {
+      // Stilles Scheitern — kein Netzwerk ist OK
+    }
   }
 
   Future<void> _loadBadges() async {
@@ -126,6 +142,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _user.isAdminVerified = true;
       _user.promotionSource = 'trust_score';
       await _user.save();
+
+      // "Proof of Reputation" auf Nostr publizieren
+      // → Andere Apps können diesen Claim verifizieren
+      // → Kein Super-Admin nötig für organisches Wachstum
+      try {
+        final meetupName = _user.homeMeetupId.isNotEmpty
+            ? _user.homeMeetupId
+            : 'Unbekannt';
+        await PromotionClaimService.publishAdminClaim(
+          badges: myBadges,
+          meetupName: meetupName,
+        );
+        print('[Dashboard] Admin Claim auf Nostr publiziert ✓');
+      } catch (e) {
+        print('[Dashboard] Admin Claim konnte nicht publiziert werden: $e');
+        // Kein Problem — wird beim nächsten App-Start erneut versucht
+      }
       
       if (mounted) {
         setState(() {
@@ -791,3 +824,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 }
+
+
+================================================
