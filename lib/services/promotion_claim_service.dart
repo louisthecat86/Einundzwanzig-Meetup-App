@@ -388,7 +388,7 @@ class PromotionClaimService {
 
       final result = await completer.future.timeout(
         _relayTimeout,
-        onTimeout: () => claims.isNotEmpty ? claims : null,
+        onTimeout: () => <_RawClaim>[],
       );
 
       ws.add(jsonEncode(['CLOSE', subscriptionId]));
