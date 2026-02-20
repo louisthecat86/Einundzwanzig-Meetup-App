@@ -25,8 +25,8 @@ import '../models/user.dart';
 import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/badge_security.dart';
-import '../services/nostr_service.dart';
-import '../services/mempool.dart';
+// NEU: Import für den zentralen RollingQRService
+import '../services/rolling_qr_service.dart';
 
 class NFCWriterScreen extends StatefulWidget {
   const NFCWriterScreen({super.key});
@@ -103,41 +103,17 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
 
     setState(() {
-      _statusText = "Berechne Signatur...";
+      _statusText = "Lade Session-Daten...";
       _success = false;
     });
 
-    // Block Height holen
-    int blockHeight = 0;
-    try {
-      blockHeight = await MempoolService.getBlockHeight();
-    } catch (e) {
-      print("Mempool Fehler: $e");
-    }
-
-    // Kompakte Meetup-ID: "aschaffenburg-de"
-    final compactMeetupId = '${_homeMeetup!.city.toLowerCase().replaceAll(' ', '-')}-${_homeMeetup!.country.toLowerCase()}';
-
-    // KOMPAKT-SIGNIERUNG (Schnorr, ~285B)
-    Map<String, dynamic> tagData;
-    final hasNostrKey = await NostrService.hasKey();
-
-    if (hasNostrKey) {
-      try {
-        tagData = await BadgeSecurity.signCompact(
-          meetupId: compactMeetupId,
-          blockHeight: blockHeight,
-          validityHours: BadgeSecurity.badgeValidityHours,
-        );
-        setState(() => _statusText = "🔐 Signatur erstellt...");
-      } catch (e) {
-        // Fallback: Legacy
-        final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
-        tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
-      }
-    } else {
-      final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
-      tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
+    // --- NEU: ZENTRALER PAYLOAD ABRUF ---
+    // Statt selbst zu signieren, holen wir den bereits generierten Payload
+    final tagData = await RollingQRService.getBasePayload();
+    
+    if (tagData == null) {
+       setState(() => _statusText = "❌ Keine aktive Meetup-Session gefunden. Bitte starte das Meetup neu.");
+       return;
     }
 
     // NFC verfügbar?
@@ -243,6 +219,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
           "Tag kann danach überschrieben werden.";
     });
     
+    // Nach Erfolg automatisch zurück navigieren oder zum QR Code wechseln
     Future.delayed(const Duration(seconds: 5), () {
       if (mounted) Navigator.pop(context);
     });
@@ -256,7 +233,8 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   Future<void> _simulateWriteTag() async {
     setState(() => _statusText = "Schreibe Tag... (SIM)");
     await Future.delayed(const Duration(seconds: 2));
-    _handleSuccessInUI(285);
+    // Wir nehmen hier einfach die berechnete Payload-Größe für die Anzeige
+    _handleSuccessInUI(_payloadSize > 10 ? _payloadSize - 10 : 285);
   }
 
   @override

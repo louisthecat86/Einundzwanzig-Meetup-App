@@ -1,33 +1,19 @@
 // ============================================
-// ROLLING QR SERVICE v2 — SESSION + ROLLING
+// ROLLING QR SERVICE v3 — UNIFIED SESSION
 // ============================================
 //
-// Kombiniert zwei Sicherheitskonzepte:
+// Kombiniert zwei Sicherheitskonzepte und erzwingt EINE
+// einheitliche Signatur für NFC und QR.
 //
 // 1. SESSION (6h gültig, überlebt App-Neustart)
-//    → Wird in SharedPreferences gespeichert
-//    → Gleicher Seed für die gesamte Meetup-Dauer
-//    → Nachzügler nach 1h → kein Problem
+//    → Generiert EINMALIG den signierten Base-Payload (Schnorr)
+//    → Speichert diesen Base-Payload in SharedPreferences
+//    → NFC Writer liest exakt diesen Payload.
 //
 // 2. ROLLING NONCE (alle 10s neu, Screenshot = wertlos)
-//    → nonce = HMAC(sessionSeed, zeitschritt)
-//    → Code ändert sich → Foto weiterleiten unmöglich
-//    → Scanner prüft: ist der Zeitschritt aktuell?
-//
-// Krypto-Kette:
-//   sessionSeed = SHA256(privkey + meetupId + startTime)
-//   nonce       = HMAC(sessionSeed, floor(now / 10))
-//   payload     = signCompact(meetup) + nonce + timeStep
-//   
-// Scanner-Seite:
-//   1. BadgeSecurity.verify() → Schnorr-Check
-//   2. validateNonce() → Zeitschritt aktuell? (±1 Toleranz)
-//   3. isExpired() → Session noch gültig?
-//
-// SICHERHEIT:
-//   - Private Key wird über SecureKeyStore geladen
-//   - Session-Seed ist ein SHA256 Derivat → kein Rückschluss
-//     auf den privaten Schlüssel möglich
+//    → Nimmt den gespeicherten Base-Payload
+//    → Hängt nonce = HMAC(sessionSeed, zeitschritt) an
+//    → Hängt timeStep an
 //
 // ============================================
 
@@ -37,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'nostr_service.dart';
 import 'badge_security.dart';
 import 'secure_key_store.dart';
+import 'mempool.dart'; // NEU: Für initialen Fetch
 
 class RollingQRService {
   // Wie oft sich der QR ändert
@@ -48,8 +35,7 @@ class RollingQRService {
   // Session-Gültigkeit
   static const int sessionValidityHours = 6;
 
-  // SharedPreferences Keys (Session-Daten sind nicht geheim,
-  // nur der Seed wird aus dem privKey abgeleitet)
+  // SharedPreferences Keys
   static const String _keySessionSeed = 'rqr_session_seed';
   static const String _keySessionStart = 'rqr_session_start';
   static const String _keySessionExpires = 'rqr_session_expires';
@@ -58,6 +44,9 @@ class RollingQRService {
   static const String _keySessionMeetupCountry = 'rqr_session_meetup_country';
   static const String _keySessionBlockHeight = 'rqr_session_block_height';
   static const String _keySessionPubkey = 'rqr_session_pubkey';
+  
+  // NEU: Hier speichern wir den EINMALIG signierten Base-Payload
+  static const String _keySessionBasePayload = 'rqr_session_base_payload';
 
   // =============================================
   // SESSION MANAGEMENT
@@ -78,13 +67,20 @@ class RollingQRService {
       return existing;
     }
 
+    // Wenn keine valide BlockHeight übergeben wurde (Fallback-Case), hole sie
+    int finalBlockHeight = blockHeight;
+    if (finalBlockHeight <= 0) {
+      finalBlockHeight = await MempoolService.getBlockHeight();
+      if (finalBlockHeight == 0) finalBlockHeight = 850000; // Fallback
+    }
+
     // Neue Session erstellen
     return await _createSession(
       prefs: prefs,
       meetupId: meetupId,
       meetupName: meetupName,
       meetupCountry: meetupCountry,
-      blockHeight: blockHeight,
+      blockHeight: finalBlockHeight,
     );
   }
 
@@ -100,7 +96,7 @@ class RollingQRService {
       return null;
     }
 
-    return MeetupSession(
+    final session = MeetupSession(
       seed: seed,
       startedAt: start,
       expiresAt: expires,
@@ -110,6 +106,14 @@ class RollingQRService {
       blockHeight: prefs.getInt(_keySessionBlockHeight) ?? 0,
       pubkey: prefs.getString(_keySessionPubkey) ?? '',
     );
+
+    // Wenn abgelaufen, direkt bereinigen
+    if (session.isExpired) {
+      await endSession();
+      return null;
+    }
+
+    return session;
   }
 
   /// Neue Session erstellen und speichern
@@ -120,23 +124,34 @@ class RollingQRService {
     required String meetupCountry,
     required int blockHeight,
   }) async {
-    // Private Key aus SecureKeyStore laden (nicht mehr aus SharedPreferences)
+    // 1. Keys laden
     final privHex = await SecureKeyStore.getPrivHex() ?? '';
+    final pubkey = await NostrService.getNpub() ?? '';
+    
+    // 2. Zeitstempel
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final expiresAt = now + (sessionValidityHours * 3600);
 
-    // Session-Seed: deterministisch aus privkey + meetup + startzeit
-    // → Gleicher Organisator, gleiches Meetup = gleicher Seed pro Session
-    // Der SHA256-Hash lässt keinen Rückschluss auf den privKey zu.
+    // 3. Session-Seed generieren
     final seedInput = '$privHex:$meetupId:$now';
     final seed = sha256.convert(utf8.encode(seedInput)).toString();
 
-    // Pubkey für Signatur
-    String pubkey = '';
-    try {
-      final npub = await NostrService.getNpub();
-      pubkey = npub ?? '';
-    } catch (_) {}
+    // 4. BASE-PAYLOAD EINMALIG SIGNIEREN
+    Map<String, dynamic> basePayload;
+    final hasKey = await NostrService.hasKey();
+    if (hasKey) {
+      try {
+        basePayload = await BadgeSecurity.signCompact(
+          meetupId: meetupId,
+          blockHeight: blockHeight,
+          validityHours: sessionValidityHours,
+        );
+      } catch (e) {
+        basePayload = _legacyPayload(meetupId, blockHeight);
+      }
+    } else {
+      basePayload = _legacyPayload(meetupId, blockHeight);
+    }
 
     final session = MeetupSession(
       seed: seed,
@@ -149,8 +164,7 @@ class RollingQRService {
       pubkey: pubkey,
     );
 
-    // In SharedPreferences speichern
-    // (Session-Seed ist ein Hash-Derivat, kein Schlüssel)
+    // 5. Alles in SharedPreferences speichern
     await prefs.setString(_keySessionSeed, seed);
     await prefs.setInt(_keySessionStart, now);
     await prefs.setInt(_keySessionExpires, expiresAt);
@@ -159,6 +173,9 @@ class RollingQRService {
     await prefs.setString(_keySessionMeetupCountry, meetupCountry);
     await prefs.setInt(_keySessionBlockHeight, blockHeight);
     await prefs.setString(_keySessionPubkey, pubkey);
+    
+    // NEU: Base-Payload speichern (Für QR und NFC)
+    await prefs.setString(_keySessionBasePayload, jsonEncode(basePayload));
 
     return session;
   }
@@ -174,6 +191,23 @@ class RollingQRService {
     await prefs.remove(_keySessionMeetupCountry);
     await prefs.remove(_keySessionBlockHeight);
     await prefs.remove(_keySessionPubkey);
+    await prefs.remove(_keySessionBasePayload);
+  }
+
+  // =============================================
+  // PAYLOAD ABRUF (Für NFC Writer)
+  // =============================================
+  
+  /// Gibt den statischen, fertig signierten Base-Payload für den NFC-Tag zurück
+  static Future<Map<String, dynamic>?> getBasePayload() async {
+    final session = await loadSession();
+    if (session == null) return null;
+    
+    final prefs = await SharedPreferences.getInstance();
+    final payloadStr = prefs.getString(_keySessionBasePayload);
+    if (payloadStr == null) return null;
+    
+    return jsonDecode(payloadStr);
   }
 
   // =============================================
@@ -198,44 +232,37 @@ class RollingQRService {
   // =============================================
 
   static Future<String> generateQRString(MeetupSession session) async {
+    // 1. Hole den EINMALIG signierten Base-Payload
+    final prefs = await SharedPreferences.getInstance();
+    final basePayloadStr = prefs.getString(_keySessionBasePayload);
+    
+    Map<String, dynamic> payload;
+    if (basePayloadStr != null) {
+      payload = jsonDecode(basePayloadStr);
+    } else {
+      // Fallback, sollte nie passieren
+      payload = _legacyPayload(session.meetupId, session.blockHeight);
+    }
+
+    // 2. Rolling Nonce berechnen
     final timeStep = _currentTimeStep();
     final nonce = _generateNonce(session.seed, timeStep);
 
-    // Kompakt-Format: Badge-Daten + Rolling-Felder
-    // Signiert mit signCompact (Schnorr)
-    Map<String, dynamic> payload;
-
-    final hasKey = await NostrService.hasKey();
-    if (hasKey) {
-      try {
-        payload = await BadgeSecurity.signCompact(
-          meetupId: session.meetupId,
-          blockHeight: session.blockHeight,
-          validityHours: sessionValidityHours,
-        );
-      } catch (e) {
-        // Fallback Legacy
-        payload = _legacyPayload(session);
-      }
-    } else {
-      payload = _legacyPayload(session);
-    }
-
-    // Rolling-Felder anhängen
+    // 3. Rolling-Felder an den bestehenden Payload anhängen
     payload['n'] = nonce;       // Rolling Nonce (16 hex)
     payload['ts'] = timeStep;   // Time-Step (für Validierung)
-    payload['d'] = 'qr';       // delivery = rolling_qr
+    payload['d'] = 'rolling_qr';// delivery methode
 
     return jsonEncode(payload);
   }
 
-  static Map<String, dynamic> _legacyPayload(MeetupSession session) {
-    final sig = BadgeSecurity.signLegacy(session.meetupId, DateTime.now().toIso8601String(), session.blockHeight);
+  static Map<String, dynamic> _legacyPayload(String meetupId, int blockHeight) {
+    final sig = BadgeSecurity.signLegacy(meetupId, DateTime.now().toIso8601String(), blockHeight);
     return {
       'v': 1,
       't': 'B',
-      'm': session.meetupId,
-      'b': session.blockHeight,
+      'm': meetupId,
+      'b': blockHeight,
       'sig': sig,
     };
   }
