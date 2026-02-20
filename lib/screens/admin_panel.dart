@@ -8,6 +8,7 @@ import '../services/nostr_service.dart';
 import '../services/rolling_qr_service.dart'; // Import für den zentralen Session-Manager
 import 'admin_management.dart';
 import 'meetup_session_wizard.dart'; // Der Wizard für den Ablauf
+import 'rolling_qr_screen.dart'; // NEU: Import für den direkten Sprung zum QR Code
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -252,9 +253,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           foregroundColor: Colors.white,
                         ),
                         onPressed: () {
+                          // THE FIX: Direkter Sprung zum QR Code!
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const MeetupSessionWizard()),
+                            MaterialPageRoute(builder: (context) => const RollingQRScreen()),
                           );
                         },
                         icon: const Icon(Icons.qr_code_scanner),
