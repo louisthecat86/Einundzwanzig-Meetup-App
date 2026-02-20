@@ -30,6 +30,9 @@ dependencies:
   dbcrypt: ^2.0.0
   nostr: ^1.5.0
 
+  # NEU: Verschlüsselung für das Backup
+  encrypt: ^5.0.3
+
   # Secure Storage (Android Keystore / iOS Keychain)
   flutter_secure_storage: ^9.2.4
 

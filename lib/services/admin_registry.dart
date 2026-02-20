@@ -1,17 +1,22 @@
 // ============================================
-// ADMIN REGISTRY v2 - MIT ECHTEM RELAY-FETCH
+// ADMIN REGISTRY v4 - FULL WEB OF TRUST
 // ============================================
 //
 // Ablauf:
 //   1. App startet → checkAdmin(npub)
-//   2. Cache prüfen (sofort, offline-fähig)
-//   3. Relay kontaktieren (im Hintergrund)
-//   4. Signiertes Event empfangen → Admin-Liste extrahieren
-//   5. Cache aktualisieren
+//   2. Prüfen: Ist der "Bootstrap Sunset" aktiv?
+//   3. Cache prüfen (sofort, offline-fähig)
+//   4. Relay kontaktieren (im Hintergrund)
+//   5. Signierte Events empfangen
+//      - WENN Bootstrap: Lade Liste von Super-Admin
+//      - WENN Sunset: Lade Listen von ALLEN aktuell bekannten Admins (Web of Trust)
+//   6. Cache aktualisieren und zusammenführen
 //
-// Das Admin-Event (Kind 30078) wird vom Super-Admin
-// auf Relays publiziert. Es enthält die Liste aller
-// vertrauenswürdigen Admin-npubs.
+// BOOTSTRAP SUNSET LOGIK:
+//   Um einen "Single Point of Failure" zu vermeiden, verliert
+//   der Super-Admin automatisch seinen hartcodierten Gott-Modus,
+//   sobald das Netzwerk eine kritische Masse an Organic-Admins (z.B. 20)
+//   erreicht hat. Danach vertraut das Netzwerk auf Peer-to-Peer Vouching.
 // ============================================
 
 import 'dart:async';
@@ -66,11 +71,12 @@ class AdminCheckResult {
 
 class AdminRegistry {
   // =============================================
-  // SUPER-ADMIN NPUB
-  // Das ist die EINZIGE hardcoded Konstante.
-  // Wer diesen npub kontrolliert, kontrolliert die Admin-Liste.
+  // SUPER-ADMIN NPUB & SUNSET CONFIG
   // =============================================
   static const String superAdminNpub = "npub1lf0rga7j66uj6enae2mxezamz5nsz3vechhvmh25tcarn4u8qf5q534jzc"; // ← DEINEN npub hier einsetzen!
+
+  // Ab wie vielen verifizierten Admins soll der Super-Admin entmachtet werden?
+  static const int sunsetThreshold = 20; 
 
   // Nostr Relays (die App versucht alle der Reihe nach)
   static const List<String> _relays = [
@@ -87,9 +93,37 @@ class AdminRegistry {
   // Cache Keys
   static const String _cacheKey = 'admin_registry_cache';
   static const String _cacheTimestampKey = 'admin_registry_timestamp';
+  static const String _sunsetFlagKey = 'bootstrap_permanently_sunset';
 
   // Timeout für Relay-Verbindung
   static const Duration _relayTimeout = Duration(seconds: 8);
+
+  // =============================================
+  // SUNSET LOGIK (Sonnenuntergang für Super-Admin)
+  // =============================================
+
+  /// Prüft und setzt den Sunset-Status. Wird nie wieder 'false', wenn einmal 'true'.
+  static Future<bool> isSunsetActive() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Wenn Sunset schon mal erreicht wurde, bleibt es für immer true
+    if (prefs.getBool(_sunsetFlagKey) == true) {
+      return true;
+    }
+
+    // Zählen, wie viele Admins wir lokal im Cache haben
+    final cachedList = await _loadFromCache();
+    final int currentAdminCount = cachedList?.length ?? 0;
+
+    // Wenn Schwellenwert erreicht, aktiviere Sunset permanent
+    if (currentAdminCount >= sunsetThreshold) {
+      await prefs.setBool(_sunsetFlagKey, true);
+      print('[AdminRegistry] 🌅 BOOTSTRAP SUNSET AKTIVIERT! Web of Trust ist nun völlig dezentral.');
+      return true;
+    }
+
+    return false;
+  }
 
   // =============================================
   // ADMIN-CHECK (Hauptfunktion)
@@ -99,8 +133,11 @@ class AdminRegistry {
       return AdminCheckResult(isAdmin: false, source: 'no_key');
     }
 
-    // 1. Super-Admin ist IMMER Admin
-    if (userNpub == superAdminNpub) {
+    // 1. Sunset-Check durchführen
+    final bool isSunset = await isSunsetActive();
+
+    // 2. Super-Admin Check (NUR wenn Sunset NICHT aktiv ist)
+    if (!isSunset && userNpub == superAdminNpub) {
       return AdminCheckResult(
         isAdmin: true,
         meetup: 'Alle Meetups',
@@ -109,7 +146,7 @@ class AdminRegistry {
       );
     }
 
-    // 2. Cache prüfen (schnell, offline)
+    // 3. Cache prüfen (schnell, offline)
     final cachedList = await _loadFromCache();
     final cacheHit = cachedList?.where((e) => e.npub == userNpub).firstOrNull;
     if (cacheHit != null) {
@@ -123,11 +160,15 @@ class AdminRegistry {
       );
     }
 
-    // 3. Kein Cache-Treffer → Relay fragen (blockierend, mit Timeout)
+    // 4. Kein Cache-Treffer → Relay fragen (blockierend, mit Timeout)
     try {
       final relayList = await fetchFromRelays();
       if (relayList != null && relayList.isNotEmpty) {
         await _saveToCache(relayList);
+
+        // Nach Relay-Update erneut Sunset-Check (falls wir den Schwellenwert just überschritten haben)
+        await isSunsetActive();
+
         final entry = relayList.where((e) => e.npub == userNpub).firstOrNull;
         if (entry != null) {
           return AdminCheckResult(
@@ -155,20 +196,7 @@ class AdminRegistry {
       return AdminCheckResult(isAdmin: false, source: 'no_key');
     }
 
-    // Super-Admin Pubkey Hex prüfen
-    try {
-      final superAdminHex = Nip19.decodePubkey(superAdminNpub);
-      if (pubkeyHex == superAdminHex) {
-        return AdminCheckResult(
-          isAdmin: true,
-          meetup: 'Alle Meetups',
-          name: 'Super-Admin',
-          source: 'super_admin',
-        );
-      }
-    } catch (_) {}
-
-    // Pubkey Hex → npub konvertieren und regulär prüfen
+    // Pubkey Hex → npub konvertieren und regulär an Hauptfunktion weitergeben
     try {
       final npub = Nip19.encodePubkey(pubkeyHex);
       return await checkAdmin(npub);
@@ -178,32 +206,61 @@ class AdminRegistry {
   }
 
   // =============================================
-  // RELAY FETCH (das Herzstück!)
-  // Verbindet per WebSocket zu Nostr Relays,
-  // fragt nach dem Admin-Listen-Event vom Super-Admin,
-  // verifiziert die Signatur, extrahiert die Liste.
+  // RELAY FETCH (WEB OF TRUST LOGIK)
   // =============================================
   static Future<List<AdminEntry>?> fetchFromRelays() async {
-    // Super-Admin pubkey in Hex (für die Relay-Query)
-    String superAdminHex;
-    try {
-      if (superAdminNpub == "DEIN_NPUB_HIER") {
-        print('[AdminRegistry] Super-Admin npub noch nicht konfiguriert!');
+    List<String> authorsToQuery = [];
+    final bool isSunset = await isSunsetActive();
+
+    if (!isSunset) {
+      // BOOTSTRAP PHASE: Wir vertrauen nur dem Super-Admin
+      try {
+        final superAdminHex = Nip19.decodePubkey(superAdminNpub);
+        authorsToQuery.add(superAdminHex);
+        print('[AdminRegistry] Bootstrap Phase: Frage Relays nach Super-Admin ($superAdminHex)');
+      } catch (e) {
+        print('[AdminRegistry] Ungültiger Super-Admin npub: $e');
         return null;
       }
-      superAdminHex = Nip19.decodePubkey(superAdminNpub);
-    } catch (e) {
-      print('[AdminRegistry] Ungültiger Super-Admin npub: $e');
-      return null;
+    } else {
+      // SUNSET PHASE (WEB OF TRUST): Wir fragen alle uns bekannten Admins
+      final cachedList = await _loadFromCache();
+      if (cachedList != null && cachedList.isNotEmpty) {
+        for (var admin in cachedList) {
+          try {
+            authorsToQuery.add(Nip19.decodePubkey(admin.npub));
+          } catch (_) {}
+        }
+      }
+      
+      // Falls der Cache warum auch immer leer ist, Fallback auf Super-Admin, 
+      // um das Netzwerk wieder hochzuziehen
+      if (authorsToQuery.isEmpty) {
+        try {
+          authorsToQuery.add(Nip19.decodePubkey(superAdminNpub));
+        } catch (_) {}
+      }
+      print('[AdminRegistry] Sunset Phase: Frage Relays nach Updates von ${authorsToQuery.length} bekannten Admins.');
+    }
+
+    // Aus Nostr-Protokoll-Gründen (Limits bei Filtern) teilen wir große Listen auf
+    List<String> queryChunk = authorsToQuery;
+    if (authorsToQuery.length > 50) {
+      queryChunk = authorsToQuery.sublist(0, 50); // Wir fragen vorerst nur die ersten 50 ab um Timeout zu vermeiden
     }
 
     // Versuche jeden Relay der Reihe nach
     for (final relayUrl in _relays) {
       try {
-        final result = await _fetchFromSingleRelay(relayUrl, superAdminHex);
+        final result = await _fetchFromSingleRelay(relayUrl, queryChunk);
         if (result != null) {
-          print('[AdminRegistry] Admin-Liste von $relayUrl geladen (${result.length} Admins)');
-          return result;
+          // Wenn Sunset aktiv ist, mergen wir die Ergebnisse mit dem Cache
+          if (isSunset) {
+            return await _mergeWithCache(result);
+          } else {
+            // In der Bootstrap-Phase überschreibt das Super-Admin-Event alles
+            return result;
+          }
         }
       } catch (e) {
         print('[AdminRegistry] $relayUrl fehlgeschlagen: $e');
@@ -215,23 +272,34 @@ class AdminRegistry {
     return null;
   }
 
+  // Hilfsfunktion: Fügt neu gefundene Admins aus dem Web of Trust dem Cache hinzu
+  static Future<List<AdminEntry>> _mergeWithCache(List<AdminEntry> newEntries) async {
+    final cachedList = await _loadFromCache() ?? [];
+    
+    // Einfacher Merge: Alles, was wir noch nicht kannten, kommt dazu
+    for (var newEntry in newEntries) {
+      if (!cachedList.any((e) => e.npub == newEntry.npub)) {
+        cachedList.add(newEntry);
+      }
+    }
+    return cachedList;
+  }
+
   // =============================================
-  // EINZELNEN RELAY ABFRAGEN
+  // EINZELNEN RELAY ABFRAGEN (MEHRERE AUTHORS)
   // =============================================
   static Future<List<AdminEntry>?> _fetchFromSingleRelay(
     String relayUrl, 
-    String authorHex,
+    List<String> authorsHex,
   ) async {
     WebSocket? ws;
-    
+    List<AdminEntry> collectedAdmins = [];
+
     try {
-      // 1. WebSocket verbinden
       ws = await WebSocket.connect(relayUrl).timeout(_relayTimeout);
-      
       final completer = Completer<List<AdminEntry>?>();
       final subscriptionId = 'admin-list-${DateTime.now().millisecondsSinceEpoch}';
 
-      // 2. Listener für Antworten
       ws.listen(
         (data) {
           try {
@@ -239,10 +307,8 @@ class AdminRegistry {
             final type = message[0] as String;
 
             if (type == 'EVENT' && message.length >= 3) {
-              // Event empfangen!
               final eventData = message[2] as Map<String, dynamic>;
-              
-              // Signatur prüfen
+
               final event = Event(
                 eventData['id'] ?? '',
                 eventData['pubkey'] ?? '',
@@ -255,37 +321,24 @@ class AdminRegistry {
                 eventData['sig'] ?? '',
               );
 
-              // Ist das Event vom richtigen Author?
-              if (event.pubkey != authorHex) {
-                print('[AdminRegistry] Event von falschem Author: ${event.pubkey}');
-                return;
-              }
+              // Ist der Author überhaupt jemand, nach dem wir gefragt haben?
+              if (!authorsHex.contains(event.pubkey)) return;
+              if (!event.isValid()) return;
 
-              // Signatur valid?
-              if (!event.isValid()) {
-                print('[AdminRegistry] Ungültige Event-Signatur!');
-                return;
-              }
-
-              // Content parsen
               try {
                 final content = jsonDecode(event.content) as Map<String, dynamic>;
-                final admins = (content['admins'] as List<dynamic>?)
+                final adminsInEvent = (content['admins'] as List<dynamic>?)
                     ?.map((e) => AdminEntry.fromJson(e as Map<String, dynamic>))
                     .toList() ?? [];
-                
-                if (!completer.isCompleted) {
-                  completer.complete(admins);
-                }
+
+                // Sammeln aller Admins aus allen Events
+                collectedAdmins.addAll(adminsInEvent);
               } catch (e) {
                 print('[AdminRegistry] Content-Parse Fehler: $e');
               }
             } 
             else if (type == 'EOSE') {
-              // End of Stored Events - keine weiteren Events
-              if (!completer.isCompleted) {
-                completer.complete(null); // Kein Event gefunden
-              }
+              if (!completer.isCompleted) completer.complete(collectedAdmins);
             }
           } catch (e) {
             print('[AdminRegistry] Message-Parse Fehler: $e');
@@ -299,54 +352,54 @@ class AdminRegistry {
         },
       );
 
-      // 3. Subscription Request senden
-      // Fragt: "Gib mir das neueste Kind-30078 Event vom Super-Admin mit Tag d=einundzwanzig-admins"
       final request = jsonEncode([
         'REQ',
         subscriptionId,
         {
           'kinds': [_eventKind],
-          'authors': [authorHex],
+          'authors': authorsHex,
           '#d': [_eventDTag],
-          'limit': 1,
+          // Wir holen die letzten 50 Events, falls viele Admins Vouchings gepostet haben
+          'limit': 50, 
         }
       ]);
-      
+
       ws.add(request);
 
-      // 4. Auf Antwort warten (mit Timeout)
       final result = await completer.future.timeout(
         _relayTimeout,
-        onTimeout: () => null,
+        onTimeout: () => collectedAdmins.isNotEmpty ? collectedAdmins : null,
       );
 
-      // 5. Subscription beenden
       ws.add(jsonEncode(['CLOSE', subscriptionId]));
       
-      return result;
+      // Duplikate aus der gesammelten Liste filtern
+      if (result != null) {
+        final uniqueMap = { for (var e in result) e.npub : e };
+        return uniqueMap.values.toList();
+      }
+      return null;
 
     } catch (e) {
       rethrow;
     } finally {
-      // WebSocket immer schließen
       try { ws?.close(); } catch (_) {}
     }
   }
 
   // =============================================
   // HINTERGRUND-REFRESH
-  // Aktualisiert Cache ohne zu blockieren
   // =============================================
   static void _refreshFromRelaysInBackground() async {
     try {
       final age = await cacheAge();
-      // Nur refreshen wenn Cache älter als 1 Stunde
       if (age != null && age.inHours < 1) return;
-      
+
       final relayList = await fetchFromRelays();
       if (relayList != null) {
         await _saveToCache(relayList);
-        print('[AdminRegistry] Cache im Hintergrund aktualisiert');
+        await isSunsetActive(); // Sunset-Status nach Update prüfen
+        print('[AdminRegistry] Cache im Hintergrund aktualisiert. Total Admins: ${relayList.length}');
       }
     } catch (e) {
       // Stilles Scheitern im Hintergrund
@@ -402,6 +455,9 @@ class AdminRegistry {
       addedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     ));
     await _saveToCache(list);
+
+    // Nach Hinzufügen prüfen, ob Sunset erreicht ist
+    await isSunsetActive();
   }
 
   static Future<void> removeAdmin(String npub) async {
@@ -412,7 +468,6 @@ class AdminRegistry {
 
   // =============================================
   // NOSTR EVENT ERSTELLEN + PUBLISHEN
-  // Erstellt das signierte Event UND sendet es an Relays
   // =============================================
   static Future<String> createAndPublishAdminListEvent() async {
     final privHex = await SecureKeyStore.getPrivHex();
@@ -427,7 +482,6 @@ class AdminRegistry {
       'updated_at': DateTime.now().toIso8601String(),
     });
 
-    // Signiertes Nostr Event erstellen
     final event = Event.from(
       kind: _eventKind,
       tags: [
@@ -450,7 +504,6 @@ class AdminRegistry {
       }
     ]);
 
-    // An alle Relays senden
     int successCount = 0;
     List<String> errors = [];
 
@@ -460,8 +513,7 @@ class AdminRegistry {
           const Duration(seconds: 5),
         );
         ws.add(eventJson);
-        
-        // Kurz warten auf OK-Antwort
+
         await Future.delayed(const Duration(seconds: 2));
         ws.close();
         successCount++;
@@ -472,7 +524,6 @@ class AdminRegistry {
       }
     }
 
-    // JSON des Events für Anzeige/Kopieren
     final displayJson = jsonEncode({
       'id': event.id,
       'pubkey': event.pubkey,
@@ -490,7 +541,6 @@ class AdminRegistry {
     return '{"sent_to": $successCount, "event": $displayJson}';
   }
 
-  // Legacy: Nur Event JSON erzeugen ohne zu publishen
   static Future<String> createAdminListEvent() async {
     final privHex = await SecureKeyStore.getPrivHex();
 
@@ -533,18 +583,17 @@ class AdminRegistry {
     return DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestamp));
   }
 
-  /// Cache manuell leeren (z.B. bei Logout)
   static Future<void> clearCache() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
     await prefs.remove(_cacheTimestampKey);
   }
 
-  /// Admin-Liste manuell von Relays neu laden
   static Future<int> forceRefresh() async {
     final relayList = await fetchFromRelays();
     if (relayList != null) {
       await _saveToCache(relayList);
+      await isSunsetActive(); // Sunset Update
       return relayList.length;
     }
     return -1; // Fehler

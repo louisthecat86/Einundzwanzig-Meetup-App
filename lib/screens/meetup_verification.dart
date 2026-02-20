@@ -15,7 +15,7 @@
 // SICHERHEIT:
 //   - Signatur allein reicht NICHT — der Signer-Pubkey
 //     wird gegen die Admin Registry geprüft.
-//   - Unbekannte Signer werden deutlich als ❌ markiert.
+//   - Unbekannte Signer werden deutlich als ✗ markiert.
 //   - Legacy v1 Badges werden als unsicher gekennzeichnet.
 // ============================================
 
@@ -45,7 +45,7 @@ class MeetupVerificationScreen extends StatefulWidget {
 
 class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> with SingleTickerProviderStateMixin {
   bool _success = false;
-  bool _isUnknownSigner = false; // NEU: Flag für unbekannten Signer
+  bool _isUnknownSigner = false; // Flag für unbekannten Signer
   String _statusText = "Bereit zum Scannen";
 
   late AnimationController _controller;
@@ -85,21 +85,21 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             final ndef = Ndef.from(tag);
             if (ndef == null) {
               await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Kein NDEF Tag");
+              setState(() => _statusText = "✗ Kein NDEF Tag");
               return;
             }
 
             final ndefMessage = await ndef.read();
             if (ndefMessage == null || ndefMessage.records.isEmpty) {
               await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Tag ist leer");
+              setState(() => _statusText = "✗ Tag ist leer");
               return;
             }
 
             final payload = ndefMessage.records.first.payload;
             if (payload.isEmpty) {
               await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Payload leer");
+              setState(() => _statusText = "✗ Payload leer");
               return;
             }
 
@@ -107,7 +107,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
             final textStart = 1 + languageCodeLength;
             if (payload.length <= textStart) {
               await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Ungültiges Format");
+              setState(() => _statusText = "✗ Ungültiges Format");
               return;
             }
 
@@ -121,7 +121,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               final result = BadgeSecurity.verify(tagData);
               if (!result.isValid) {
                 setState(() {
-                  _statusText = "❌ ${result.message}";
+                  _statusText = "✗ ${result.message}";
                   _success = false;
                 });
                 return;
@@ -137,16 +137,16 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
             } catch (e) {
               await NfcManager.instance.stopSession();
-              setState(() => _statusText = "❌ Ungültiger Tag: $e");
+              setState(() => _statusText = "✗ Ungültiger Tag: $e");
             }
           } catch (e) {
             await NfcManager.instance.stopSession();
-            setState(() => _statusText = "❌ Lesefehler: $e");
+            setState(() => _statusText = "✗ Lesefehler: $e");
           }
         },
       );
     } catch (e) {
-      setState(() => _statusText = "❌ NFC Fehler: $e");
+      setState(() => _statusText = "✗ NFC Fehler: $e");
     }
   }
 
@@ -166,7 +166,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         final nonceResult = RollingQRService.validateNonce(result);
         if (!nonceResult.isValid) {
           setState(() {
-            _statusText = "❌ QR-Code abgelaufen!\n${nonceResult.message}\n\nBitte direkt am Bildschirm des Organisators scannen.";
+            _statusText = "✗ QR-Code abgelaufen!\n${nonceResult.message}\n\nBitte direkt am Bildschirm des Organisators scannen.";
             _success = false;
           });
           return;
@@ -187,7 +187,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       final verifyResult = BadgeSecurity.verify(dataToVerify);
       if (!verifyResult.isValid) {
         setState(() {
-          _statusText = "❌ ${verifyResult.message}";
+          _statusText = "✗ ${verifyResult.message}";
           _success = false;
         });
         return;
@@ -261,17 +261,17 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
           isKnownAdmin = adminResult.isAdmin;
           if (isKnownAdmin) {
             final adminName = adminResult.name ?? adminResult.meetup ?? 'Verifizierter Admin';
-            adminCheckInfo = '✅ Bekannter Organisator: $adminName';
+            adminCheckInfo = '✓ Bekannter Organisator: $adminName';
           } else {
-            adminCheckInfo = '❌ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.';
+            adminCheckInfo = '✗ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.';
           }
         } catch (e) {
           // Offline: Cache-Miss → Warnung anzeigen
-          adminCheckInfo = '⚠️ Admin-Status konnte nicht geprüft werden (offline?)';
+          adminCheckInfo = '! Admin-Status konnte nicht geprüft werden (offline?)';
         }
       } else if (verifyResult != null && verifyResult.version == 1) {
         // Legacy v1: Shared Secret, per Definition nicht vertrauenswürdig
-        adminCheckInfo = '⚠️ Legacy-Badge (v1) — Signer nicht prüfbar';
+        adminCheckInfo = '! Legacy-Badge (v1) — Signer nicht prüfbar';
       }
 
       // Originalen signierten Content für Re-Verifikation
@@ -298,10 +298,12 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
       await MeetupBadge.saveBadges(myBadges);
 
-      msg = "🎉 BADGE GESAMMELT!\n\n📍 $fullName";
-      if (currentBlockHeight > 0) msg += "\n⛓️ Block: $currentBlockHeight";
-      if (tagData['_verified_by'] != null) msg += "\n🔐 Signiert von: ${tagData['_verified_by']}";
-      if (sigVersion == 2) msg += "\n✅ Schnorr-Beweis gespeichert";
+      // --- NEUES, CLEANES STRING FORMAT ---
+      msg = "BADGE GESAMMELT!\n\n";
+      msg += "Ort: $fullName\n";
+      if (currentBlockHeight > 0) msg += "Block: $currentBlockHeight\n";
+      if (tagData['_verified_by'] != null) msg += "Signiert von: ${tagData['_verified_by']}\n";
+      if (sigVersion == 2) msg += "Beweis: Schnorr (BIP-340)";
 
       // Admin-Registry Ergebnis anzeigen
       if (adminCheckInfo.isNotEmpty) {
@@ -310,7 +312,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
       // Ablauf-Info anzeigen
       final expiryStr = BadgeSecurity.expiryInfo(tagData);
-      if (expiryStr != 'Kein Ablauf') msg += "\n⏱️ Tag: $expiryStr";
+      if (expiryStr != 'Kein Ablauf') msg += "\n\nTag-Ablauf: $expiryStr";
 
       // Flag setzen für UI (Farbe des Icons)
       if (!isKnownAdmin && verifyResult != null && verifyResult.version >= 2 && adminPubkey.isNotEmpty) {
@@ -318,7 +320,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
 
     } else {
-      msg = "✅ Badge bereits gesammelt\n\n📍 $fullName";
+      msg = "Badge bereits gesammelt!\n\nOrt: $fullName";
     }
 
     setState(() {
@@ -326,7 +328,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       _statusText = msg;
     });
 
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 4));
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -342,7 +344,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       'v': 2,
       't': 'B',
       'm': 'sim-meetup-de',
-      'b': 0,
+      'b': 850000, // Echte Blockzahl für Simulation eingefügt
       'x': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 21600,
       'delivery': 'nfc',
     };
@@ -365,15 +367,48 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Icon-Farbe abhängig vom Signer-Status
+                    // Icon bleibt mittig und prominent
                     Icon(
                       _isUnknownSigner ? Icons.warning_amber_rounded : Icons.check_circle,
                       size: 100,
                       color: _isUnknownSigner ? Colors.orange : Colors.green,
                     ),
-                    const SizedBox(height: 20),
-                    Text(_statusText, textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, height: 1.6)),
+                    const SizedBox(height: 30),
+                    
+                    // --- NEUER INFO-BLOCK (Linksbündig, im Card-Design) ---
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: cCard,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: _isUnknownSigner 
+                              ? Colors.orange.withOpacity(0.5) 
+                              : Colors.green.withOpacity(0.5)
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _isUnknownSigner 
+                                ? Colors.orange.withOpacity(0.1) 
+                                : Colors.green.withOpacity(0.1),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          )
+                        ]
+                      ),
+                      child: Text(
+                        _statusText, 
+                        textAlign: TextAlign.left, // Linksbündig!
+                        style: const TextStyle(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 15, 
+                          height: 1.6, // Zeilenabstand für bessere Lesbarkeit
+                          letterSpacing: 0.3,
+                        )
+                      ),
+                    ),
                   ],
                 ),
               )

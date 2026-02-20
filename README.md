@@ -405,4 +405,6 @@ Credits
 
     Flutter — Cross-Platform Framework
 
-Made with 🧡 for the Bitcoin Community
+---
+
+**Made with 🧡 for the Bitcoin Community**

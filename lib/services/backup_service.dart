@@ -5,34 +5,111 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as enc; // Das neue Verschlüsselungspaket
 import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
 import 'secure_key_store.dart';
+import 'dart:typed_data';
 
 class BackupService {
+  // --- HILFSFUNKTIONEN FÜR VERSCHLÜSSELUNG ---
+
+  /// Leitet aus dem Nutzerpasswort einen 32-Byte (256 Bit) AES-Schlüssel ab.
+  static enc.Key _deriveKey(String password) {
+    // SHA-256 erzeugt immer genau 32 Bytes
+    final bytes = utf8.encode(password);
+    final digest = sha256.convert(bytes);
+    return enc.Key(Uint8List.fromList(digest.bytes));
+  }
+
+  /// Zeigt den Dialog zur Passwort-Eingabe (für Export und Import)
+  static Future<String?> _promptForPassword(BuildContext context, {required bool isExport}) async {
+    String password = '';
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(
+          isExport ? 'Backup verschlüsseln' : 'Backup entschlüsseln',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isExport 
+                  ? 'Vergib ein Passwort, um deinen privaten Schlüssel (nsec) im Backup zu schützen. Wenn du dieses Passwort vergisst, ist das Backup wertlos!'
+                  : 'Dieses Backup ist verschlüsselt. Bitte gib das Passwort ein.',
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Passwort',
+                hintStyle: TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: Color(0xFF0A0A0A),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (val) => password = val,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Abbrechen', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () {
+              if (password.isNotEmpty) {
+                Navigator.pop(context, password);
+              }
+            },
+            child: Text(isExport ? 'Verschlüsseln & Speichern' : 'Entschlüsseln & Laden', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   // --- EXPORT (BACKUP ERSTELLEN) ---
   static Future<void> createBackup(BuildContext context) async {
     try {
+      // 1. Passwort abfragen
+      final password = await _promptForPassword(context, isExport: true);
+      if (password == null) return; // User hat abgebrochen
+
+      // Ladeindikator zeigen
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.orange)),
+        );
+      }
+
       final user = await UserProfile.load();
       final badges = await MeetupBadge.loadBadges();
 
-      // Nostr Keys aus SecureKeyStore laden (nicht mehr aus SharedPreferences)
+      // Nostr Keys aus SecureKeyStore laden
       final nsec = await SecureKeyStore.getNsec();
       final npub = await SecureKeyStore.getNpub();
       final privHex = await SecureKeyStore.getPrivHex();
-
-      // Admin-Registry laden
       final adminList = await AdminRegistry.getAdminList();
 
       Map<String, dynamic> backupData = {
-        'version': 2, // v2: mit Nostr Keys + Admin Registry
+        'version': 3, // v3: AES Encrypted
         'timestamp': DateTime.now().toIso8601String(),
         'app': 'Einundzwanzig Meetup App',
         
-        // User Profil
         'user': {
           'nickname': user.nickname,
           'fullName': user.fullName,
@@ -44,43 +121,54 @@ class BackupService {
           'telegramHandle': user.telegramHandle,
           'twitterHandle': user.twitterHandle,
         },
-
-        // Badges
         'badges': badges.map((b) => {
           'id': b.id,
           'meetupName': b.meetupName,
           'date': b.date.toIso8601String(),
           'blockHeight': b.blockHeight,
         }).toList(),
-
-        // NEU: Nostr Schlüssel
         'nostr': {
           'nsec': nsec ?? '',
           'npub': npub ?? '',
           'priv_hex': privHex ?? '',
           'has_key': nsec != null,
         },
-
-        // NEU: Admin Registry (lokaler Cache)
         'admin_registry': adminList.map((a) => a.toJson()).toList(),
       };
 
       String jsonString = jsonEncode(backupData);
 
+      // --- VERSCHLÜSSELUNG (AES-GCM) ---
+      final key = _deriveKey(password);
+      final iv = enc.IV.fromLength(16); // Initialization Vector
+      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+
+      final encrypted = encrypter.encrypt(jsonString, iv: iv);
+      
+      // Wir speichern das IV zusammen mit dem verschlüsselten Base64 String
+      // Format: "enc_v1:[IV_BASE64]:[CIPHERTEXT_BASE64]"
+      final finalPayload = "enc_v1:${iv.base64}:${encrypted.base64}";
+
+      // Speichern
       final directory = await getTemporaryDirectory();
       String dateStr = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
-      final file = File('${directory.path}/21_backup_$dateStr.json');
-      await file.writeAsString(jsonString);
+      final file = File('${directory.path}/21_backup_$dateStr.21bkp'); // Eigene Endung optional, hier zur Unterscheidung
 
+      await file.writeAsString(finalPayload);
+
+      if (context.mounted) Navigator.pop(context); // Ladeindikator weg
+
+      // Teilen
       await Share.shareXFiles(
         [XFile(file.path)],
-        subject: 'Einundzwanzig App Backup',
-        text: 'Backup enthält deine Nostr-Identität. Sicher aufbewahren!',
+        subject: 'Einundzwanzig App Backup (Verschlüsselt)',
+        text: 'Dein verschlüsseltes Backup. Halte dein Passwort bereit, um es wiederherzustellen.',
       );
 
     } catch (e) {
       print("Backup Fehler: $e");
       if (context.mounted) {
+        Navigator.pop(context); // Ladeindikator weg
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Fehler beim Backup: $e"), backgroundColor: Colors.red),
         );
@@ -92,17 +180,51 @@ class BackupService {
   static Future<bool> restoreBackup(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
+        type: FileType.any, // Erlaubt auch die neue Endung
       );
 
       if (result != null && result.files.single.path != null) {
         File file = File(result.files.single.path!);
         String content = await file.readAsString();
-        Map<String, dynamic> data = jsonDecode(content);
+        
+        String decryptedJson = content;
+
+        // Prüfen, ob es ein verschlüsseltes Backup (v3) ist
+        if (content.startsWith("enc_v1:")) {
+          final password = await _promptForPassword(context, isExport: false);
+          if (password == null) return false; // Abgebrochen
+
+          try {
+            final parts = content.split(':');
+            if (parts.length != 3) throw Exception("Backup-Datei ist beschädigt (Formatfehler).");
+
+            final iv = enc.IV.fromBase64(parts[1]);
+            final cipherText = parts[2];
+
+            final key = _deriveKey(password);
+            final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+
+            decryptedJson = encrypter.decrypt64(cipherText, iv: iv);
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Falsches Passwort oder Datei beschädigt!"), backgroundColor: Colors.red),
+              );
+            }
+            return false;
+          }
+        }
+
+        // --- JSON PARSEN UND VERARBEITEN ---
+        Map<String, dynamic> data;
+        try {
+          data = jsonDecode(decryptedJson);
+        } catch (e) {
+          throw Exception("Datei ist kein gültiges Backup oder das falsche Format.");
+        }
 
         if (!data.containsKey('user') || !data.containsKey('badges')) {
-          throw Exception("Datei ist kein gültiges Backup oder beschädigt.");
+          throw Exception("Datei ist kein gültiges Einundzwanzig Backup.");
         }
 
         final int version = data['version'] ?? 1;
@@ -136,7 +258,7 @@ class BackupService {
         }
         await MeetupBadge.saveBadges(restoredBadges);
 
-        // --- v2: NOSTR KEYS WIEDERHERSTELLEN ---
+        // --- NOSTR KEYS WIEDERHERSTELLEN ---
         if (version >= 2 && data['nostr'] != null) {
           final nostrData = data['nostr'] as Map<String, dynamic>;
           final hasKey = nostrData['has_key'] ?? false;
@@ -147,14 +269,12 @@ class BackupService {
             final privHex = nostrData['priv_hex'] ?? '';
 
             if (nsec.isNotEmpty && npub.isNotEmpty && privHex.isNotEmpty) {
-              // In SecureKeyStore speichern (nicht mehr in SharedPreferences)
               await SecureKeyStore.saveKeys(
                 nsec: nsec,
                 npub: npub,
                 privHex: privHex,
               );
 
-              // npub auch im User-Profil aktualisieren
               user.nostrNpub = npub;
               user.isNostrVerified = true;
               user.hasNostrKey = true;
@@ -163,7 +283,7 @@ class BackupService {
           }
         }
 
-        // --- v2: ADMIN REGISTRY WIEDERHERSTELLEN ---
+        // --- ADMIN REGISTRY WIEDERHERSTELLEN ---
         if (version >= 2 && data['admin_registry'] != null) {
           final registryList = data['admin_registry'] as List<dynamic>;
           for (var adminJson in registryList) {
@@ -183,8 +303,8 @@ class BackupService {
             SnackBar(
               content: Text(
                 hasNostr
-                    ? "✅ Backup eingespielt! Nostr-Key wiederhergestellt."
-                    : "✅ Backup eingespielt!",
+                    ? "✅ Verschlüsseltes Backup geladen! Nostr-Key wiederhergestellt."
+                    : "✅ Backup erfolgreich eingespielt!",
               ),
               backgroundColor: Colors.green,
             ),

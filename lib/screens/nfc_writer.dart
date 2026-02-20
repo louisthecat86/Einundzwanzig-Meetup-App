@@ -25,8 +25,9 @@ import '../models/user.dart';
 import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/badge_security.dart';
-import '../services/nostr_service.dart';
-import '../services/mempool.dart';
+import '../services/rolling_qr_service.dart';
+// NEU: Import für den QR-Screen, um nach Erfolg dorthin zu springen
+import 'rolling_qr_screen.dart';
 
 class NFCWriterScreen extends StatefulWidget {
   const NFCWriterScreen({super.key});
@@ -41,6 +42,9 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   Meetup? _homeMeetup;
   String _meetupInfo = "";
   int _payloadSize = 0;
+  
+  // THE FIX: Sperre, damit das Handy nicht mehrfach schreibt/vibriert
+  bool _isProcessingTag = false; 
   
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -103,41 +107,17 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
 
     setState(() {
-      _statusText = "Berechne Signatur...";
+      _statusText = "Lade Session-Daten...";
       _success = false;
+      _isProcessingTag = false; // Reset lock
     });
 
-    // Block Height holen
-    int blockHeight = 0;
-    try {
-      blockHeight = await MempoolService.getBlockHeight();
-    } catch (e) {
-      print("Mempool Fehler: $e");
-    }
-
-    // Kompakte Meetup-ID: "aschaffenburg-de"
-    final compactMeetupId = '${_homeMeetup!.city.toLowerCase().replaceAll(' ', '-')}-${_homeMeetup!.country.toLowerCase()}';
-
-    // KOMPAKT-SIGNIERUNG (Schnorr, ~285B)
-    Map<String, dynamic> tagData;
-    final hasNostrKey = await NostrService.hasKey();
-
-    if (hasNostrKey) {
-      try {
-        tagData = await BadgeSecurity.signCompact(
-          meetupId: compactMeetupId,
-          blockHeight: blockHeight,
-          validityHours: BadgeSecurity.badgeValidityHours,
-        );
-        setState(() => _statusText = "🔐 Signatur erstellt...");
-      } catch (e) {
-        // Fallback: Legacy
-        final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
-        tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
-      }
-    } else {
-      final sig = BadgeSecurity.signLegacy(compactMeetupId, DateTime.now().toIso8601String(), blockHeight);
-      tagData = {'v': 1, 't': 'B', 'm': compactMeetupId, 'b': blockHeight, 'sig': sig};
+    // Zentraler Payload Abruf
+    final tagData = await RollingQRService.getBasePayload();
+    
+    if (tagData == null) {
+       setState(() => _statusText = "❌ Keine aktive Meetup-Session gefunden. Bitte starte das Meetup neu.");
+       return;
     }
 
     // NFC verfügbar?
@@ -167,6 +147,10 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
       await NfcManager.instance.startSession(
         pollingOptions: {NfcPollingOption.iso14443, NfcPollingOption.iso15693},
         onDiscovered: (NfcTag tag) async {
+          // Verhindert, dass der Scanner während dem Schreibvorgang neu triggert
+          if (_isProcessingTag) return;
+          _isProcessingTag = true;
+
           try {
             var ndef = Ndef.from(tag);
             
@@ -182,17 +166,20 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                 } catch (e) {
                   await NfcManager.instance.stopSession();
                   _handleErrorInUI("Formatierung fehlgeschlagen");
+                  _isProcessingTag = false;
                   return;
                 }
               }
               await NfcManager.instance.stopSession();
               _handleErrorInUI("Kein NDEF Format möglich");
+              _isProcessingTag = false;
               return;
             }
 
             if (!ndef.isWritable) {
               await NfcManager.instance.stopSession();
               _handleErrorInUI("Tag ist schreibgeschützt");
+              _isProcessingTag = false;
               return;
             }
 
@@ -204,6 +191,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
                 "Tag zu klein! Daten: ${actualSize}B, Tag: ${maxSize}B.\n"
                 "Verwende einen NTAG215 (504B) oder größer."
               );
+              _isProcessingTag = false;
               return;
             }
 
@@ -222,11 +210,15 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             } else {
               _handleErrorInUI(errorMsg);
             }
+            _isProcessingTag = false;
           }
         },
       );
     } catch (e) {
-      setState(() => _statusText = "❌ Start Fehler: $e");
+      setState(() {
+        _statusText = "❌ Start Fehler: $e";
+        _isProcessingTag = false;
+      });
     }
   }
 
@@ -236,15 +228,19 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     setState(() {
       _success = true;
       _statusText = "✅ MEETUP TAG geschrieben!\n\n"
-          "📍 ${_homeMeetup?.city}\n"
           "📦 ${dataSize}B (kompakt)\n"
           "⏱️ Gültig für ${expiresIn}h\n\n"
-          "Teilnehmer können jetzt Badges scannen.\n"
-          "Tag kann danach überschrieben werden.";
+          "Springe zum QR-Code...";
     });
     
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) Navigator.pop(context);
+    // THE FIX: Automatischer Sprung zum QR-Code Screen
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const RollingQRScreen()),
+        );
+      }
     });
   }
 
@@ -256,7 +252,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
   Future<void> _simulateWriteTag() async {
     setState(() => _statusText = "Schreibe Tag... (SIM)");
     await Future.delayed(const Duration(seconds: 2));
-    _handleSuccessInUI(285);
+    _handleSuccessInUI(_payloadSize > 10 ? _payloadSize - 10 : 285);
   }
 
   @override

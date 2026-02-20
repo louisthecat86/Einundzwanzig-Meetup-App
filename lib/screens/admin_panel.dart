@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
-import 'nfc_writer.dart';
+import '../services/rolling_qr_service.dart'; // Import für den zentralen Session-Manager
 import 'admin_management.dart';
-import 'rolling_qr_screen.dart';
+import 'meetup_session_wizard.dart'; // Der Wizard für den Ablauf
+import 'rolling_qr_screen.dart'; // NEU: Import für den direkten Sprung zum QR Code
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -19,10 +22,22 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   String _adminNpub = '';
   String _promotionSource = '';
 
+  // --- Session State ---
+  DateTime? _sessionExpiry;
+  Timer? _countdownTimer;
+  String _timeLeft = "";
+
   @override
   void initState() {
     super.initState();
     _loadAdminInfo();
+    _checkSession();
+  }
+
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
   }
 
   void _loadAdminInfo() async {
@@ -37,8 +52,102 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
+  // Prüft, ob noch eine 6-Stunden Session läuft
+  Future<void> _checkSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // THE FIX: Korrekter Abruf als int (Unix Timestamp)
+    final int? expiryUnix = prefs.getInt('rqr_session_expires');
+
+    if (expiryUnix != null) {
+      final expiry = DateTime.fromMillisecondsSinceEpoch(expiryUnix * 1000);
+      if (DateTime.now().isBefore(expiry)) {
+        setState(() {
+          _sessionExpiry = expiry;
+        });
+        _startTimer();
+      } else {
+        // Session ist abgelaufen
+        await RollingQRService.endSession();
+        setState(() {
+          _sessionExpiry = null;
+        });
+      }
+    } else {
+      setState(() {
+        _sessionExpiry = null;
+      });
+    }
+  }
+
+  void _startTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_sessionExpiry != null) {
+        final diff = _sessionExpiry!.difference(DateTime.now());
+        if (diff.isNegative) {
+          _checkSession(); // Timer beenden und UI resetten
+        } else {
+          if (mounted) {
+            setState(() {
+              _timeLeft = "${diff.inHours}h ${(diff.inMinutes % 60).toString().padLeft(2, '0')}m ${(diff.inSeconds % 60).toString().padLeft(2, '0')}s";
+            });
+          }
+        }
+      }
+    });
+  }
+
+  // Startet eine brandneue 6-Stunden Session
+  Future<void> _startNewSession() async {
+    final user = await UserProfile.load();
+    final meetupId = user.homeMeetupId.isNotEmpty ? user.homeMeetupId : 'unknown-meetup';
+    final compactId = meetupId.toLowerCase().replaceAll(' ', '-');
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: cOrange))
+    );
+
+    try {
+      await RollingQRService.getOrCreateSession(
+          meetupId: compactId, 
+          meetupName: meetupId, 
+          meetupCountry: '', 
+          blockHeight: 0
+      );
+      
+      if (mounted) {
+        Navigator.pop(context); // Lade-Dialog schließen
+        _checkSession(); // Timer und UI updaten
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MeetupSessionWizard()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Lade-Dialog schließen
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  // Bricht die Session manuell ab (z.B. Meetup früher beendet)
+  Future<void> _endSessionEarly() async {
+    await RollingQRService.endSession();
+    _countdownTimer?.cancel();
+    setState(() {
+      _sessionExpiry = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isSessionActive = _sessionExpiry != null;
+
     return Scaffold(
       backgroundColor: cDark,
       appBar: AppBar(title: const Text("ORGANISATOR")),
@@ -74,11 +183,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Erstelle NFC Tags und Rolling QR-Codes für dein Meetup. "
-                    "Teilnehmer scannen diese um Badges zu sammeln.",
+                    "Erstelle NFC Tags und Rolling QR-Codes für dein Meetup. Teilnehmer scannen diese, um Badges zu sammeln.",
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  // Status-Badges
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -106,39 +213,108 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ),
             
             const SizedBox(height: 32),
-            
-            // NFC Tag erstellen
-            _buildAdminTile(
-              context: context,
-              icon: Icons.nfc,
-              color: cOrange,
-              title: "NFC TAG ERSTELLEN",
-              subtitle: "NFC-Tag auf den Tisch legen, Teilnehmer halten Handy dran",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NFCWriterScreen()),
-                );
-              },
-            ),
-            
-            const SizedBox(height: 16),
 
-            // Rolling QR-Code
-            _buildAdminTile(
-              context: context,
-              icon: Icons.qr_code_2,
-              color: cOrange,
-              title: "ROLLING QR-CODE",
-              subtitle: "QR-Code auf dem Handy anzeigen, ändert sich alle 30 Sekunden",
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const RollingQRScreen()),
-                );
-              },
+            // --- UNIFIED SESSION CONTROLLER ---
+            Text(
+              "MEETUP SESSION",
+              style: TextStyle(color: cOrange, fontWeight: FontWeight.bold, letterSpacing: 1.2),
             ),
+            const SizedBox(height: 12),
 
+            if (isSessionActive) ...[
+              // ACTIVE SESSION UI
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.green.withOpacity(0.5), width: 1.5),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
+                    const SizedBox(height: 12),
+                    const Text(
+                      "SESSION LÄUFT",
+                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Endet in $_timeLeft",
+                      style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 16),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          // THE FIX: Direkter Sprung zum QR Code!
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const RollingQRScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text("AKTIVES MEETUP ÖFFNEN", style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () async {
+                        bool? confirm = await showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: cCard,
+                            title: const Text("Session beenden?", style: TextStyle(color: Colors.white)),
+                            content: const Text("Damit sperrst du die aktuelle Blockzeit. Du kannst danach eine neue Session starten.", style: TextStyle(color: Colors.grey)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
+                              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Beenden", style: TextStyle(color: Colors.red))),
+                            ],
+                          )
+                        );
+                        if (confirm == true) _endSessionEarly();
+                      },
+                      child: const Text("Meetup vorzeitig beenden", style: TextStyle(color: Colors.redAccent)),
+                    )
+                  ],
+                ),
+              ),
+            ] else ...[
+              // INACTIVE SESSION UI
+              _buildAdminTile(
+                context: context,
+                icon: Icons.power_settings_new,
+                color: cOrange,
+                title: "MEETUP STARTEN",
+                subtitle: "Generiert einen neuen kryptographischen Beweis für die nächsten 6 Stunden.",
+                onTap: () async {
+                  bool? confirm = await showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: cCard,
+                      title: const Text("Neues Meetup starten?", style: TextStyle(color: Colors.white)),
+                      content: const Text("Dies erstellt eine eindeutige Signatur (Blockzeit) für die nächsten 6 Stunden. In dieser Zeit ist die Erstellung neuer Sessions gesperrt.", style: TextStyle(color: Colors.grey)),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black),
+                          onPressed: () => Navigator.pop(context, true), 
+                          child: const Text("Starten")
+                        ),
+                      ],
+                    )
+                  );
+                  if (confirm == true) _startNewSession();
+                },
+              ),
+            ],
+            
             // Admin-Verwaltung (nur Super-Admin)
             if (_isSuperAdmin) ...[
               const SizedBox(height: 32),
@@ -176,7 +352,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 },
               ),
             ],
-
             const SizedBox(height: 32),
             
             // Info Box
@@ -197,8 +372,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   ]),
                   const SizedBox(height: 12),
                   Text(
-                    "1. Erstelle einen NFC Tag oder starte den Rolling QR-Code\n"
-                    "2. Teilnehmer scannen mit ihrer App\n"
+                    "1. Starte ein neues Meetup (Session).\n"
+                    "2. Beschreibe danach NFC Tags oder zeige den QR-Code.\n"
                     "3. Jeder Scan = ein Badge für den Teilnehmer\n"
                     "4. Badges bauen Reputation auf → mehr Reputation = neue Organisatoren",
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.6, color: cTextSecondary),

@@ -1,16 +1,13 @@
 // ============================================
-// ROLLING QR SCREEN v2 — SESSION + ROLLING
+// ROLLING QR SCREEN v3 — UNIFIED SESSION
 // ============================================
 //
-// Organisator-Workflow:
-//   1. "Session starten" → 6h Session wird erstellt
-//   2. QR rollt alle 10 Sekunden (Anti-Screenshot)
-//   3. App schließen + öffnen → Session läuft weiter
-//   4. Nachzügler nach 1h → scannt den aktuellen QR → OK
-//   5. Nach 6h → "Session abgelaufen" → neue Session starten
+// Dieser Screen generiert KEINE eigene Session mehr.
+// Er setzt voraus, dass über den AdminPanelScreen
+// bereits eine Session gestartet wurde.
 //
 // Der QR enthält:
-//   - Badge-Daten (kompakt, Schnorr-signiert)
+//   - Badge-Daten (kompakt, EINMALIG Schnorr-signiert)
 //   - Rolling Nonce (10s gültig, Screenshot = wertlos)
 //   - Session-Ablauf (6h)
 //
@@ -24,7 +21,6 @@ import '../models/user.dart';
 import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/rolling_qr_service.dart';
-import '../services/mempool.dart';
 import '../services/nostr_service.dart';
 
 class RollingQRScreen extends StatefulWidget {
@@ -88,58 +84,36 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
     if (meetups.isEmpty) meetups = allMeetups;
     final meetup = meetups.where((m) => m.city == user.homeMeetupId).firstOrNull;
 
-    try {
-      _blockHeight = await MempoolService.getBlockHeight();
-    } catch (e) {
-      print('[RollingQR] Mempool Fehler: $e');
-    }
-
     setState(() {
       _homeMeetup = meetup;
       _meetupInfo = meetup != null ? "📍 ${meetup.city}, ${meetup.country}" : "⚠️ Meetup nicht gefunden";
       _adminNpub = npub ?? '';
-      _isLoading = false;
     });
 
-    // Bestehende Session prüfen
+    // Wir prüfen nur noch auf eine bestehende Session, starten aber keine neue!
     await _checkExistingSession();
   }
 
-  /// Prüft ob eine laufende Session existiert und setzt sie fort
+  /// Prüft ob eine laufende Session existiert
   Future<void> _checkExistingSession() async {
     final session = await RollingQRService.loadSession();
+    
     if (session != null && !session.isExpired) {
       setState(() {
         _session = session;
+        _blockHeight = session.blockHeight;
         _isActive = true;
+        _isLoading = false;
       });
       _startTimers();
       await _refreshQR();
+    } else {
+      // Keine aktive Session gefunden!
+      setState(() {
+        _isActive = false;
+        _isLoading = false;
+      });
     }
-  }
-
-  /// Neue Session starten
-  Future<void> _startNewSession() async {
-    if (_homeMeetup == null) return;
-
-    final compactId = '${_homeMeetup!.city.toLowerCase().replaceAll(' ', '-')}-${_homeMeetup!.country.toLowerCase()}';
-
-    final session = await RollingQRService.getOrCreateSession(
-      meetupId: compactId,
-      meetupName: _homeMeetup!.city,
-      meetupCountry: _homeMeetup!.country,
-      blockHeight: _blockHeight,
-    );
-
-    if (session == null) return;
-
-    setState(() {
-      _session = session;
-      _isActive = true;
-    });
-
-    _startTimers();
-    await _refreshQR();
   }
 
   /// Rolling fortsetzen (nach App-Resume)
@@ -153,7 +127,7 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
   void _startTimers() {
     // QR alle 10 Sekunden neu
     _refreshTimer = Timer.periodic(
-      Duration(seconds: RollingQRService.intervalSeconds),
+      const Duration(seconds: RollingQRService.intervalSeconds),
       (_) => _refreshQR(),
     );
 
@@ -165,7 +139,7 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
 
         // Session abgelaufen?
         if (_session != null && _session!.isExpired) {
-          _stopSession();
+          _stopSessionUIOnly();
           return;
         }
 
@@ -192,16 +166,27 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
     }
   }
 
-  Future<void> _stopSession() async {
+  // Beendet nur die QR-Anzeige, falls die 6h abgelaufen sind
+  Future<void> _stopSessionUIOnly() async {
     _refreshTimer?.cancel();
     _countdownTimer?.cancel();
-    await RollingQRService.endSession();
     if (mounted) {
       setState(() {
         _isActive = false;
         _session = null;
         _qrData = '';
       });
+    }
+  }
+
+  // Beendet die Session manuell (Löscht sie auch aus SharedPreferences)
+  Future<void> _stopSession() async {
+    _refreshTimer?.cancel();
+    _countdownTimer?.cancel();
+    await RollingQRService.endSession();
+    if (mounted) {
+      // Gehe zurück ins Admin Panel, da die Session beendet wurde
+      Navigator.pop(context);
     }
   }
 
@@ -213,8 +198,7 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
         title: const Text("Session beenden?", style: TextStyle(color: Colors.white)),
         content: Text(
           "Restzeit: ${_session?.remainingTimeString ?? '-'}\n\n"
-          "Eine beendete Session kann nicht fortgesetzt werden. "
-          "Du kannst danach eine neue starten.",
+          "Eine beendete Session sperrt diese Blockzeit. Du kannst danach eine neue Session starten.",
           style: const TextStyle(color: Colors.grey),
         ),
         actions: [
@@ -258,11 +242,11 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
           ? const Center(child: CircularProgressIndicator(color: cOrange))
           : _isActive
               ? _buildActiveQR()
-              : _buildStartScreen(),
+              : _buildNoSessionScreen(),
     );
   }
 
-  Widget _buildStartScreen() {
+  Widget _buildNoSessionScreen() {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(30),
@@ -273,77 +257,33 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: cOrange, width: 3),
+                border: Border.all(color: Colors.redAccent, width: 3),
               ),
-              child: const Icon(Icons.qr_code_2, size: 80, color: cOrange),
+              child: const Icon(Icons.error_outline, size: 80, color: Colors.redAccent),
             ),
             const SizedBox(height: 30),
-            const Text("MEETUP QR-CODE",
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const Text("KEINE AKTIVE SESSION",
+              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
             const SizedBox(height: 16),
-            Text(_meetupInfo, style: const TextStyle(color: cOrange, fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 24),
-
-            // Feature-Erklärung
-            Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: cCard,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("So funktioniert's:",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 12),
-                  _featureRow(Icons.timer, "6 Stunden gültig", "Session überlebt App-Neustart"),
-                  const SizedBox(height: 8),
-                  _featureRow(Icons.refresh, "Rollt alle 10 Sekunden", "Screenshots sind sofort wertlos"),
-                  const SizedBox(height: 8),
-                  _featureRow(Icons.lock, "Schnorr-signiert", "Unfälschbar, kryptographisch sicher"),
-                  const SizedBox(height: 8),
-                  _featureRow(Icons.group, "Beliebig viele Scans", "Alle Teilnehmer können scannen"),
-                ],
+            const Text(
+              "Es läuft aktuell keine Meetup-Session.\nBitte starte das Meetup im Admin Panel neu.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 16, height: 1.5)
+            ),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black),
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text("ZURÜCK ZUM ADMIN PANEL", style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
-            const SizedBox(height: 30),
-
-            if (_homeMeetup != null)
-              SizedBox(
-                width: 280, height: 60,
-                child: ElevatedButton.icon(
-                  onPressed: _startNewSession,
-                  icon: const Icon(Icons.play_arrow, color: Colors.white, size: 28),
-                  label: const Text("SESSION STARTEN (6h)",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  style: ElevatedButton.styleFrom(backgroundColor: cOrange),
-                ),
-              ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _featureRow(IconData icon, String title, String subtitle) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: cOrange, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-              Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
