@@ -2,26 +2,10 @@
 // SECURE QR SCANNER v3 — ECHTE SCHNORR-VERIFIKATION
 // ============================================
 //
-// VORHER (v2): signatureOnQr.length == 128 → "valid"
-//   → JEDE 128-Zeichen-Zeichenkette wurde akzeptiert!
-//   → Komplett nutzlos, jeder konnte einen "gültigen" QR fälschen
-//
-// JETZT (v3): Nostr-Event wird rekonstruiert → event.isValid()
+// v3: Nostr-Event wird rekonstruiert → event.isValid()
 //   → Echte BIP-340 Schnorr-Signatur-Verifikation
-//   → Mathematisch beweisbar: Nur wer den Private Key hat
-//     konnte diesen QR signieren
 //
-// Das QR-Format v3 enthält:
-//   "21v3:BASE64.SIGNATURE.EVENTID.CREATEDAT.PUBKEY"
-//
-//   → BASE64: Die Payload-Daten (Identität + Reputation + Proof)
-//   → SIGNATURE: 128-hex Schnorr-Signatur
-//   → EVENTID: 64-hex SHA-256 Event-ID
-//   → CREATEDAT: Unix-Timestamp der Signierung
-//   → PUBKEY: 64-hex Public Key des Signers
-//
-// Der Scanner rekonstruiert das exakte Nostr-Event und
-// verifiziert die Schnorr-Signatur kryptographisch.
+// Format: "21v3:BASE64.SIGNATURE.EVENTID.CREATEDAT.PUBKEY"
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -55,26 +39,21 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 
   void _verifyAndShow(String fullCode) {
     try {
-      // Version erkennen
       final bool isV3 = fullCode.startsWith("21v3:");
       final bool isV2 = fullCode.startsWith("21v2:");
       
-      // Prefix entfernen
       String cleanCode;
       if (isV3) {
-        cleanCode = fullCode.substring(5); // "21v3:" = 5
+        cleanCode = fullCode.substring(5);
       } else if (isV2) {
-        cleanCode = fullCode.substring(5); // "21v2:" = 5
+        cleanCode = fullCode.substring(5);
       } else {
-        cleanCode = fullCode.substring(3); // "21:" = 3
+        cleanCode = fullCode.substring(3);
       }
 
       final parts = cleanCode.split('.');
 
-      // ==============================================
       // v3: ECHTE SCHNORR-VERIFIKATION
-      // Format: BASE64.SIG.EVENTID.CREATEDAT.PUBKEY
-      // ==============================================
       if (isV3 && parts.length >= 5) {
         final dataBase64 = parts[0];
         final signature = parts[1];
@@ -82,10 +61,8 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         final createdAt = int.tryParse(parts[3]) ?? 0;
         final pubkeyHex = parts[4];
 
-        // Daten decodieren
         final jsonString = utf8.decode(base64.decode(dataBase64));
 
-        // ECHTE Schnorr-Verifikation!
         final result = BadgeSecurity.verifyQRv3(
           jsonData: jsonString,
           signature: signature,
@@ -98,18 +75,12 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           final data = jsonDecode(jsonString);
           _showV3Result(data, signerNpub: result.signerNpub, verifyMessage: result.message);
         } else {
-          _showFailed(
-            title: "SIGNATUR UNGÜLTIG",
-            subtitle: result.message,
-          );
+          _showFailed(title: "SIGNATUR UNGÜLTIG", subtitle: result.message);
         }
         return;
       }
 
-      // ==============================================
-      // v2: Legacy mit Pubkey (STRENG prüfen)
-      // Format: BASE64.SIG.PUBKEY
-      // ==============================================
+      // v2: Legacy mit Pubkey
       if (isV2 && parts.length >= 3) {
         final dataBase64 = parts[0];
         final signature = parts[1];
@@ -126,19 +97,12 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           final data = jsonDecode(jsonString);
           _showV2Result(data, signerNpub: result.signerNpub);
         } else {
-          // v2 ohne Event-Metadaten kann NICHT vollständig verifiziert werden
-          _showFailed(
-            title: "NICHT VERIFIZIERBAR",
-            subtitle: result.message,
-          );
+          _showFailed(title: "NICHT VERIFIZIERBAR", subtitle: result.message);
         }
         return;
       }
 
-      // ==============================================
       // v1: Legacy HMAC
-      // Format: BASE64.SIG
-      // ==============================================
       if (parts.length >= 2) {
         final dataBase64 = parts[0];
         final signature = parts[1];
@@ -165,9 +129,6 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
     }
   }
 
-  // ==============================================
-  // v3 RESULT: Volle Reputation mit Badge-Proof
-  // ==============================================
   void _showV3Result(Map<String, dynamic> data, {required String signerNpub, required String verifyMessage}) {
     final id = data['id'] as Map<String, dynamic>? ?? {};
     final rp = data['rp'] as Map<String, dynamic>? ?? {};
@@ -180,14 +141,11 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 
     Navigator.pushReplacement(context, MaterialPageRoute(
       builder: (context) => _VerificationResultScreen(
-        isValid: true,
-        version: 3,
-        title: "VERIFIZIERT ✓",
+        isValid: true, version: 3,
+        title: "VERIFIZIERT",
         subtitle: verifyMessage,
-        identity: id,
-        hasIdentity: hasRealIdentity,
+        identity: id, hasIdentity: hasRealIdentity,
         signerNpub: signerNpub,
-        // Reputation
         trustLevel: rp['lv'] as String? ?? '',
         trustScore: (rp['sc'] as num?)?.toDouble() ?? 0,
         badgeCount: rp['bc'] as int? ?? 0,
@@ -196,7 +154,6 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         signerCount: rp['si'] as int? ?? 0,
         accountAgeDays: rp['ad'] as int? ?? 0,
         meetupList: (rp['ml'] as List?)?.cast<String>() ?? [],
-        // Proof
         badgeProof: pf['bp'] as String? ?? '',
         proofTotalCount: pf['tc'] as int? ?? 0,
         proofVerifiedCount: pf['vc'] as int? ?? 0,
@@ -204,9 +161,6 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
     ));
   }
 
-  // ==============================================
-  // v2 RESULT: Identity-bound (ohne Proof)
-  // ==============================================
   void _showV2Result(Map<String, dynamic> data, {String? signerNpub}) {
     final id = data['id'] as Map<String, dynamic>? ?? {};
     final bool hasRealIdentity =
@@ -216,12 +170,10 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 
     Navigator.pushReplacement(context, MaterialPageRoute(
       builder: (context) => _VerificationResultScreen(
-        isValid: true,
-        version: 2,
+        isValid: true, version: 2,
         title: "VERIFIZIERT (v2)",
         subtitle: "Legacy-Signatur gültig — kein Badge-Proof",
-        identity: id,
-        hasIdentity: hasRealIdentity,
+        identity: id, hasIdentity: hasRealIdentity,
         signerNpub: signerNpub,
         badgeCount: data['c'] as int? ?? 0,
         meetupCount: data['m'] as int? ?? 0,
@@ -229,16 +181,12 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
     ));
   }
 
-  // ==============================================
-  // v1 RESULT: Legacy (kein Identity-Binding)
-  // ==============================================
   void _showV1Result(Map<String, dynamic> data) {
     Navigator.pushReplacement(context, MaterialPageRoute(
       builder: (context) => _VerificationResultScreen(
-        isValid: true,
-        version: 1,
+        isValid: true, version: 1,
         title: "VERIFIZIERT (v1)",
-        subtitle: "Älteres Format — keine Identitätsbindung, kein Badge-Proof",
+        subtitle: "Älteres Format — keine Identitätsbindung",
         identity: {'n': data['u'] ?? 'Anon'},
         hasIdentity: false,
         badgeCount: data['c'] as int? ?? 0,
@@ -278,7 +226,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
 }
 
 // ============================================================
-// VERIFIZIERUNGS-ERGEBNIS SCREEN (v3 — mit Reputation + Proof)
+// VERIFIZIERUNGS-ERGEBNIS SCREEN
 // ============================================================
 class _VerificationResultScreen extends StatelessWidget {
   final bool isValid;
@@ -288,7 +236,6 @@ class _VerificationResultScreen extends StatelessWidget {
   final Map<String, dynamic>? identity;
   final bool hasIdentity;
   final String? signerNpub;
-  // Reputation (v3)
   final String trustLevel;
   final double trustScore;
   final int badgeCount;
@@ -297,7 +244,6 @@ class _VerificationResultScreen extends StatelessWidget {
   final int signerCount;
   final int accountAgeDays;
   final List<String> meetupList;
-  // Proof (v3)
   final String badgeProof;
   final int proofTotalCount;
   final int proofVerifiedCount;
@@ -323,6 +269,17 @@ class _VerificationResultScreen extends StatelessWidget {
     this.proofVerifiedCount = 0,
   });
 
+  // Icons statt Emojis
+  static IconData _levelIcon(String level) {
+    switch (level) {
+      case 'VETERAN': return Icons.bolt;
+      case 'ETABLIERT': return Icons.shield;
+      case 'AKTIV': return Icons.local_fire_department;
+      case 'STARTER': return Icons.eco;
+      default: return Icons.fiber_new;
+    }
+  }
+
   Color get _levelColor {
     switch (trustLevel) {
       case 'VETERAN': return Colors.amber;
@@ -330,16 +287,6 @@ class _VerificationResultScreen extends StatelessWidget {
       case 'AKTIV': return cCyan;
       case 'STARTER': return cOrange;
       default: return Colors.grey;
-    }
-  }
-
-  String get _levelEmoji {
-    switch (trustLevel) {
-      case 'VETERAN': return '⚡';
-      case 'ETABLIERT': return '🛡️';
-      case 'AKTIV': return '🔥';
-      case 'STARTER': return '🌱';
-      default: return '🆕';
     }
   }
 
@@ -351,28 +298,31 @@ class _VerificationResultScreen extends StatelessWidget {
       backgroundColor: cDark,
       appBar: AppBar(title: const Text("ERGEBNIS")),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         child: Column(children: [
           // STATUS HEADER
           Container(
             width: double.infinity, padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: statusColor.withOpacity(0.5), width: 2),
+              color: statusColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: statusColor.withOpacity(0.4), width: 2),
             ),
             child: Column(children: [
-              Icon(isValid ? Icons.verified : Icons.gpp_bad, color: statusColor, size: 64),
-              const SizedBox(height: 16),
-              Text(title, style: TextStyle(color: statusColor, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
+              Icon(isValid ? Icons.verified : Icons.gpp_bad, color: statusColor, size: 56),
+              const SizedBox(height: 14),
+              Text(title, style: TextStyle(color: statusColor, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 6),
+              Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12), textAlign: TextAlign.center),
               if (version > 0) ...[
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(20)),
-                  child: Text("Protokoll v$version${version == 3 ? ' (Schnorr)' : version == 2 ? ' (Legacy+ID)' : ' (Legacy)'}",
-                    style: const TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'monospace')),
+                  child: Text(
+                    "Protokoll v$version${version == 3 ? ' · Schnorr' : version == 2 ? ' · Legacy+ID' : ' · Legacy'}",
+                    style: const TextStyle(color: Colors.white30, fontSize: 11, fontFamily: 'monospace'),
+                  ),
                 ),
               ],
             ]),
@@ -380,23 +330,34 @@ class _VerificationResultScreen extends StatelessWidget {
 
           // TRUST SCORE (v3)
           if (isValid && version >= 3 && trustLevel.isNotEmpty) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Container(
               width: double.infinity, padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16), border: Border.all(color: _levelColor.withOpacity(0.4))),
+              decoration: BoxDecoration(
+                color: cCard, borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _levelColor.withOpacity(0.3)),
+              ),
               child: Column(children: [
-                Text(_levelEmoji, style: const TextStyle(fontSize: 32)),
-                const SizedBox(height: 8),
-                Text(trustLevel, style: TextStyle(color: _levelColor, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                // Icon statt Emoji
+                Container(
+                  width: 48, height: 48,
+                  decoration: BoxDecoration(
+                    color: _levelColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(_levelIcon(trustLevel), color: _levelColor, size: 24),
+                ),
+                const SizedBox(height: 10),
+                Text(trustLevel, style: TextStyle(color: _levelColor, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 2)),
                 const SizedBox(height: 4),
-                Text("Trust Score: ${trustScore.toStringAsFixed(1)}", style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                Text("Score ${trustScore.toStringAsFixed(1)}", style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                 const SizedBox(height: 16),
-                // Stats Grid
+                // Stats
                 Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  _miniStat("Badges", "$badgeCount", cOrange),
-                  _miniStat("Meetups", "$meetupCount", cCyan),
-                  _miniStat("Ersteller", "$signerCount", cPurple),
-                  _miniStat("Tage", "$accountAgeDays", Colors.green),
+                  _miniStat(Icons.military_tech, "$badgeCount", "Badges", cOrange),
+                  _miniStat(Icons.location_on, "$meetupCount", "Meetups", cCyan),
+                  _miniStat(Icons.people_outline, "$signerCount", "Signer", cPurple),
+                  _miniStat(Icons.calendar_today, "$accountAgeDays", "Tage", Colors.green),
                 ]),
               ]),
             ),
@@ -404,44 +365,20 @@ class _VerificationResultScreen extends StatelessWidget {
 
           // BADGE-PROOF (v3)
           if (isValid && version >= 3 && badgeProof.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity, padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: (proofVerifiedCount == proofTotalCount && proofTotalCount > 0)
-                    ? Colors.green.withOpacity(0.08) : Colors.orange.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: (proofVerifiedCount == proofTotalCount && proofTotalCount > 0)
-                    ? Colors.green.withOpacity(0.3) : Colors.orange.withOpacity(0.3)),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.shield, color: proofVerifiedCount == proofTotalCount ? Colors.green : Colors.orange, size: 20),
-                  const SizedBox(width: 8),
-                  Text("BADGE-PROOF", style: TextStyle(
-                    color: proofVerifiedCount == proofTotalCount ? Colors.green : Colors.orange,
-                    fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                ]),
-                const SizedBox(height: 8),
-                Text("$proofVerifiedCount von $proofTotalCount Badges haben einen kryptographischen Beweis (Schnorr-Signatur des Organisators).",
-                  style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
-                const SizedBox(height: 8),
-                Text("Proof: ${badgeProof.substring(0, 16)}...",
-                  style: const TextStyle(color: Colors.white30, fontSize: 10, fontFamily: 'monospace')),
-              ]),
-            ),
+            const SizedBox(height: 14),
+            _buildProofCard(),
           ],
 
           // MEETUP-LISTE (v3)
           if (isValid && meetupList.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Container(
               width: double.infinity, padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: cBorder)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: const [
                   Icon(Icons.location_on, color: cCyan, size: 18), SizedBox(width: 8),
-                  Text("BESUCHTE MEETUPS", style: TextStyle(color: cCyan, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                  Text("BESUCHTE MEETUPS", style: TextStyle(color: cCyan, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)),
                 ]),
                 const SizedBox(height: 12),
                 Wrap(spacing: 8, runSpacing: 8, children: meetupList.map((m) =>
@@ -457,63 +394,17 @@ class _VerificationResultScreen extends StatelessWidget {
 
           // IDENTITÄT
           if (isValid && identity != null) ...[
-            const SizedBox(height: 24),
-            Container(
-              width: double.infinity, padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: hasIdentity ? cPurple.withOpacity(0.5) : Colors.orange.withOpacity(0.5))),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.fingerprint, color: hasIdentity ? cPurple : Colors.orange, size: 20),
-                  const SizedBox(width: 8),
-                  Text(hasIdentity ? "IDENTITÄT" : "KEINE IDENTITÄT",
-                    style: TextStyle(color: hasIdentity ? cPurple : Colors.orange, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1)),
-                ]),
-                const SizedBox(height: 16),
-                _identityLine("Nickname", identity!['n'] ?? 'Anon', Icons.person),
-                if (identity!['np'] != null && identity!['np'].toString().isNotEmpty)
-                  _identityLine("Nostr", identity!['np'], Icons.key, isMono: true),
-                if (identity!['tg'] != null && identity!['tg'].toString().isNotEmpty)
-                  _identityLine("Telegram", "@${identity!['tg']}", Icons.send),
-                if (identity!['tw'] != null && identity!['tw'].toString().isNotEmpty)
-                  _identityLine("Twitter/X", "@${identity!['tw']}", Icons.alternate_email),
-
-                if (!hasIdentity) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: const Text("⚠️ Keine verifizierbare Identität. Die Reputation könnte von jemand anderem stammen.",
-                      style: TextStyle(color: Colors.orange, fontSize: 12, height: 1.4)),
-                  ),
-                ],
-                if (hasIdentity) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text("✅ Prüfe ob die Person Zugang zu den oben genannten Accounts hat.",
-                        style: TextStyle(color: Colors.green, fontSize: 12, height: 1.4)),
-                      if (signerNpub != null && signerNpub!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text("🔐 Signiert von: ${NostrService.shortenNpub(signerNpub!)}",
-                          style: const TextStyle(color: Colors.green, fontSize: 11, fontFamily: 'monospace')),
-                      ],
-                    ]),
-                  ),
-                ],
-              ]),
-            ),
+            const SizedBox(height: 20),
+            _buildIdentityCard(),
           ],
 
-          // Für v1/v2 ohne Reputation: einfache Stats
+          // v1/v2 einfache Stats
           if (isValid && version < 3 && (badgeCount > 0 || meetupCount > 0)) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Row(children: [
-              Expanded(child: _statBox(icon: Icons.military_tech, label: "Badges", value: "$badgeCount", color: cOrange)),
+              Expanded(child: _statBox(Icons.military_tech, "$badgeCount", "Badges", cOrange)),
               const SizedBox(width: 12),
-              Expanded(child: _statBox(icon: Icons.location_on, label: "Meetups", value: "$meetupCount", color: cCyan)),
+              Expanded(child: _statBox(Icons.location_on, "$meetupCount", "Meetups", cCyan)),
             ]),
           ],
 
@@ -531,32 +422,129 @@ class _VerificationResultScreen extends StatelessWidget {
     );
   }
 
-  Widget _miniStat(String label, String value, Color color) {
+  Widget _buildProofCard() {
+    final allVerified = proofVerifiedCount == proofTotalCount && proofTotalCount > 0;
+    final Color c = allVerified ? Colors.green : Colors.orange;
+
+    return Container(
+      width: double.infinity, padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.06), borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.withOpacity(0.25)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(allVerified ? Icons.verified : Icons.shield_outlined, color: c, size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            "$proofVerifiedCount von $proofTotalCount Badges kryptographisch verifiziert",
+            style: TextStyle(color: c, fontWeight: FontWeight.w600, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Proof: ${badgeProof.length > 16 ? '${badgeProof.substring(0, 16)}...' : badgeProof}",
+            style: const TextStyle(color: Colors.white24, fontSize: 10, fontFamily: 'monospace'),
+          ),
+        ])),
+      ]),
+    );
+  }
+
+  Widget _buildIdentityCard() {
+    return Container(
+      width: double.infinity, padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cCard, borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: hasIdentity ? cPurple.withOpacity(0.4) : Colors.orange.withOpacity(0.4)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.fingerprint, color: hasIdentity ? cPurple : Colors.orange, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            hasIdentity ? "IDENTITÄT" : "KEINE IDENTITÄT",
+            style: TextStyle(color: hasIdentity ? cPurple : Colors.orange, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        _idLine("Nickname", identity!['n'] ?? 'Anon', Icons.person),
+        if (identity!['np'] != null && identity!['np'].toString().isNotEmpty)
+          _idLine("Nostr", identity!['np'], Icons.key, mono: true),
+        if (identity!['tg'] != null && identity!['tg'].toString().isNotEmpty)
+          _idLine("Telegram", "@${identity!['tg']}", Icons.send),
+        if (identity!['tw'] != null && identity!['tw'].toString().isNotEmpty)
+          _idLine("Twitter/X", "@${identity!['tw']}", Icons.alternate_email),
+
+        if (!hasIdentity) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.orange.withOpacity(0.08), borderRadius: BorderRadius.circular(8)),
+            child: Row(children: [
+              Icon(Icons.info_outline, color: Colors.orange.shade300, size: 16),
+              const SizedBox(width: 8),
+              const Expanded(child: Text("Keine verifizierbare Identität. Die Reputation könnte von jemand anderem stammen.",
+                style: TextStyle(color: Colors.orange, fontSize: 11, height: 1.4))),
+            ]),
+          ),
+        ],
+        if (hasIdentity) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.green.withOpacity(0.06), borderRadius: BorderRadius.circular(8)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.check_circle_outline, color: Colors.green, size: 16),
+                const SizedBox(width: 8),
+                const Expanded(child: Text("Prüfe ob die Person Zugang zu den oben genannten Accounts hat.",
+                  style: TextStyle(color: Colors.green, fontSize: 11, height: 1.4))),
+              ]),
+              if (signerNpub != null && signerNpub!.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(children: [
+                  const Icon(Icons.lock_outline, color: Colors.green, size: 14),
+                  const SizedBox(width: 8),
+                  Text("Signiert: ${NostrService.shortenNpub(signerNpub!)}",
+                    style: const TextStyle(color: Colors.green, fontSize: 10, fontFamily: 'monospace')),
+                ]),
+              ],
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _miniStat(IconData icon, String value, String label, Color color) {
     return Column(children: [
-      Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w800)),
+      Icon(icon, color: color, size: 18),
+      const SizedBox(height: 4),
+      Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
       const SizedBox(height: 2),
       Text(label, style: const TextStyle(color: cTextSecondary, fontSize: 10)),
     ]);
   }
 
-  Widget _identityLine(String label, String value, IconData icon, {bool isMono = false}) {
+  Widget _idLine(String label, String value, IconData icon, {bool mono = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 18, color: cOrange), const SizedBox(width: 10),
-        SizedBox(width: 70, child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13))),
-        Expanded(child: Text(value, style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: isMono ? 'monospace' : null))),
+        Icon(icon, size: 16, color: cOrange), const SizedBox(width: 8),
+        SizedBox(width: 65, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12))),
+        Expanded(child: Text(value, style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: mono ? 'monospace' : null), overflow: TextOverflow.ellipsis)),
       ]),
     );
   }
 
-  Widget _statBox({required IconData icon, required String label, required String value, required Color color}) {
+  Widget _statBox(IconData icon, String value, String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20),
       decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
       child: Column(children: [
-        Icon(icon, color: color, size: 28), const SizedBox(height: 8),
-        Text(value, style: TextStyle(color: color, fontSize: 28, fontWeight: FontWeight.w900)),
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.w900)),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: cTextSecondary, fontSize: 12)),
       ]),

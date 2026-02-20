@@ -51,12 +51,13 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
   }
 
   String _formatDate(DateTime dt) {
-    return "${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}. ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+    const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    final wd = weekdays[dt.weekday - 1];
+    return "$wd, ${_twoDigits(dt.day)}.${_twoDigits(dt.month)}. ${_twoDigits(dt.hour)}:${_twoDigits(dt.minute)}";
   }
 
   String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
-  // POPUP FÜR TERMIN DETAILS
   void _showEventDetails(CalendarEvent event) {
     showModalBottomSheet(
       context: context,
@@ -66,41 +67,49 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
       builder: (context) {
         return Container(
           padding: const EdgeInsets.all(24),
-          height: 500,
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(child: Container(width: 40, height: 4, color: Colors.grey, margin: const EdgeInsets.only(bottom: 20))),
-                Text(event.title, style: const TextStyle(color: cOrange, fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      "${_twoDigits(event.startTime.day)}.${_twoDigits(event.startTime.month)}.${event.startTime.year}, ${_twoDigits(event.startTime.hour)}:${_twoDigits(event.startTime.minute)} Uhr",
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ],
+                Center(child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+                )),
+                const SizedBox(height: 24),
+                Text(event.title, style: const TextStyle(color: cOrange, fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                // Datum
+                _detailRow(
+                  Icons.calendar_today,
+                  "${_twoDigits(event.startTime.day)}.${_twoDigits(event.startTime.month)}.${event.startTime.year}, ${_twoDigits(event.startTime.hour)}:${_twoDigits(event.startTime.minute)} Uhr",
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.white70, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(event.location, style: const TextStyle(color: Colors.white70, fontSize: 16))),
-                  ],
-                ),
-                const Divider(color: Colors.white24, height: 40),
-                const Text("BESCHREIBUNG", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Text(event.description, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5)),
+                // Ort
+                if (event.location.isNotEmpty)
+                  _detailRow(Icons.location_on, event.location),
+                const SizedBox(height: 20),
+                const Divider(color: Colors.white12),
+                const SizedBox(height: 16),
+                const Text("BESCHREIBUNG", style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 12),
+                Text(event.description, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.6)),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _detailRow(IconData icon, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: Colors.white38, size: 18),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4))),
+      ],
     );
   }
 
@@ -112,10 +121,11 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
         title: Text(widget.meetup.city.toUpperCase()),
         backgroundColor: cDark,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_new),
-            onPressed: () => _launchURL(widget.meetup.telegramLink),
-          )
+          if (widget.meetup.telegramLink.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => _launchURL(widget.meetup.telegramLink),
+            )
         ],
       ),
       body: SingleChildScrollView(
@@ -123,17 +133,17 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // HEADER (Land & Stadt)
+            // HEADER
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(border: Border.all(color: cOrange), borderRadius: BorderRadius.circular(8)),
-              child: Text(widget.meetup.country.toUpperCase(), style: const TextStyle(color: cOrange, fontWeight: FontWeight.bold)),
+              child: Text(widget.meetup.country.toUpperCase(), style: const TextStyle(color: cOrange, fontWeight: FontWeight.bold, fontSize: 13)),
             ),
-            const SizedBox(height: 16),
-            Text(widget.meetup.city, style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 32),
+            const SizedBox(height: 12),
+            Text(widget.meetup.city, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 28),
 
-            // TERMINE SEKTION (Klickbar!)
+            // TERMINE
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -141,24 +151,66 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(children: [Icon(Icons.calendar_month, color: cCyan), SizedBox(width: 10), Text("TERMINE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))]),
+                  Row(children: const [
+                    Icon(Icons.calendar_month, color: cCyan, size: 20),
+                    SizedBox(width: 10),
+                    Text("TERMINE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5)),
+                  ]),
                   const SizedBox(height: 16),
                   _isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: cCyan))
+                    ? const Center(child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(color: cCyan, strokeWidth: 2),
+                      ))
                     : _meetupEvents.isEmpty
-                        ? Text("Aktuell keine Termine im Kalender.", style: TextStyle(color: Colors.grey.shade400))
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text("Aktuell keine Termine im Kalender.", style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                          )
                         : Column(
-                            children: _meetupEvents.map((event) => InkWell(
-                              onTap: () => _showEventDetails(event),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(_formatDate(event.startTime), style: const TextStyle(color: cOrange, fontWeight: FontWeight.bold)),
-                                    const SizedBox(width: 10),
-                                    Expanded(child: Text(event.title, style: const TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis)),
-                                  ],
+                            children: _meetupEvents.map((event) => Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _showEventDetails(event),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Datum-Chip
+                                      Container(
+                                        width: 100,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: cOrange.withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          _formatDate(event.startTime),
+                                          style: const TextStyle(color: cOrange, fontWeight: FontWeight.w600, fontSize: 12),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(event.title,
+                                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                                            if (event.location.isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(event.location,
+                                                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+                                    ],
+                                  ),
                                 ),
                               ),
                             )).toList(),
@@ -166,84 +218,139 @@ class _MeetupDetailsScreenState extends State<MeetupDetailsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // LINKS SEKTION (Mit Twitter!)
+            // LINKS
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(children: [Icon(Icons.link, color: cOrange), SizedBox(width: 10), Text("LINKS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))]),
-                  const SizedBox(height: 20),
+                  Row(children: const [
+                    Icon(Icons.link, color: cOrange, size: 20),
+                    SizedBox(width: 10),
+                    Text("LINKS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5)),
+                  ]),
+                  const SizedBox(height: 16),
                   
                   // Telegram
-                  InkWell(
-                    onTap: () => _launchURL(widget.meetup.telegramLink),
-                    child: Row(children: [const Icon(Icons.send, color: Colors.grey, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Telegram", style: TextStyle(color: Colors.grey, fontSize: 12)), Text(widget.meetup.telegramLink, style: const TextStyle(color: cCyan), maxLines: 1, overflow: TextOverflow.ellipsis)])), const Icon(Icons.chevron_right, color: Colors.grey)]),
-                  ),
+                  if (widget.meetup.telegramLink.isNotEmpty)
+                    _buildLinkTile(
+                      icon: Icons.send,
+                      label: "Telegram",
+                      value: widget.meetup.telegramLink,
+                      onTap: () => _launchURL(widget.meetup.telegramLink),
+                    ),
 
-                  // Twitter / X (Aus deinem Code wiederhergestellt)
+                  // Twitter / X
                   if (widget.meetup.twitterUsername.isNotEmpty) ...[
-                      const Divider(color: Colors.white10, height: 30),
-                      InkWell(
+                    if (widget.meetup.telegramLink.isNotEmpty)
+                      const Divider(color: Colors.white10, height: 24),
+                    _buildLinkTile(
+                      icon: Icons.alternate_email,
+                      label: "Twitter / X",
+                      value: "@${widget.meetup.twitterUsername}",
                       onTap: () {
-                          final handle = widget.meetup.twitterUsername.replaceAll('@', '');
-                          _launchURL("https://twitter.com/$handle");
+                        final handle = widget.meetup.twitterUsername.replaceAll('@', '');
+                        _launchURL("https://twitter.com/$handle");
                       },
-                      child: Row(
-                        children: [
-                          const Icon(Icons.alternate_email, color: Colors.grey, size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text("Twitter / X", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                                Text("@${widget.meetup.twitterUsername}", style: const TextStyle(color: cCyan, fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: Colors.grey),
-                        ],
-                      ),
+                    ),
+                  ],
+
+                  // Nostr
+                  if (widget.meetup.nostrNpub.isNotEmpty) ...[
+                    const Divider(color: Colors.white10, height: 24),
+                    _buildLinkTile(
+                      icon: Icons.key,
+                      label: "Nostr",
+                      value: widget.meetup.nostrNpub.length > 28
+                          ? "${widget.meetup.nostrNpub.substring(0, 28)}..."
+                          : widget.meetup.nostrNpub,
+                      onTap: () {},
+                      mono: true,
                     ),
                   ],
                 ],
               ),
             ),
-             const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-             // STANDORT SEKTION (Reparierter Link)
+            // STANDORT
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(children: [Icon(Icons.location_on, color: Colors.redAccent), SizedBox(width: 10), Text("STANDORT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))]),
-                  const SizedBox(height: 20),
+                  Row(children: const [
+                    Icon(Icons.location_on, color: Colors.redAccent, size: 20),
+                    SizedBox(width: 10),
+                    Text("STANDORT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 0.5)),
+                  ]),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("${widget.meetup.lat.toStringAsFixed(4)}, ${widget.meetup.lng.toStringAsFixed(4)}", style: const TextStyle(color: Colors.grey, fontFamily: 'monospace')),
-                      
-                      // KORRIGIERTER ROUTE BUTTON (Mit $ und sauberer URL)
+                      Text(
+                        "${widget.meetup.lat.toStringAsFixed(4)}, ${widget.meetup.lng.toStringAsFixed(4)}",
+                        style: TextStyle(color: Colors.grey.shade500, fontFamily: 'monospace', fontSize: 13),
+                      ),
                       TextButton.icon(
-                        onPressed: () => _launchURL("https://www.google.com/maps/search/?api=1&query=${widget.meetup.lat},${widget.meetup.lng}"),
+                        onPressed: () => _launchURL(
+                          "https://www.google.com/maps/search/?api=1&query=${widget.meetup.lat},${widget.meetup.lng}",
+                        ),
                         icon: const Icon(Icons.directions, size: 18),
                         label: const Text("Route"),
                         style: TextButton.styleFrom(foregroundColor: cCyan),
-                      )
+                      ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+    bool mono = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Icon(icon, color: Colors.grey.shade500, size: 20),
+          const SizedBox(width: 14),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  color: cCyan,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  fontFamily: mono ? 'monospace' : null,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          )),
+          const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+        ]),
       ),
     );
   }

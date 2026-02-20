@@ -168,7 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Celebration!
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text("🎉 Du bist jetzt ORGANISATOR! Du kannst Meetup-Tags erstellen."),
+            content: const Text("Du bist jetzt ORGANISATOR! Du kannst Meetup-Tags erstellen."),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
@@ -208,6 +208,148 @@ class _DashboardScreenState extends State<DashboardScreen> {
         (route) => false
       );
     }
+  }
+
+  // =============================================
+  // ICON-HELPER (statt Emojis)
+  // =============================================
+  static IconData _levelIcon(String level) {
+    switch (level) {
+      case 'VETERAN': return Icons.bolt;
+      case 'ETABLIERT': return Icons.shield;
+      case 'AKTIV': return Icons.local_fire_department;
+      case 'STARTER': return Icons.eco;
+      default: return Icons.fiber_new;
+    }
+  }
+
+  static IconData _phaseIcon(BootstrapPhase phase) {
+    switch (phase) {
+      case BootstrapPhase.keimphase: return Icons.eco;
+      case BootstrapPhase.wachstum: return Icons.park;
+      case BootstrapPhase.stabil: return Icons.forest;
+    }
+  }
+
+  // =============================================
+  // HILFE & INFO
+  // =============================================
+  void _showHelpSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: cCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag Handle
+              Center(child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+              )),
+              const SizedBox(height: 24),
+
+              const Text("SO FUNKTIONIERT'S",
+                style: TextStyle(color: cOrange, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 20),
+
+              _helpSection(
+                icon: Icons.military_tech,
+                color: cOrange,
+                title: "BADGES SAMMELN",
+                text: "Geh zu einem Einundzwanzig-Meetup und scanne den NFC-Tag oder Rolling-QR-Code des Organisators. "
+                    "Für jeden Besuch bekommst du ein kryptographisch signiertes Badge — ein unfälschbarer Beweis, dass du physisch dort warst.",
+              ),
+
+              _helpSection(
+                icon: Icons.workspace_premium,
+                color: Colors.amber,
+                title: "REPUTATION AUFBAUEN",
+                text: "Dein Trust Score steigt mit jedem Badge. Er berücksichtigt verschiedene Meetups, verschiedene Organisatoren, "
+                    "und die Regelmäßigkeit deiner Teilnahme. Je diverser deine Badges, desto höher dein Score.",
+              ),
+
+              _helpSection(
+                icon: Icons.admin_panel_settings,
+                color: Colors.green,
+                title: "ORGANISATOR WERDEN",
+                text: "Ab einem bestimmten Trust Score wirst du automatisch zum Organisator befördert. "
+                    "Dann kannst du selbst NFC-Tags und QR-Codes für dein eigenes Meetup erstellen. "
+                    "Keine Anmeldung nötig — das Netzwerk wächst organisch.",
+              ),
+
+              _helpSection(
+                icon: Icons.verified_user,
+                color: cCyan,
+                title: "KRYPTOGRAPHISCHE SICHERHEIT",
+                text: "Jedes Badge enthält eine BIP-340 Schnorr-Signatur. Diese beweist mathematisch, welcher Organisator den Tag erstellt hat. "
+                    "Niemand kann Badges fälschen — auch wir nicht. Kein Server, kein Login, keine persönlichen Daten.",
+              ),
+
+              _helpSection(
+                icon: Icons.qr_code_scanner,
+                color: cPurple,
+                title: "REPUTATION PRÜFEN",
+                text: "Unter 'Reputation' kannst du deinen QR-Code anzeigen und teilen. "
+                    "Andere können ihn scannen und sehen sofort dein Trust Level — kryptographisch verifiziert. "
+                    "Du kannst auch die Reputation anderer prüfen, auch ohne eigene Badges.",
+              ),
+
+              _helpSection(
+                icon: Icons.upload,
+                color: Colors.blue,
+                title: "BACKUP",
+                text: "Sichere deinen Account über die Einstellungen (Zahnrad oben rechts). "
+                    "Das Backup enthält deinen Nostr-Key und alle Badges. Ohne Backup sind die Daten bei einer Neuinstallation verloren.",
+              ),
+
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 12),
+
+              Row(children: [
+                const Icon(Icons.lock_outline, color: Colors.grey, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  "Alle Daten bleiben auf deinem Gerät. Kein Account, kein Server, kein Tracking.",
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12, height: 1.4),
+                )),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _helpSection({required IconData icon, required Color color, required String title, required String text}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          const SizedBox(height: 6),
+          Text(text, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+        ])),
+      ]),
+    );
   }
 
   void _showSettings() {
@@ -298,6 +440,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         automaticallyImplyLeading: false, 
         actions: [
           IconButton(
+            icon: const Icon(Icons.help_outline, color: cCyan),
+            tooltip: 'Hilfe & Info',
+            onPressed: _showHelpSheet,
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: _showSettings,
           )
@@ -379,12 +526,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _loadUser();
                   }
                 ),
-                if (myBadges.isNotEmpty) 
-                  _buildTile(
+                _buildTile(
                     icon: Icons.workspace_premium,
                     color: Colors.amber,
                     title: "REPUTATION",
-                    subtitle: "Badges teilen",
+                    subtitle: myBadges.isNotEmpty ? "Badges teilen" : "Scannen & prüfen",
                     onTap: () {
                       Navigator.push(
                         context,
@@ -459,7 +605,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Row(
                 children: [
-                  Text(score.levelEmoji, style: const TextStyle(fontSize: 24)),
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: levelColor.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(_levelIcon(score.level), color: levelColor, size: 22),
+                  ),
                   const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -517,7 +670,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(phase.emoji, style: const TextStyle(fontSize: 14)),
+                Icon(_phaseIcon(score.currentPhase), color: Colors.grey.shade400, size: 14),
                 const SizedBox(width: 6),
                 Text(
                   "Netzwerk: ${phase.name}",

@@ -71,7 +71,7 @@ class TrustConfig {
   static const Map<BootstrapPhase, PhaseThresholds> phases = {
     BootstrapPhase.keimphase: PhaseThresholds(
       name: 'Keimphase',
-      emoji: '🌱',
+      emoji: '◇',
       minBadges: 3,
       minUniqueMeetups: 2,
       minUniqueSigners: 1,      // Nur DU als Signer → 1 reicht
@@ -80,7 +80,7 @@ class TrustConfig {
     ),
     BootstrapPhase.wachstum: PhaseThresholds(
       name: 'Wachstum',
-      emoji: '🌿',
+      emoji: '◈',
       minBadges: 4,
       minUniqueMeetups: 3,
       minUniqueSigners: 2,      // Mindestens 2 verschiedene Signer
@@ -89,7 +89,7 @@ class TrustConfig {
     ),
     BootstrapPhase.stabil: PhaseThresholds(
       name: 'Stabil',
-      emoji: '🌳',
+      emoji: '◉',
       minBadges: 5,
       minUniqueMeetups: 3,
       minUniqueSigners: 2,
@@ -194,12 +194,14 @@ class TrustScore {
     return 'NEU';
   }
 
+  /// Visuelles Kürzel für das Level.
+  /// Screens sollten stattdessen Icons verwenden (z.B. Icons.bolt für VETERAN).
   String get levelEmoji {
-    if (totalScore >= 40) return '⭐';
-    if (totalScore >= 20) return '🟢';
-    if (totalScore >= 10) return '🔵';
-    if (totalScore >= 3) return '🟠';
-    return '⚪';
+    if (totalScore >= 40) return '★';
+    if (totalScore >= 20) return '●';
+    if (totalScore >= 10) return '◆';
+    if (totalScore >= 3) return '▲';
+    return '○';
   }
 
   // Gesamtfortschritt in Prozent (0.0 - 1.0)
@@ -411,7 +413,7 @@ class TrustScoreService {
     }
 
     if (meetsThreshold) {
-      promotionReason = '${thresholds.emoji} Alle Bedingungen erfüllt! Du kannst jetzt Meetup-Tags erstellen.';
+      promotionReason = 'Alle Bedingungen erfüllt! Du kannst jetzt Meetup-Tags erstellen.';
     }
 
     return TrustScore(
