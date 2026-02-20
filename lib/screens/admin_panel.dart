@@ -54,30 +54,23 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   // Prüft, ob noch eine 6-Stunden Session läuft
   Future<void> _checkSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final expiryStr = prefs.getString('rqr_session_expires'); // Nutzt den Key aus dem Service
+    
+    // THE FIX: Korrekter Abruf als int (Unix Timestamp)
+    final int? expiryUnix = prefs.getInt('rqr_session_expires');
 
-    if (expiryStr != null) {
-      // In RollingQRService wird expiresAt als int (Unix-Timestamp in Sekunden) gespeichert
-      final int? expiryUnix = int.tryParse(expiryStr) ?? prefs.getInt('rqr_session_expires');
-      
-      if (expiryUnix != null) {
-          final expiry = DateTime.fromMillisecondsSinceEpoch(expiryUnix * 1000);
-          if (DateTime.now().isBefore(expiry)) {
-            setState(() {
-              _sessionExpiry = expiry;
-            });
-            _startTimer();
-          } else {
-            // Session ist abgelaufen
-            await RollingQRService.endSession();
-            setState(() {
-              _sessionExpiry = null;
-            });
-          }
+    if (expiryUnix != null) {
+      final expiry = DateTime.fromMillisecondsSinceEpoch(expiryUnix * 1000);
+      if (DateTime.now().isBefore(expiry)) {
+        setState(() {
+          _sessionExpiry = expiry;
+        });
+        _startTimer();
       } else {
-          setState(() {
-             _sessionExpiry = null;
-          });
+        // Session ist abgelaufen
+        await RollingQRService.endSession();
+        setState(() {
+          _sessionExpiry = null;
+        });
       }
     } else {
       setState(() {
@@ -106,17 +99,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   // Startet eine brandneue 6-Stunden Session
   Future<void> _startNewSession() async {
-    // 1. Lade das Meetup des Admins
     final user = await UserProfile.load();
     final meetupId = user.homeMeetupId.isNotEmpty ? user.homeMeetupId : 'unknown-meetup';
-    
-    // Wir extrahieren die kompakte ID wie im alten Code
-    // Das geht davon aus, dass wir die Meetup-Liste nicht extra neu laden wollen, 
-    // sondern die ID direkt formattieren, falls nötig.
-    // Ein saubererer Weg wäre, das Meetup-Objekt zu haben. Wir formatieren hier simpel.
     final compactId = meetupId.toLowerCase().replaceAll(' ', '-');
 
-    // Lade-Indikator zeigen, da Netzwerk (Blockzeit) involviert ist
     showDialog(
       context: context, 
       barrierDismissible: false,
@@ -124,11 +110,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     try {
-      // 2. Erzeuge den kryptographischen Beweis über den neuen Service
-      // Die Blockheight 0 triggert den automatischen Fetch im Service
       await RollingQRService.getOrCreateSession(
           meetupId: compactId, 
-          meetupName: meetupId, // Wir nutzen ID als Name falls Name nicht vorhanden
+          meetupName: meetupId, 
           meetupCountry: '', 
           blockHeight: 0
       );
@@ -137,7 +121,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         Navigator.pop(context); // Lade-Dialog schließen
         _checkSession(); // Timer und UI updaten
 
-        // 3. Zum Wizard weiterleiten
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const MeetupSessionWizard()),
@@ -275,7 +258,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           );
                         },
                         icon: const Icon(Icons.qr_code_scanner),
-                        label: const Text("ZUM QR-CODE / NFC TAG"),
+                        label: const Text("AKTIVES MEETUP ÖFFNEN", style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -285,8 +268,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           context: context,
                           builder: (context) => AlertDialog(
                             backgroundColor: cCard,
-                            title: const Text("Session beenden?"),
-                            content: const Text("Damit sperrst du die aktuelle Blockzeit. Du kannst danach eine neue Session starten."),
+                            title: const Text("Session beenden?", style: TextStyle(color: Colors.white)),
+                            content: const Text("Damit sperrst du die aktuelle Blockzeit. Du kannst danach eine neue Session starten.", style: TextStyle(color: Colors.grey)),
                             actions: [
                               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
                               TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Beenden", style: TextStyle(color: Colors.red))),
