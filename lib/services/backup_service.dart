@@ -11,6 +11,7 @@ import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
 import 'secure_key_store.dart';
+import 'dart:typed_data';
 
 class BackupService {
   // --- HILFSFUNKTIONEN FÜR VERSCHLÜSSELUNG ---
