@@ -1,5 +1,5 @@
 // ============================================
-// ADMIN REGISTRY v3 - MIT BOOTSTRAP SUNSET
+// ADMIN REGISTRY v4 - FULL WEB OF TRUST
 // ============================================
 //
 // Ablauf:
@@ -7,15 +7,16 @@
 //   2. Prüfen: Ist der "Bootstrap Sunset" aktiv?
 //   3. Cache prüfen (sofort, offline-fähig)
 //   4. Relay kontaktieren (im Hintergrund)
-//   5. Signiertes Event empfangen → Admin-Liste extrahieren
-//   6. Cache aktualisieren
+//   5. Signierte Events empfangen
+//      - WENN Bootstrap: Lade Liste von Super-Admin
+//      - WENN Sunset: Lade Listen von ALLEN aktuell bekannten Admins (Web of Trust)
+//   6. Cache aktualisieren und zusammenführen
 //
 // BOOTSTRAP SUNSET LOGIK:
 //   Um einen "Single Point of Failure" zu vermeiden, verliert
 //   der Super-Admin automatisch seinen hartcodierten Gott-Modus,
 //   sobald das Netzwerk eine kritische Masse an Organic-Admins (z.B. 20)
-//   erreicht hat. Diese Entscheidung wird lokal PERMANENT gespeichert.
-//   Danach verwaltet sich das Netzwerk komplett dezentral selbst.
+//   erreicht hat. Danach vertraut das Netzwerk auf Peer-to-Peer Vouching.
 // ============================================
 
 import 'dart:async';
@@ -73,7 +74,7 @@ class AdminRegistry {
   // SUPER-ADMIN NPUB & SUNSET CONFIG
   // =============================================
   static const String superAdminNpub = "npub1lf0rga7j66uj6enae2mxezamz5nsz3vechhvmh25tcarn4u8qf5q534jzc"; // ← DEINEN npub hier einsetzen!
-  
+
   // Ab wie vielen verifizierten Admins soll der Super-Admin entmachtet werden?
   static const int sunsetThreshold = 20; 
 
@@ -100,20 +101,24 @@ class AdminRegistry {
   // =============================================
   // SUNSET LOGIK (Sonnenuntergang für Super-Admin)
   // =============================================
-  
+
   /// Prüft und setzt den Sunset-Status. Wird nie wieder 'false', wenn einmal 'true'.
-  static Future<bool> _isSunsetActive(int currentAdminCount) async {
+  static Future<bool> isSunsetActive() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Wenn Sunset schon mal erreicht wurde, bleibt es für immer true
     if (prefs.getBool(_sunsetFlagKey) == true) {
       return true;
     }
 
+    // Zählen, wie viele Admins wir lokal im Cache haben
+    final cachedList = await _loadFromCache();
+    final int currentAdminCount = cachedList?.length ?? 0;
+
     // Wenn Schwellenwert erreicht, aktiviere Sunset permanent
     if (currentAdminCount >= sunsetThreshold) {
       await prefs.setBool(_sunsetFlagKey, true);
-      print('[AdminRegistry] 🌅 BOOTSTRAP SUNSET AKTIVIERT! Super-Admin Modus beendet.');
+      print('[AdminRegistry] 🌅 BOOTSTRAP SUNSET AKTIVIERT! Web of Trust ist nun völlig dezentral.');
       return true;
     }
 
@@ -128,14 +133,10 @@ class AdminRegistry {
       return AdminCheckResult(isAdmin: false, source: 'no_key');
     }
 
-    // 1. Lokale Cache-Liste laden (für Sunset-Check & Offline-Suche)
-    final cachedList = await _loadFromCache();
-    final int adminCount = cachedList?.length ?? 0;
-    
-    // 2. Sunset-Check durchführen
-    final bool isSunset = await _isSunsetActive(adminCount);
+    // 1. Sunset-Check durchführen
+    final bool isSunset = await isSunsetActive();
 
-    // 3. Super-Admin Check (NUR wenn Sunset NICHT aktiv ist)
+    // 2. Super-Admin Check (NUR wenn Sunset NICHT aktiv ist)
     if (!isSunset && userNpub == superAdminNpub) {
       return AdminCheckResult(
         isAdmin: true,
@@ -145,7 +146,8 @@ class AdminRegistry {
       );
     }
 
-    // 4. Cache prüfen (schnell, offline)
+    // 3. Cache prüfen (schnell, offline)
+    final cachedList = await _loadFromCache();
     final cacheHit = cachedList?.where((e) => e.npub == userNpub).firstOrNull;
     if (cacheHit != null) {
       // Cache-Treffer! Relay-Update im Hintergrund starten
@@ -158,14 +160,14 @@ class AdminRegistry {
       );
     }
 
-    // 5. Kein Cache-Treffer → Relay fragen (blockierend, mit Timeout)
+    // 4. Kein Cache-Treffer → Relay fragen (blockierend, mit Timeout)
     try {
       final relayList = await fetchFromRelays();
       if (relayList != null && relayList.isNotEmpty) {
         await _saveToCache(relayList);
-        
+
         // Nach Relay-Update erneut Sunset-Check (falls wir den Schwellenwert just überschritten haben)
-        await _isSunsetActive(relayList.length);
+        await isSunsetActive();
 
         final entry = relayList.where((e) => e.npub == userNpub).firstOrNull;
         if (entry != null) {
@@ -204,23 +206,61 @@ class AdminRegistry {
   }
 
   // =============================================
-  // RELAY FETCH (das Herzstück!)
+  // RELAY FETCH (WEB OF TRUST LOGIK)
   // =============================================
   static Future<List<AdminEntry>?> fetchFromRelays() async {
-    String superAdminHex;
-    try {
-      superAdminHex = Nip19.decodePubkey(superAdminNpub);
-    } catch (e) {
-      print('[AdminRegistry] Ungültiger Super-Admin npub: $e');
-      return null;
+    List<String> authorsToQuery = [];
+    final bool isSunset = await isSunsetActive();
+
+    if (!isSunset) {
+      // BOOTSTRAP PHASE: Wir vertrauen nur dem Super-Admin
+      try {
+        final superAdminHex = Nip19.decodePubkey(superAdminNpub);
+        authorsToQuery.add(superAdminHex);
+        print('[AdminRegistry] Bootstrap Phase: Frage Relays nach Super-Admin ($superAdminHex)');
+      } catch (e) {
+        print('[AdminRegistry] Ungültiger Super-Admin npub: $e');
+        return null;
+      }
+    } else {
+      // SUNSET PHASE (WEB OF TRUST): Wir fragen alle uns bekannten Admins
+      final cachedList = await _loadFromCache();
+      if (cachedList != null && cachedList.isNotEmpty) {
+        for (var admin in cachedList) {
+          try {
+            authorsToQuery.add(Nip19.decodePubkey(admin.npub));
+          } catch (_) {}
+        }
+      }
+      
+      // Falls der Cache warum auch immer leer ist, Fallback auf Super-Admin, 
+      // um das Netzwerk wieder hochzuziehen
+      if (authorsToQuery.isEmpty) {
+        try {
+          authorsToQuery.add(Nip19.decodePubkey(superAdminNpub));
+        } catch (_) {}
+      }
+      print('[AdminRegistry] Sunset Phase: Frage Relays nach Updates von ${authorsToQuery.length} bekannten Admins.');
     }
 
+    // Aus Nostr-Protokoll-Gründen (Limits bei Filtern) teilen wir große Listen auf
+    List<String> queryChunk = authorsToQuery;
+    if (authorsToQuery.length > 50) {
+      queryChunk = authorsToQuery.sublist(0, 50); // Wir fragen vorerst nur die ersten 50 ab um Timeout zu vermeiden
+    }
+
+    // Versuche jeden Relay der Reihe nach
     for (final relayUrl in _relays) {
       try {
-        final result = await _fetchFromSingleRelay(relayUrl, superAdminHex);
+        final result = await _fetchFromSingleRelay(relayUrl, queryChunk);
         if (result != null) {
-          print('[AdminRegistry] Admin-Liste von $relayUrl geladen (${result.length} Admins)');
-          return result;
+          // Wenn Sunset aktiv ist, mergen wir die Ergebnisse mit dem Cache
+          if (isSunset) {
+            return await _mergeWithCache(result);
+          } else {
+            // In der Bootstrap-Phase überschreibt das Super-Admin-Event alles
+            return result;
+          }
         }
       } catch (e) {
         print('[AdminRegistry] $relayUrl fehlgeschlagen: $e');
@@ -232,14 +272,28 @@ class AdminRegistry {
     return null;
   }
 
+  // Hilfsfunktion: Fügt neu gefundene Admins aus dem Web of Trust dem Cache hinzu
+  static Future<List<AdminEntry>> _mergeWithCache(List<AdminEntry> newEntries) async {
+    final cachedList = await _loadFromCache() ?? [];
+    
+    // Einfacher Merge: Alles, was wir noch nicht kannten, kommt dazu
+    for (var newEntry in newEntries) {
+      if (!cachedList.any((e) => e.npub == newEntry.npub)) {
+        cachedList.add(newEntry);
+      }
+    }
+    return cachedList;
+  }
+
   // =============================================
-  // EINZELNEN RELAY ABFRAGEN
+  // EINZELNEN RELAY ABFRAGEN (MEHRERE AUTHORS)
   // =============================================
   static Future<List<AdminEntry>?> _fetchFromSingleRelay(
     String relayUrl, 
-    String authorHex,
+    List<String> authorsHex,
   ) async {
     WebSocket? ws;
+    List<AdminEntry> collectedAdmins = [];
 
     try {
       ws = await WebSocket.connect(relayUrl).timeout(_relayTimeout);
@@ -267,22 +321,24 @@ class AdminRegistry {
                 eventData['sig'] ?? '',
               );
 
-              if (event.pubkey != authorHex) return;
+              // Ist der Author überhaupt jemand, nach dem wir gefragt haben?
+              if (!authorsHex.contains(event.pubkey)) return;
               if (!event.isValid()) return;
 
               try {
                 final content = jsonDecode(event.content) as Map<String, dynamic>;
-                final admins = (content['admins'] as List<dynamic>?)
+                final adminsInEvent = (content['admins'] as List<dynamic>?)
                     ?.map((e) => AdminEntry.fromJson(e as Map<String, dynamic>))
                     .toList() ?? [];
 
-                if (!completer.isCompleted) completer.complete(admins);
+                // Sammeln aller Admins aus allen Events
+                collectedAdmins.addAll(adminsInEvent);
               } catch (e) {
                 print('[AdminRegistry] Content-Parse Fehler: $e');
               }
             } 
             else if (type == 'EOSE') {
-              if (!completer.isCompleted) completer.complete(null);
+              if (!completer.isCompleted) completer.complete(collectedAdmins);
             }
           } catch (e) {
             print('[AdminRegistry] Message-Parse Fehler: $e');
@@ -301,9 +357,10 @@ class AdminRegistry {
         subscriptionId,
         {
           'kinds': [_eventKind],
-          'authors': [authorHex],
+          'authors': authorsHex,
           '#d': [_eventDTag],
-          'limit': 1,
+          // Wir holen die letzten 50 Events, falls viele Admins Vouchings gepostet haben
+          'limit': 50, 
         }
       ]);
 
@@ -311,11 +368,17 @@ class AdminRegistry {
 
       final result = await completer.future.timeout(
         _relayTimeout,
-        onTimeout: () => null,
+        onTimeout: () => collectedAdmins.isNotEmpty ? collectedAdmins : null,
       );
 
       ws.add(jsonEncode(['CLOSE', subscriptionId]));
-      return result;
+      
+      // Duplikate aus der gesammelten Liste filtern
+      if (result != null) {
+        final uniqueMap = { for (var e in result) e.npub : e };
+        return uniqueMap.values.toList();
+      }
+      return null;
 
     } catch (e) {
       rethrow;
@@ -335,8 +398,8 @@ class AdminRegistry {
       final relayList = await fetchFromRelays();
       if (relayList != null) {
         await _saveToCache(relayList);
-        await _isSunsetActive(relayList.length); // Sunset-Status nach Update prüfen
-        print('[AdminRegistry] Cache im Hintergrund aktualisiert');
+        await isSunsetActive(); // Sunset-Status nach Update prüfen
+        print('[AdminRegistry] Cache im Hintergrund aktualisiert. Total Admins: ${relayList.length}');
       }
     } catch (e) {
       // Stilles Scheitern im Hintergrund
@@ -392,9 +455,9 @@ class AdminRegistry {
       addedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     ));
     await _saveToCache(list);
-    
+
     // Nach Hinzufügen prüfen, ob Sunset erreicht ist
-    await _isSunsetActive(list.length);
+    await isSunsetActive();
   }
 
   static Future<void> removeAdmin(String npub) async {
@@ -530,7 +593,7 @@ class AdminRegistry {
     final relayList = await fetchFromRelays();
     if (relayList != null) {
       await _saveToCache(relayList);
-      await _isSunsetActive(relayList.length); // Sunset Update
+      await isSunsetActive(); // Sunset Update
       return relayList.length;
     }
     return -1; // Fehler
