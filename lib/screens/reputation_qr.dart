@@ -26,6 +26,7 @@ import '../services/platform_proof_service.dart';
 import 'qr_scanner.dart';
 import 'reputation_verify_screen.dart';
 import 'platform_proof_screen.dart';
+import 'humanity_proof_screen.dart';
 
 class ReputationQRScreen extends StatefulWidget {
   const ReputationQRScreen({super.key});
@@ -317,57 +318,99 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
   }
 
   Widget _buildNoBadgesView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                color: cOrange.withOpacity(0.1),
-                shape: BoxShape.circle,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 40),
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              color: cOrange.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.workspace_premium, color: cOrange, size: 40),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            "NOCH KEINE BADGES",
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 1),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            "Besuche ein Meetup und scanne einen Badge um deine Reputation aufzubauen. "
+            "In der Zwischenzeit kannst du schon deine Plattformen verknüpfen "
+            "und deine Menschlichkeit per Lightning beweisen.",
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 32),
+
+          // Plattform-Verknüpfung — AUCH ohne Badges
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
               ),
-              child: const Icon(Icons.workspace_premium, color: cOrange, size: 40),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              "NOCH KEINE REPUTATION",
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 1),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Besuche ein Meetup und scanne einen Badge um deine Reputation aufzubauen.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 32),
-
-            // Remote Verify — auch ohne eigene Badges nutzbar
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
-                ),
-                icon: const Icon(Icons.verified_user),
-                label: const Text("REPUTATION PRÜFEN"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: cCyan,
-                  side: const BorderSide(color: cCyan, width: 1.5),
-                ),
+              icon: const Icon(Icons.link, size: 20),
+              label: const Text("PLATTFORMEN VERKNÜPFEN"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
               ),
             ),
+          ),
 
-            const SizedBox(height: 12),
+          const SizedBox(height: 12),
 
-            // QR Scanner
-            SizedBox(
-              width: double.infinity,
-              height: 50,
+          // Proof of Humanity — AUCH ohne Badges
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HumanityProofScreen()),
+              ),
+              icon: const Icon(Icons.bolt),
+              label: const Text("PROOF OF HUMANITY"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.amber,
+                side: const BorderSide(color: Colors.amber, width: 1.5),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Remote Verify — auch ohne eigene Badges nutzbar
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
+              ),
+              icon: const Icon(Icons.verified_user),
+              label: const Text("REPUTATION PRÜFEN"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: cCyan,
+                side: const BorderSide(color: cCyan, width: 1.5),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // QR Scanner
+          SizedBox(
+            width: double.infinity,
+            height: 50,
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
@@ -383,7 +426,6 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 

@@ -95,10 +95,20 @@ class HumanityProofService {
 
     final relays = await RelayConfig.getActiveRelays();
 
-    // Auf mehreren Relays gleichzeitig suchen
-    for (final relayUrl in relays) {
+    // Zap-Daten sind oft auf großen öffentlichen Relays.
+    // Nutzer-Relays kennen die Zaps evtl. nicht.
+    final zapRelays = <String>{
+      ...relays,
+      'wss://relay.damus.io',
+      'wss://relay.nostr.band',
+      'wss://nos.lol',
+      'wss://relay.snort.social',
+    };
+
+    // Auf mehreren Relays suchen
+    for (final relayUrl in zapRelays) {
       try {
-        final result = await _searchSentZaps(relayUrl, pubkeyHex);
+        final result = await _searchZapActivity(relayUrl, pubkeyHex);
         if (result != null) {
           // Beweis gefunden! Speichern.
           await _saveProof(result.receiptEventId, result.zapTimestamp);
@@ -133,10 +143,16 @@ class HumanityProofService {
 
   static Future<bool> checkForZapsByPubkey(String pubkeyHex) async {
     final relays = await RelayConfig.getActiveRelays();
+    final zapRelays = <String>{
+      ...relays.take(2),
+      'wss://relay.damus.io',
+      'wss://relay.nostr.band',
+      'wss://nos.lol',
+    };
 
-    for (final relayUrl in relays.take(3)) {
+    for (final relayUrl in zapRelays) {
       try {
-        final result = await _searchSentZaps(relayUrl, pubkeyHex);
+        final result = await _searchZapActivity(relayUrl, pubkeyHex);
         if (result != null) return true;
       } catch (_) {}
     }
@@ -144,28 +160,33 @@ class HumanityProofService {
   }
 
   // =============================================
-  // ZAP RECEIPTS SUCHEN
+  // ZAP-AKTIVITÄT SUCHEN — ZWEI STRATEGIEN
   // =============================================
-  // Strategie: Wir holen die neuesten Kind 9735 Events
-  // und prüfen ob unser Pubkey im eingebetteten
-  // "description"-Tag (= Zap Request, Kind 9734) als
-  // Sender steht.
+  // Strategie 1: Kind 9735 mit #p = pubkey
+  //   → Findet EMPFANGENE Zaps (Nutzer wurde gezappt)
+  //   → Standard NIP-57, alle Relays unterstützen das
+  //   → Beweis: Echte Menschen haben ihm Sats geschickt
   //
-  // Einige Relays indizieren auch '#P' für den Sender,
-  // aber das ist nicht standardisiert. Daher:
-  // Wir holen generisch und filtern lokal.
+  // Strategie 2: Kind 9734 mit authors = pubkey
+  //   → Findet GESENDETE Zap-Requests (Nutzer hat gezappt)
+  //   → Manche Clients speichern diese auf Relays
+  //   → Beweis: Er hat selbst eine Lightning-Zahlung ausgelöst
+  //
+  // Ein Treffer bei EINER der Strategien reicht.
   // =============================================
 
-  static Future<_ZapSearchResult?> _searchSentZaps(
+  static Future<_ZapSearchResult?> _searchZapActivity(
     String relayUrl,
-    String senderPubkeyHex,
+    String pubkeyHex,
   ) async {
     WebSocket? ws;
     try {
       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
       final completer = Completer<_ZapSearchResult?>();
-      final subId = 'humanity-${DateTime.now().millisecondsSinceEpoch}';
+      final subId1 = 'zap-recv-${DateTime.now().millisecondsSinceEpoch}';
+      final subId2 = 'zap-sent-${DateTime.now().millisecondsSinceEpoch}';
       _ZapSearchResult? found;
+      int eoseCount = 0;
 
       ws.listen(
         (data) {
@@ -173,35 +194,60 @@ class HumanityProofService {
             final message = jsonDecode(data as String) as List<dynamic>;
             final type = message[0] as String;
 
-            if (type == 'EVENT' && message.length >= 3) {
+            if (type == 'EVENT' && message.length >= 3 && found == null) {
               final eventData = message[2] as Map<String, dynamic>;
-              final tags = eventData['tags'] as List<dynamic>? ?? [];
               final eventId = eventData['id'] as String? ?? '';
               final createdAt = eventData['created_at'] as int? ?? 0;
+              final kind = eventData['kind'] as int? ?? 0;
 
-              // "description" Tag enthält den Zap-Request als JSON
-              for (final tag in tags) {
-                final t = tag as List<dynamic>;
-                if (t.length >= 2 && t[0] == 'description') {
-                  try {
-                    final zapRequest = jsonDecode(t[1] as String) as Map<String, dynamic>;
-                    final zapSenderPubkey = zapRequest['pubkey'] as String? ?? '';
-
-                    // Ist UNSER Pubkey der Sender?
-                    if (zapSenderPubkey == senderPubkeyHex) {
-                      found = _ZapSearchResult(
-                        receiptEventId: eventId,
-                        zapTimestamp: createdAt,
-                      );
-                      // Ein Receipt reicht — sofort abbrechen
-                      if (!completer.isCompleted) completer.complete(found);
-                      return;
-                    }
-                  } catch (_) {}
+              if (kind == 9735) {
+                // Strategie 1: Empfangenes Zap Receipt
+                // Prüfe ob der Nutzer der Empfänger ist (#p Tag)
+                final tags = eventData['tags'] as List<dynamic>? ?? [];
+                for (final tag in tags) {
+                  final t = tag as List<dynamic>;
+                  if (t.length >= 2 && t[0] == 'p' && t[1] == pubkeyHex) {
+                    found = _ZapSearchResult(
+                      receiptEventId: eventId,
+                      zapTimestamp: createdAt,
+                    );
+                    if (!completer.isCompleted) completer.complete(found);
+                    return;
+                  }
                 }
+
+                // Zusätzlich: Prüfe description-Tag auf Sender
+                for (final tag in tags) {
+                  final t = tag as List<dynamic>;
+                  if (t.length >= 2 && t[0] == 'description') {
+                    try {
+                      final zapReq = jsonDecode(t[1] as String) as Map<String, dynamic>;
+                      if (zapReq['pubkey'] == pubkeyHex) {
+                        found = _ZapSearchResult(
+                          receiptEventId: eventId,
+                          zapTimestamp: createdAt,
+                        );
+                        if (!completer.isCompleted) completer.complete(found);
+                        return;
+                      }
+                    } catch (_) {}
+                  }
+                }
+              } else if (kind == 9734) {
+                // Strategie 2: Gesendeter Zap Request
+                found = _ZapSearchResult(
+                  receiptEventId: eventId,
+                  zapTimestamp: createdAt,
+                );
+                if (!completer.isCompleted) completer.complete(found);
+                return;
               }
             } else if (type == 'EOSE') {
-              if (!completer.isCompleted) completer.complete(found);
+              eoseCount++;
+              // Warte auf beide Subscriptions
+              if (eoseCount >= 2 && !completer.isCompleted) {
+                completer.complete(found);
+              }
             }
           } catch (_) {}
         },
@@ -213,22 +259,28 @@ class HumanityProofService {
         },
       );
 
-      // Strategie 1: Versuche '#P' Tag (manche Relays indizieren den Sender)
-      // Strategie 2: Hole einfach die letzten Zap-Receipts und filtere lokal
-      // Wir verwenden Strategie 2 — universeller
-      //
-      // Wir holen maximal 50 Receipts und prüfen lokal.
-      // Das deckt die meisten Nutzer ab.
+      // Strategie 1: Empfangene Zap Receipts (Kind 9735, #p = pubkey)
       ws.add(jsonEncode([
-        'REQ', subId,
+        'REQ', subId1,
         {
           'kinds': [9735],
-          'limit': 50,
+          '#p': [pubkeyHex],
+          'limit': 3, // Ein einziger reicht, aber 3 für Redundanz
+        }
+      ]));
+
+      // Strategie 2: Gesendete Zap Requests (Kind 9734, authors = pubkey)
+      ws.add(jsonEncode([
+        'REQ', subId2,
+        {
+          'kinds': [9734],
+          'authors': [pubkeyHex],
+          'limit': 3,
         }
       ]));
 
       return await completer.future.timeout(
-        const Duration(seconds: 12), // Etwas länger da wir mehr Events prüfen
+        const Duration(seconds: 12),
         onTimeout: () => found,
       );
     } finally {
