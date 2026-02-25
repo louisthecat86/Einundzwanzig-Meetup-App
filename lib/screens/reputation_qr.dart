@@ -121,11 +121,22 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       'bb': boundCount,
     };
 
+    // Platform-Proofs kompakt für QR (Signatur + Username)
+    // Scanner kann damit direkt verifizieren ohne separaten String
+    final Map<String, dynamic> platformProofs = {};
+    for (final p in proofs) {
+      platformProofs[p.platform] = {
+        'u': p.username,
+        's': p.proofSig,
+      };
+    }
+
     final Map<String, dynamic> qrPayload = {
-      'v': 4,  // v4: mit Badge-Binding
+      'v': 5,  // v5: mit eingebetteten Platform-Proofs
       'id': identity,
       'rp': reputation,
       'pf': proof,
+      if (platformProofs.isNotEmpty) 'pp': platformProofs,
       't': DateTime.now().millisecondsSinceEpoch,
     };
 

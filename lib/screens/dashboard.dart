@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nostr/nostr.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -29,6 +30,7 @@ import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
 import '../services/platform_proof_service.dart';
 import '../services/humanity_proof_service.dart';
+import '../services/nip05_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -46,6 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Identity Layer State
   int _platformProofCount = 0;
   bool _humanityVerified = false;
+  bool _nip05Verified = false;
   List<String> _platformNames = [];
   
   // Aktive Meetup-Session
@@ -79,11 +82,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final proofs = await PlatformProofService.getSavedProofs();
       final humanity = await HumanityProofService.getStatus();
+
+      // NIP-05 prüfen (nur wenn Nostr-Key vorhanden)
+      bool nip05 = false;
+      if (_user.hasNostrKey && _user.nostrNpub.isNotEmpty) {
+        try {
+          final relays = ['wss://relay.damus.io', 'wss://nos.lol'];
+          final pubkeyHex = Nip19.decodePubkey(_user.nostrNpub);
+          final nip05Str = await Nip05Service.fetchNip05FromProfile(pubkeyHex, relays)
+              .timeout(const Duration(seconds: 8), onTimeout: () => null);
+          if (nip05Str != null && nip05Str.isNotEmpty) {
+            final result = await Nip05Service.verify(nip05Str, pubkeyHex);
+            nip05 = result.valid;
+          }
+        } catch (_) {}
+      }
+
       if (mounted) {
         setState(() {
           _platformProofCount = proofs.length;
           _platformNames = proofs.map((p) => p.platform).toList();
           _humanityVerified = humanity.verified;
+          _nip05Verified = nip05;
         });
       }
     } catch (_) {}
@@ -639,8 +659,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 _buildTile(
                   icon: Icons.person, color: Colors.grey, title: "PROFIL",
-                  subtitle: _platformProofCount > 0 || _humanityVerified
-                      ? "${ _platformProofCount + (_humanityVerified ? 1 : 0)} Verknüpfungen"
+                  subtitle: _platformProofCount > 0 || _humanityVerified || _nip05Verified
+                      ? "${ _platformProofCount + (_humanityVerified ? 1 : 0) + (_nip05Verified ? 1 : 0)} Verknüpfungen"
                       : "Identität aufbauen",
                   onTap: () async {
                     await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileEditScreen()));
@@ -805,8 +825,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Zähle aktive Identity-Layer
-    final identityCount = _platformProofCount + (_humanityVerified ? 1 : 0);
-    final hasIdentityGaps = _platformProofCount == 0 || !_humanityVerified;
+    final identityCount = _platformProofCount + (_humanityVerified ? 1 : 0) + (_nip05Verified ? 1 : 0);
+    final hasIdentityGaps = _platformProofCount == 0 || !_humanityVerified || !_nip05Verified;
 
     return Container(
       width: double.infinity,
@@ -909,6 +929,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       "Lightning",
                       _humanityVerified,
                       _humanityVerified ? Colors.amber : null,
+                    ),
+                    _buildIdDot(
+                      Icons.alternate_email,
+                      "NIP-05",
+                      _nip05Verified,
+                      _nip05Verified ? cCyan : null,
                     ),
                     ..._buildPlatformDots(),
                     if (_platformProofCount == 0)
@@ -1014,7 +1040,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(16),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
             decoration: BoxDecoration(
               color: cCard,
               borderRadius: BorderRadius.circular(16),
@@ -1023,31 +1049,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 52, height: 52,
                   decoration: BoxDecoration(
                     color: Colors.grey.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(Icons.home_outlined, color: Colors.grey.shade600, size: 24),
+                  child: Icon(Icons.home_outlined, color: Colors.grey.shade600, size: 26),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         "HOME MEETUP WÄHLEN",
-                        style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
-                        "Wähle dein Stammtisch-Meetup aus",
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        "Wähle dein Stammtisch-Meetup für schnellen Zugriff auf Termine",
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.3),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 22),
               ],
             ),
           ),
@@ -1055,150 +1082,189 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    // Home Meetup gesetzt → Kompakte Karte mit Schnellzugriff
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: hasHome
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CalendarScreen(initialSearch: _homeMeetup!.city),
-                  ),
-                )
-            : null,
+    // Home Meetup gesetzt → Karte mit Schnellzugriff
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cCard,
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: cCard,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cOrange.withOpacity(0.25)),
-          ),
-          child: Row(
-            children: [
-              // Meetup-Bild oder Fallback-Icon
-              Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(
-                  color: cOrange.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: hasHome && _homeMeetup!.coverImagePath.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          _homeMeetup!.coverImagePath,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.home_filled, color: cOrange, size: 24),
+        border: Border.all(color: cOrange.withOpacity(0.25)),
+      ),
+      child: Column(
+        children: [
+          // Oberer Bereich: Tap → Kalender
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: hasHome
+                  ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CalendarScreen(initialSearch: _homeMeetup!.city),
                         ),
                       )
-                    : const Icon(Icons.home_filled, color: cOrange, size: 24),
-              ),
-              const SizedBox(width: 14),
-
-              // Name + Meta
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  : null,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
+                    // Meetup-Bild oder Fallback-Icon
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(
+                        color: cOrange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: hasHome && _homeMeetup!.coverImagePath.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.network(
+                                _homeMeetup!.coverImagePath,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.home_filled, color: cOrange, size: 28),
+                              ),
+                            )
+                          : const Icon(Icons.home_filled, color: cOrange, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+
+                    // Name + Meta
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: cOrange.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  "HOME",
+                                  style: TextStyle(
+                                    color: cOrange.withOpacity(0.9),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
                             hasHome
                                 ? _homeMeetup!.city.toUpperCase()
                                 : _user.homeMeetupId.toUpperCase(),
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 15,
+                              fontSize: 17,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cOrange.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
+                          const SizedBox(height: 4),
+                          Text(
+                            hasHome
+                                ? [
+                                    _homeMeetup!.country,
+                                    if (badgesHere > 0) "$badgesHere Badge${badgesHere > 1 ? 's' : ''} hier",
+                                  ].join(' · ')
+                                : "Lade...",
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                           ),
-                          child: Text(
-                            "HOME",
-                            style: TextStyle(
-                              color: cOrange.withOpacity(0.9),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      hasHome
-                          ? [
-                              _homeMeetup!.country,
-                              if (badgesHere > 0) "$badgesHere Badge${badgesHere > 1 ? 's' : ''}",
-                            ].join(' · ')
-                          : "Lade...",
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    ),
+
+                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
                   ],
                 ),
               ),
-
-              // Schnellzugriff-Buttons
-              if (hasHome) ...[
-                _buildMiniAction(
-                  icon: Icons.info_outline,
-                  color: Colors.grey.shade600,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => MeetupDetailsScreen(meetup: _homeMeetup!),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildMiniAction(
-                  icon: Icons.event,
-                  color: cOrange,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CalendarScreen(initialSearch: _homeMeetup!.city),
-                    ),
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+
+          // Unterer Bereich: Schnellzugriff-Buttons
+          if (hasHome)
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.event,
+                      label: "TERMINE",
+                      color: cOrange,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CalendarScreen(initialSearch: _homeMeetup!.city),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.info_outline,
+                      label: "DETAILS",
+                      color: Colors.grey.shade500,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MeetupDetailsScreen(meetup: _homeMeetup!),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildQuickAction(
+                      icon: Icons.swap_horiz,
+                      label: "ÄNDERN",
+                      color: Colors.grey.shade500,
+                      onTap: _selectHomeMeetup,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  // Mini-Action-Button für Home Meetup Card
-  Widget _buildMiniAction({
+  Widget _buildQuickAction({
     required IconData icon,
+    required String label,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 15),
+              const SizedBox(width: 5),
+              Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+            ],
+          ),
         ),
-        child: Icon(icon, color: color, size: 18),
       ),
     );
   }

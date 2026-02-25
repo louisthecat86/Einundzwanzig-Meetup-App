@@ -358,34 +358,38 @@ class _AdminManagementScreenState extends State<AdminManagementScreen> {
                   ),
                 ),
 
-                // PUBLISH Button (Immer sichtbar, wenn Änderungen da sind, aber hier zur Sicherheit immer aktiv wenn >0)
-                if (_admins.isNotEmpty) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton.icon(
-                      onPressed: _isPublishing ? null : _publishToRelays,
-                      icon: _isPublishing
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.satellite_alt, color: Colors.white),
-                      label: Text(
-                        _isPublishing ? "SIGNIERE & PUBLIZIERE..." : "AUF NOSTR PUBLISHEN",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: cOrange, // Orange als Call-to-Action
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
+                // PUBLISH Button (Immer sichtbar — auch bei leerer Liste für Revocation)
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton.icon(
+                    onPressed: _isPublishing ? null : _publishToRelays,
+                    icon: _isPublishing
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.satellite_alt, color: Colors.white),
+                    label: Text(
+                      _isPublishing 
+                          ? "SIGNIERE & PUBLIZIERE..." 
+                          : _admins.isEmpty 
+                              ? "WIDERRUF PUBLISHEN"
+                              : "AUF NOSTR PUBLISHEN",
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _admins.isEmpty ? Colors.red.shade700 : cOrange,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Das Netzwerk erfährt erst von deinen neuen Co-Admins,\nwenn du deine Signatur auf Nostr veröffentlichst.",
-                    style: TextStyle(color: Colors.grey, fontSize: 11, height: 1.4),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _admins.isEmpty
+                      ? "Publiziere eine leere Liste um alle Delegationen\nim Netzwerk zu widerrufen."
+                      : "Das Netzwerk erfährt erst von deinen neuen Co-Admins,\nwenn du deine Signatur auf Nostr veröffentlichst.",
+                  style: const TextStyle(color: Colors.grey, fontSize: 11, height: 1.4),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
 
                 // Admin-Liste
                 if (_admins.isEmpty)
