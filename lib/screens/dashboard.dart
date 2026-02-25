@@ -763,7 +763,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // =============================================
-  // TRUST SCORE CARD
+  // TRUST SCORE CARD (einzige Version)
   // =============================================
   Widget _buildTrustScoreCard() {
     final score = _trustScore!;
@@ -854,7 +854,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Wrap(
             spacing: 16,
             runSpacing: 6,
-            children: score.progress.entries.map((entry) {
+            children: score.progress.entries.map<Widget>((entry) {
               final p = entry.value;
               return _buildCriterion(p.label, p.current, p.required, p.met);
             }).toList(),
@@ -1002,7 +1002,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'robosats': 'RoboSats',
       'nostr': 'Nostr',
     };
-    return _platformNames.map((name) {
+    return _platformNames.map<Widget>((name) {
       return _buildIdDot(
         iconMap[name.toLowerCase()] ?? Icons.link,
         labelMap[name.toLowerCase()] ?? name,
@@ -1114,223 +1114,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // =============================================
-  // TRUST SCORE CARD
-  // =============================================
-  Widget _buildTrustScoreCard() {
-    final score = _trustScore!;
-    
-    Color levelColor;
-    switch (score.level) {
-      case 'VETERAN': levelColor = Colors.amber; break;
-      case 'ETABLIERT': levelColor = Colors.green; break;
-      case 'AKTIV': levelColor = cCyan; break;
-      case 'STARTER': levelColor = cOrange; break;
-      default: levelColor = Colors.grey;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: levelColor.withOpacity(0.2), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ===== HEADER =====
-          Row(
-            children: [
-              Container(
-                width: 44, height: 44,
-                decoration: BoxDecoration(
-                  color: levelColor.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(_levelIcon(score.level), color: levelColor, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(score.level,
-                      style: TextStyle(color: levelColor, fontSize: 17, fontWeight: FontWeight.w800)),
-                    Text(
-                      score.meetsPromotionThreshold
-                          ? "Organisator-Status erreicht"
-                          : "Nächstes Ziel: Organisator",
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                score.totalScore.toStringAsFixed(1),
-                style: TextStyle(color: levelColor, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
-              ),
-            ],
-          ),
-
-          // ===== GESAMTFORTSCHRITT =====
-          if (!score.meetsPromotionThreshold) ...[
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: score.promotionProgress,
-                backgroundColor: Colors.white.withOpacity(0.06),
-                valueColor: AlwaysStoppedAnimation(levelColor.withOpacity(0.7)),
-                minHeight: 4,
-              ),
-            ),
-          ],
-
-          // ===== BADGE-FORTSCHRITT =====
-          const SizedBox(height: 16),
-          Text("MEETUP-AKTIVITÄT",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
-          const SizedBox(height: 8),
-
-          // Kriterien als kompakte Zeilen
-          Wrap(
-            spacing: 16,
-            runSpacing: 6,
-            children: score.progress.entries.map((entry) {
-              final p = entry.value;
-              return _buildCriterion(p.label, p.current, p.required, p.met);
-            }).toList(),
-          ),
-
-          if (score.meetsPromotionThreshold) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Icon(Icons.verified, color: Colors.green, size: 14),
-                const SizedBox(width: 6),
-                Text("Du kannst NFC-Tags und Rolling-QR-Codes erstellen.",
-                  style: TextStyle(color: Colors.green.shade400, fontSize: 11)),
-              ],
-            ),
-          ],
-
-          // ===== IDENTITÄTS-LAYER =====
-          const SizedBox(height: 16),
-          Text("IDENTITÄT",
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
-          const SizedBox(height: 8),
-
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: [
-              _buildIdDot(Icons.bolt, "Lightning", _humanityVerified, Colors.amber),
-              _buildIdDot(Icons.alternate_email, "NIP-05", _nip05Verified, cCyan),
-              ..._buildPlatformDots(),
-              if (_platformProofCount == 0)
-                _buildIdDot(Icons.link, "Plattform", false, Colors.grey),
-            ],
-          ),
-
-          // Hint
-          if (!_humanityVerified || !_nip05Verified || _platformProofCount == 0) ...[
-            const SizedBox(height: 10),
-            GestureDetector(
-              onTap: () async {
-                await Navigator.push(context,
-                  MaterialPageRoute(builder: (context) => const ProfileEditScreen()));
-                _loadAll();
-              },
-              child: Row(
-                children: [
-                  Icon(Icons.arrow_forward_ios, color: cOrange.withOpacity(0.5), size: 10),
-                  const SizedBox(width: 4),
-                  Text("Identität im Profil stärken",
-                    style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10)),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // Badge-Kriterium (kompakt)
-  Widget _buildCriterion(String label, int current, int required, bool met) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          met ? Icons.check_circle : Icons.radio_button_unchecked,
-          color: met ? Colors.green : Colors.grey.shade700,
-          size: 14,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          "$label $current/$required",
-          style: TextStyle(
-            color: met ? Colors.green.shade400 : Colors.grey.shade600,
-            fontSize: 11,
-            fontWeight: met ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Identity-Dot
-  Widget _buildIdDot(IconData icon, String label, bool active, Color activeColor) {
-    final color = active ? activeColor : Colors.grey.shade700;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color, size: 14),
-        const SizedBox(width: 4),
-        Text(label,
-          style: TextStyle(
-            color: active ? color : Colors.grey.shade600,
-            fontSize: 11,
-            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-          )),
-        if (active) ...[
-          const SizedBox(width: 3),
-          Icon(Icons.check_circle, color: color, size: 11),
-        ],
-      ],
-    );
-  }
-
-  // Platform-Dots
-  List<Widget> _buildPlatformDots() {
-    final iconMap = {
-      'telegram': Icons.send,
-      'twitter': Icons.alternate_email,
-      'satoshikleinanzeigen': Icons.storefront,
-      'robosats': Icons.smart_toy,
-      'nostr': Icons.hub,
-    };
-    final labelMap = {
-      'telegram': 'Telegram',
-      'twitter': 'X',
-      'satoshikleinanzeigen': 'Kleinanzeigen',
-      'robosats': 'RoboSats',
-      'nostr': 'Nostr',
-    };
-
-    return _platformNames.map((name) {
-      return _buildIdDot(
-        iconMap[name.toLowerCase()] ?? Icons.link,
-        labelMap[name.toLowerCase()] ?? name,
-        true,
-        Colors.green,
-      );
-    }).toList();
-  }
-
-  // =============================================
-  // HOME MEETUP CARD (unverändert)
+  // HOME MEETUP CARD
   // =============================================
   Widget _buildHomeMeetupCard() {
     bool hasHome = _user.homeMeetupId.isNotEmpty;
