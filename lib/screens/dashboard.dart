@@ -24,10 +24,11 @@ import 'rolling_qr_screen.dart';                            // NEU: Aktives Meet
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
 import 'relay_settings_screen.dart';
-import 'humanity_proof_screen.dart';
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
+import '../services/platform_proof_service.dart';
+import '../services/humanity_proof_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -41,6 +42,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Meetup? _homeMeetup; 
   TrustScore? _trustScore;
   bool _justPromoted = false;
+
+  // Identity Layer State
+  int _platformProofCount = 0;
+  bool _humanityVerified = false;
+  List<String> _platformNames = [];
   
   // Aktive Meetup-Session
   MeetupSession? _activeSession;
@@ -63,9 +69,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadUser();
     await _loadBadges();
     await _calculateTrustScore();
+    _loadIdentityData();
     _checkActiveSession();
     // Organic Admins von Nostr laden und verifizieren
     _syncOrganicAdminsInBackground();
+  }
+
+  void _loadIdentityData() async {
+    try {
+      final proofs = await PlatformProofService.getSavedProofs();
+      final humanity = await HumanityProofService.getStatus();
+      if (mounted) {
+        setState(() {
+          _platformProofCount = proofs.length;
+          _platformNames = proofs.keys.toList();
+          _humanityVerified = humanity.verified;
+        });
+      }
+    } catch (_) {}
   }
 
   // =============================================
@@ -479,20 +500,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               },
             ),
 
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.bolt, color: Colors.amber),
-              ),
-              title: const Text("Proof of Humanity", style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Lightning-Beweis gegen Bots (21 Sats).", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const HumanityProofScreen()));
-              },
-            ),
-
             const SizedBox(height: 20),
             const Divider(color: Colors.white10),
             const SizedBox(height: 10),
@@ -629,10 +636,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                 ),
                 _buildTile(
-                  icon: Icons.person, color: Colors.grey, title: "PROFIL", subtitle: "Identität", 
+                  icon: Icons.person, color: Colors.grey, title: "PROFIL",
+                  subtitle: _platformProofCount > 0 || _humanityVerified
+                      ? "${ _platformProofCount + (_humanityVerified ? 1 : 0)} Verknüpfungen"
+                      : "Identität aufbauen",
                   onTap: () async {
                     await Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileEditScreen()));
-                    _loadUser();
+                    _loadAll();
                   }
                 ),
                 _buildTile(
@@ -782,9 +792,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // =============================================
   Widget _buildTrustScoreCard() {
     final score = _trustScore!;
-    final phase = score.activeThresholds;
     
-    // Farbe basierend auf Level
     Color levelColor;
     switch (score.level) {
       case 'VETERAN': levelColor = Colors.amber; break;
@@ -794,6 +802,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       default: levelColor = Colors.grey;
     }
 
+    // Zähle aktive Identity-Layer
+    final identityCount = _platformProofCount + (_humanityVerified ? 1 : 0);
+    final hasIdentityGaps = _platformProofCount == 0 || !_humanityVerified;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -801,224 +813,185 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: cCard,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: score.meetsPromotionThreshold 
-              ? Colors.green.withOpacity(0.5)
-              : levelColor.withOpacity(0.3),
-          width: 1.5,
+          color: levelColor.withOpacity(0.25),
+          width: 1,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // ===== HEADER: Level + Score =====
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      color: levelColor.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(_levelIcon(score.level), color: levelColor, size: 22),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "TRUST SCORE",
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      Text(
-                        score.level,
-                        style: TextStyle(
-                          color: levelColor,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              // Score-Zahl
+              // Level Icon
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                width: 44, height: 44,
                 decoration: BoxDecoration(
-                  color: levelColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  color: levelColor.withOpacity(0.12),
+                  shape: BoxShape.circle,
                 ),
-                child: Text(
-                  score.totalScore.toStringAsFixed(1),
-                  style: TextStyle(
-                    color: levelColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    fontFamily: 'monospace',
-                  ),
-                ),
+                child: Icon(_levelIcon(score.level), color: levelColor, size: 22),
               ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // Phase-Info
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_phaseIcon(score.currentPhase), color: Colors.grey.shade400, size: 14),
-                const SizedBox(width: 6),
-                Text(
-                  "Netzwerk: ${phase.name}",
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "${score.uniqueSigners} Ersteller aktiv",
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Fortschrittsbalken (wenn noch nicht Organisator)
-          if (!score.meetsPromotionThreshold) ...[
-            // Gesamtfortschritt
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: score.promotionProgress,
-                backgroundColor: Colors.white.withOpacity(0.1),
-                valueColor: AlwaysStoppedAnimation(levelColor),
-                minHeight: 6,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            // Einzelne Kriterien
-            ...score.progress.entries.map((entry) {
-              final p = entry.value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
+              const SizedBox(width: 12),
+              // Level + Label
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      p.met ? Icons.check_circle : Icons.radio_button_unchecked,
-                      color: p.met ? Colors.green : Colors.grey.shade600,
-                      size: 16,
+                    Text(
+                      score.level,
+                      style: TextStyle(color: levelColor, fontSize: 17, fontWeight: FontWeight.w800),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        "${p.label}: ${p.current}/${p.required}",
-                        style: TextStyle(
-                          color: p.met ? Colors.green.shade300 : Colors.grey.shade500,
-                          fontSize: 12,
-                          fontWeight: p.met ? FontWeight.w600 : FontWeight.normal,
-                        ),
-                      ),
+                    Text(
+                      "${score.totalBadges} Badges · ${score.uniqueMeetups} Meetups · ${score.uniqueSigners} Ersteller",
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                     ),
                   ],
                 ),
-              );
-            }),
+              ),
+              // Score Zahl
+              Text(
+                score.totalScore.toStringAsFixed(1),
+                style: TextStyle(
+                  color: levelColor,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
 
-            const SizedBox(height: 8),
-            Text(
-              score.promotionReason,
-              style: TextStyle(
-                color: Colors.grey.shade500,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
+          // ===== PROGRESS BAR (nur wenn noch nicht Organisator) =====
+          if (!score.meetsPromotionThreshold) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: score.promotionProgress,
+                backgroundColor: Colors.white.withOpacity(0.06),
+                valueColor: AlwaysStoppedAnimation(levelColor.withOpacity(0.7)),
+                minHeight: 4,
               ),
             ),
           ] else ...[
-            // Organisator Status
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.verified, color: Colors.green, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "Du bist Organisator! Du kannst NFC-Tags und Rolling-QR-Codes erstellen.",
-                      style: TextStyle(
-                        color: Colors.green.shade300,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.verified, color: Colors.green, size: 15),
+                const SizedBox(width: 6),
+                Text("Organisator", style: TextStyle(color: Colors.green.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
+              ],
             ),
           ],
 
-          // Stats
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStat("${score.totalBadges}", "Badges"),
-              _buildStat("${score.uniqueMeetups}", "Meetups"),
-              _buildStat("${score.uniqueSigners}", "Ersteller"),
-              _buildStat("${score.accountAgeDays}d", "Alter"),
-            ],
+          // ===== IDENTITY LAYER =====
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Identity Dots
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    _buildIdDot(
+                      Icons.bolt,
+                      "Lightning",
+                      _humanityVerified,
+                      _humanityVerified ? Colors.amber : null,
+                    ),
+                    ..._buildPlatformDots(),
+                    if (_platformProofCount == 0)
+                      _buildIdDot(Icons.link, "Plattform", false, null),
+                  ],
+                ),
+
+                // Hint
+                if (hasIdentityGaps) ...[
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
+                      );
+                      _loadAll();
+                    },
+                    child: Row(
+                      children: [
+                        Icon(Icons.arrow_forward_ios, color: cOrange.withOpacity(0.5), size: 10),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Verknüpfe Plattformen in deinem Profil um Trust aufzubauen",
+                          style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStat(String value, String label) {
-    return Column(
+  // Einzelner Identity-Dot
+  Widget _buildIdDot(IconData icon, String label, bool active, Color? activeColor) {
+    final color = active ? (activeColor ?? Colors.green) : Colors.grey.shade700;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            fontFamily: 'monospace',
-          ),
-        ),
-        const SizedBox(height: 2),
+        Icon(icon, color: color, size: 14),
+        const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+          style: TextStyle(
+            color: active ? color : Colors.grey.shade600,
+            fontSize: 11,
+            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+          ),
         ),
+        if (active) ...[
+          const SizedBox(width: 3),
+          Icon(Icons.check_circle, color: color, size: 11),
+        ],
       ],
     );
+  }
+
+  // Platform-Proof Dots generieren
+  List<Widget> _buildPlatformDots() {
+    final iconMap = {
+      'telegram': Icons.send,
+      'twitter': Icons.alternate_email,
+      'nostr': Icons.key,
+      'kleinanzeigen': Icons.storefront,
+    };
+    final labelMap = {
+      'telegram': 'Telegram',
+      'twitter': 'X',
+      'nostr': 'NIP-05',
+      'kleinanzeigen': 'Kleinanzeigen',
+    };
+
+    return _platformNames.map((name) {
+      return _buildIdDot(
+        iconMap[name.toLowerCase()] ?? Icons.link,
+        labelMap[name.toLowerCase()] ?? name,
+        true,
+        Colors.green,
+      );
+    }).toList();
   }
 
   // =============================================

@@ -6,6 +6,10 @@ import '../services/meetup_service.dart';
 import '../services/nostr_service.dart';
 import '../theme.dart';
 import 'dashboard.dart';
+import 'platform_proof_screen.dart';
+import 'humanity_proof_screen.dart';
+import '../services/platform_proof_service.dart';
+import '../services/humanity_proof_service.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -31,6 +35,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   String _nostrNpub = "";
   bool _isGeneratingKey = false;
 
+  // Identity State
+  int _platformProofCount = 0;
+  bool _humanityVerified = false;
+
   @override
   void initState() {
     super.initState();
@@ -45,6 +53,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final hasKey = await NostrService.hasKey();
     final npub = await NostrService.getNpub();
 
+    // Identity Layer Status
+    int proofCount = 0;
+    bool humanity = false;
+    try {
+      final proofs = await PlatformProofService.getSavedProofs();
+      proofCount = proofs.length;
+      final hStatus = await HumanityProofService.getStatus();
+      humanity = hStatus.verified;
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _user = user;
@@ -55,6 +73,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
         _hasNostrKey = hasKey;
         _nostrNpub = npub ?? user.nostrNpub;
+
+        _platformProofCount = proofCount;
+        _humanityVerified = humanity;
 
         _isEditing = !user.isAdminVerified;
         _isLoading = false;
@@ -417,6 +438,47 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         _buildInfoTile("Home Meetup", _user!.homeMeetupId.isEmpty ? "-" : _user!.homeMeetupId, Icons.home),
         if (_hasNostrKey)
           _buildInfoTile("Nostr", NostrService.shortenNpub(_nostrNpub), Icons.key),
+        const SizedBox(height: 24),
+
+        // Identity Layer — auch in read-only verfügbar
+        const Text("IDENTITÄT STÄRKEN", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+        const SizedBox(height: 12),
+
+        _buildIdentityAction(
+          icon: Icons.link,
+          title: "Plattformen verknüpfen",
+          subtitle: _platformProofCount > 0
+              ? "$_platformProofCount Plattform${_platformProofCount > 1 ? 'en' : ''} aktiv"
+              : "Telegram, X, Kleinanzeigen",
+          color: Colors.green,
+          done: _platformProofCount > 0,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
+            );
+            _loadData();
+          },
+        ),
+        const SizedBox(height: 10),
+
+        _buildIdentityAction(
+          icon: Icons.bolt,
+          title: "Proof of Humanity",
+          subtitle: _humanityVerified
+              ? "Lightning-Beweis aktiv"
+              : "Einmal gezappt? Jetzt prüfen",
+          color: Colors.amber,
+          done: _humanityVerified,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HumanityProofScreen()),
+            );
+            _loadData();
+          },
+        ),
+
         const SizedBox(height: 30),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(foregroundColor: cRed, side: const BorderSide(color: cRed)),
@@ -641,31 +703,51 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           const SizedBox(height: 24),
 
           // =============================================
-          // HINWEIS: PLATTFORM-VERKNÜPFUNG SPÄTER
+          // IDENTITÄT STÄRKEN
           // =============================================
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: cCyan.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cCyan.withOpacity(0.15)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.link, color: cCyan.withOpacity(0.7), size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "Telegram, X, Satoshi-Kleinanzeigen und andere Plattformen "
-                    "kannst du später kryptographisch mit deinem Profil verknüpfen — "
-                    "über deine Reputation-Seite.",
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11, height: 1.5),
-                  ),
-                ),
-              ],
-            ),
+          const Text("IDENTITÄT STÄRKEN", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(
+            "Verknüpfe Plattformen und beweise deine Menschlichkeit um deinen Trust Score zu erhöhen.",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+
+          // Plattformen verknüpfen
+          _buildIdentityAction(
+            icon: Icons.link,
+            title: "Plattformen verknüpfen",
+            subtitle: _platformProofCount > 0
+                ? "$_platformProofCount Plattform${_platformProofCount > 1 ? 'en' : ''} aktiv"
+                : "Telegram, X, Kleinanzeigen",
+            color: Colors.green,
+            done: _platformProofCount > 0,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
+              );
+              _loadData(); // Refresh
+            },
+          ),
+          const SizedBox(height: 10),
+
+          // Proof of Humanity
+          _buildIdentityAction(
+            icon: Icons.bolt,
+            title: "Proof of Humanity",
+            subtitle: _humanityVerified
+                ? "Lightning-Beweis aktiv"
+                : "Einmal gezappt? Jetzt prüfen",
+            color: Colors.amber,
+            done: _humanityVerified,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HumanityProofScreen()),
+              );
+              _loadData(); // Refresh
+            },
           ),
 
           const SizedBox(height: 30),
@@ -697,6 +779,62 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       validator: required ? (v) => v!.isEmpty ? "Pflichtfeld" : null : null,
+    );
+  }
+
+  Widget _buildIdentityAction({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required bool done,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cCard,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: done ? color.withOpacity(0.3) : Colors.white10,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(done ? 0.15 : 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: done ? color : Colors.grey, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(
+                      color: done ? color.withOpacity(0.8) : Colors.grey.shade500,
+                      fontSize: 12,
+                    )),
+                  ],
+                ),
+              ),
+              done
+                  ? Icon(Icons.check_circle, color: color, size: 20)
+                  : Icon(Icons.arrow_forward_ios, color: Colors.grey.shade700, size: 14),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
