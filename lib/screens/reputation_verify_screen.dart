@@ -267,6 +267,7 @@ class _ReputationVerifyScreenState extends State<ReputationVerifyScreen> {
                   zapStats: _zapStats,
                   socialAnalysis: _socialAnalysis,
                   nip05: _nip05Result,
+                  humanityVerified: _proofResult!.reputation?.humanityVerified ?? false,
                   platformProofCount: _proofResult!.reputation?.platformProofs.length,
                   totalScore: _proofResult!.reputation?.score,
                 ),

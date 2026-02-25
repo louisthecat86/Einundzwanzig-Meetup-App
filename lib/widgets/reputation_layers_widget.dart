@@ -26,6 +26,7 @@ class ReputationLayersWidget extends StatelessWidget {
 
   // Layer 2: Lightning/Zaps
   final ZapStats? zapStats;
+  final bool humanityVerified;
 
   // Layer 3: Sozial
   final SocialAnalysis? socialAnalysis;
@@ -47,6 +48,7 @@ class ReputationLayersWidget extends StatelessWidget {
     this.meetupScore,
     this.since,
     this.zapStats,
+    this.humanityVerified = false,
     this.socialAnalysis,
     this.nip05,
     this.platformProofCount,
@@ -105,6 +107,9 @@ class ReputationLayersWidget extends StatelessWidget {
           score: zapStats?.lightningScore,
           children: zapStats != null && zapStats!.totalCount > 0
               ? [
+                  if (humanityVerified)
+                    _buildDetail(Icons.verified_user, "Mensch verifiziert",
+                      "21-Sat Lightning-Beweis aktiv", Colors.green),
                   _buildDetail(Icons.arrow_upward, "${zapStats!.sentCount} gesendet",
                     "${zapStats!.uniqueRecipientCount} verschiedene Empfänger",
                     zapStats!.sentCount > 5 ? Colors.green : Colors.grey),
@@ -118,10 +123,15 @@ class ReputationLayersWidget extends StatelessWidget {
                     _buildDetail(Icons.check_circle, "Lightning verifiziert",
                       "Echte Zahlung nachgewiesen", Colors.green),
                 ]
-              : [
-                  _buildDetail(Icons.info_outline, "Keine Zap-Aktivität",
-                    "Keine Lightning-Zahlungen gefunden", Colors.grey),
-                ],
+              : humanityVerified
+                  ? [
+                      _buildDetail(Icons.verified_user, "Mensch verifiziert",
+                        "21-Sat Lightning-Beweis aktiv", Colors.green),
+                    ]
+                  : [
+                      _buildDetail(Icons.info_outline, "Keine Zap-Aktivität",
+                        "Keine Lightning-Zahlungen gefunden", Colors.grey),
+                    ],
         ),
 
         const SizedBox(height: 12),

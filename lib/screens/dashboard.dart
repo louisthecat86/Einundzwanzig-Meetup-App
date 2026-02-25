@@ -24,6 +24,7 @@ import 'rolling_qr_screen.dart';                            // NEU: Aktives Meet
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
 import 'relay_settings_screen.dart';
+import 'humanity_proof_screen.dart';
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
@@ -475,6 +476,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const RelaySettingsScreen()));
+              },
+            ),
+
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.bolt, color: Colors.amber),
+              ),
+              title: const Text("Proof of Humanity", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Lightning-Beweis gegen Bots (21 Sats).", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const HumanityProofScreen()));
               },
             ),
 

@@ -35,6 +35,7 @@ import 'relay_config.dart';
 import 'secure_key_store.dart';
 import 'social_graph_service.dart';
 import 'zap_verification_service.dart';
+import 'humanity_proof_service.dart';
 
 class ReputationPublisher {
   // Nostr Event Konfiguration
@@ -115,6 +116,12 @@ class ReputationPublisher {
             .timeout(const Duration(seconds: 10), onTimeout: () => ZapStats.empty());
       } catch (_) {}
 
+      // Humanity-Proof laden (lokal gespeichert)
+      Map<String, dynamic>? humanityProof;
+      try {
+        humanityProof = await HumanityProofService.getProofForPublishing();
+      } catch (_) {}
+
       // Event-Content erstellen (datenschutzkonform!)
       final content = _buildContent(
         badges: badges,
@@ -122,6 +129,7 @@ class ReputationPublisher {
         platformProofs: platformProofs,
         socialStats: socialStats,
         zapStats: zapStats,
+        humanityProof: humanityProof,
       );
 
       // Nostr-Event signieren
@@ -171,6 +179,7 @@ class ReputationPublisher {
     Map<String, PlatformProof>? platformProofs,
     SocialStats? socialStats,
     ZapStats? zapStats,
+    Map<String, dynamic>? humanityProof,
   }) {
     // Badge-Statistiken
     final stats = MeetupBadge.getReputationStats(badges);
@@ -239,6 +248,11 @@ class ReputationPublisher {
     // Lightning-Layer (nur wenn Daten vorhanden)
     if (zapStats != null && zapStats.totalCount > 0) {
       content['lightning'] = zapStats.toJson();
+    }
+
+    // Humanity-Proof (Lightning-Zahlung als Anti-Bot)
+    if (humanityProof != null) {
+      content['humanity_proof'] = humanityProof;
     }
 
     // Plattform-Proofs (nur wenn vorhanden)
@@ -575,6 +589,10 @@ class ReputationEvent {
   // Lightning-Layer (Phase 5)
   final ZapStats? zapStats;
 
+  // Humanity-Proof (Phase 5)
+  final bool humanityVerified;
+  final String? humanityReceiptId;
+
   // Update-Zeitpunkt
   final int updatedAt;
 
@@ -601,6 +619,8 @@ class ReputationEvent {
     this.platformProofs = const {},
     this.socialStats,
     this.zapStats,
+    this.humanityVerified = false,
+    this.humanityReceiptId,
     this.updatedAt = 0,
   });
 
@@ -615,6 +635,7 @@ class ReputationEvent {
     final platforms = content['platform_proofs'] as Map<String, dynamic>? ?? {};
     final socialJson = content['social'] as Map<String, dynamic>?;
     final lightningJson = content['lightning'] as Map<String, dynamic>?;
+    final humanityJson = content['humanity_proof'] as Map<String, dynamic>?;
 
     String npub = '';
     try { npub = Nip19.encodePubkey(event.pubkey); } catch (_) {}
@@ -642,6 +663,8 @@ class ReputationEvent {
       platformProofs: platforms,
       socialStats: socialJson != null ? SocialStats.fromJson(socialJson) : null,
       zapStats: lightningJson != null ? ZapStats.fromJson(lightningJson) : null,
+      humanityVerified: humanityJson?['verified'] as bool? ?? false,
+      humanityReceiptId: humanityJson?['receipt_event_id'] as String?,
       updatedAt: content['updated_at'] as int? ?? event.createdAt,
     );
   }
