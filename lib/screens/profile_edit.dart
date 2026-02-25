@@ -6,7 +6,6 @@ import '../services/meetup_service.dart';
 import '../services/nostr_service.dart';
 import '../theme.dart';
 import 'dashboard.dart';
-import 'profile_review.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -19,9 +18,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _nicknameController = TextEditingController();
-  final TextEditingController _fullNameController = TextEditingController();
-  final TextEditingController _telegramController = TextEditingController();
-  final TextEditingController _twitterController = TextEditingController();
 
   String _selectedHomeMeetup = "";
   List<Meetup> _allMeetups = [];
@@ -46,7 +42,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final meetups = await MeetupService.fetchMeetups();
     meetups.sort((a, b) => a.city.compareTo(b.city));
 
-    // Nostr Key Status prüfen
     final hasKey = await NostrService.hasKey();
     final npub = await NostrService.getNpub();
 
@@ -56,9 +51,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         _allMeetups = meetups;
 
         _nicknameController.text = user.nickname;
-        _fullNameController.text = user.fullName;
-        _telegramController.text = user.telegramHandle;
-        _twitterController.text = user.twitterHandle;
         _selectedHomeMeetup = user.homeMeetupId;
 
         _hasNostrKey = hasKey;
@@ -79,7 +71,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         title: const Text("NOSTR KEY ERSTELLEN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
           "Es wird ein neues Schlüsselpaar erstellt. Dein privater Schlüssel (nsec) wird sicher auf deinem Gerät gespeichert.\n\n"
-          "⚠️ WICHTIG: Sichere deinen nsec! Wenn du dein Gerät verlierst, ist dein Key weg.",
+          "Wichtig: Sichere deinen nsec! Wenn du dein Gerät verlierst, ist dein Key weg.",
           style: TextStyle(color: Colors.white70, height: 1.5),
         ),
         actions: [
@@ -110,7 +102,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       });
 
       if (mounted) {
-        // nsec anzeigen zum Sichern
         _showNsecBackupDialog(keys['nsec']!);
       }
     } catch (e) {
@@ -159,7 +150,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              "⚠️ Dein nsec verlässt niemals dein Gerät.",
+              "Dein nsec verlässt niemals dein Gerät.",
               style: TextStyle(color: Colors.orange, fontSize: 11),
             ),
           ],
@@ -185,7 +176,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text("✅ Key importiert!"),
+                      content: Text("Key importiert!"),
                       backgroundColor: Colors.green,
                     ),
                   );
@@ -193,7 +184,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("❌ $e"), backgroundColor: Colors.red),
+                    SnackBar(content: Text("$e"), backgroundColor: Colors.red),
                   );
                 }
               }
@@ -248,7 +239,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
             const SizedBox(height: 16),
             const Text(
-              "⚠️ Dieser Key wird NICHT nochmal angezeigt!",
+              "Dieser Key wird NICHT nochmal angezeigt!",
               style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ],
@@ -279,7 +270,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final keys = await NostrService.loadKeys();
     if (keys == null || !mounted) return;
 
-    // Sicherheitsabfrage
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -329,17 +319,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   // --- SPEICHERN ---
-  Future<void> _saveAndVerify() async {
+  Future<void> _saveProfile() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
       final newUser = UserProfile(
         nickname: _nicknameController.text.trim(),
-        fullName: _fullNameController.text.trim(),
+        fullName: _user?.fullName ?? '', // Behalten falls vorhanden
         homeMeetupId: _selectedHomeMeetup,
-        nostrNpub: _nostrNpub, // Kommt jetzt vom Key (oder leer)
-        telegramHandle: _telegramController.text.trim(),
-        twitterHandle: _twitterController.text.trim(),
+        nostrNpub: _nostrNpub,
+        telegramHandle: _user?.telegramHandle ?? '', // Behalten falls vorhanden
+        twitterHandle: _user?.twitterHandle ?? '',   // Behalten falls vorhanden
         isAdminVerified: false,
         isAdmin: _user?.isAdmin ?? false,
         isNostrVerified: _hasNostrKey,
@@ -355,20 +345,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
       if (!mounted) return;
 
-      Navigator.push(
+      // Direkt zum Dashboard — kein Review-Screen mehr nötig
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (context) => ProfileReviewScreen(
-            user: newUser,
-            onConfirm: () {
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ),
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        (route) => false,
       );
     }
   }
@@ -436,12 +417,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         _buildInfoTile("Home Meetup", _user!.homeMeetupId.isEmpty ? "-" : _user!.homeMeetupId, Icons.home),
         if (_hasNostrKey)
           _buildInfoTile("Nostr", NostrService.shortenNpub(_nostrNpub), Icons.key),
-        if (!_hasNostrKey && _user!.nostrNpub.isNotEmpty)
-          _buildInfoTile("Nostr (manuell)", _user!.nostrNpub.length > 16 ? "${_user!.nostrNpub.substring(0, 16)}..." : _user!.nostrNpub, Icons.key),
-        if (_user!.telegramHandle.isNotEmpty)
-          _buildInfoTile("Telegram", _user!.telegramHandle, Icons.send),
-        if (_user!.twitterHandle.isNotEmpty)
-          _buildInfoTile("Twitter", _user!.twitterHandle, Icons.alternate_email),
         const SizedBox(height: 30),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(foregroundColor: cRed, side: const BorderSide(color: cRed)),
@@ -478,13 +453,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- BASIS DATEN ---
-          const Text("BASIS DATEN", style: TextStyle(color: cOrange, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
+          // --- IDENTITÄT ---
+          const Text("DEINE IDENTITÄT", style: TextStyle(color: cOrange, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(
+            "Wähle einen Nickname und dein Home-Meetup.",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+
           _buildTextField(_nicknameController, "Nickname", Icons.person, required: true),
-          const SizedBox(height: 10),
-          _buildTextField(_fullNameController, "Name (Optional)", Icons.badge),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
           InkWell(
             onTap: _showMeetupPicker,
@@ -510,13 +489,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           const SizedBox(height: 30),
 
           // =============================================
-          // NOSTR IDENTITÄT (ersetzt das alte npub-Textfeld)
+          // NOSTR IDENTITÄT
           // =============================================
-          const Text("NOSTR IDENTITÄT", style: TextStyle(color: cPurple, fontWeight: FontWeight.bold)),
+          const Text("NOSTR SCHLÜSSEL", style: TextStyle(color: cPurple, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          const Text(
-            "Dein kryptografischer Schlüssel – damit werden Badges signiert.",
-            style: TextStyle(color: Colors.grey, fontSize: 12),
+          Text(
+            "Dein kryptografischer Schlüssel — damit werden Badges signiert und deine Reputation verifiziert.",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
           const SizedBox(height: 12),
 
@@ -541,7 +520,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // npub anzeigen
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
@@ -557,7 +535,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -652,7 +629,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
                   const SizedBox(height: 12),
                   const Text(
-                    "Du brauchst kein Nostr-Konto. Die App erstellt dir einen Schlüssel – das dauert eine Sekunde.",
+                    "Du brauchst kein Nostr-Konto. Die App erstellt dir einen Schlüssel — das dauert eine Sekunde.",
                     style: TextStyle(color: Colors.grey, fontSize: 11, height: 1.4),
                     textAlign: TextAlign.center,
                   ),
@@ -661,25 +638,48 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
           ],
 
+          const SizedBox(height: 24),
+
+          // =============================================
+          // HINWEIS: PLATTFORM-VERKNÜPFUNG SPÄTER
+          // =============================================
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cCyan.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cCyan.withOpacity(0.15)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.link, color: cCyan.withOpacity(0.7), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "Telegram, X, Satoshi-Kleinanzeigen und andere Plattformen "
+                    "kannst du später kryptographisch mit deinem Profil verknüpfen — "
+                    "über deine Reputation-Seite.",
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11, height: 1.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           const SizedBox(height: 30),
 
-          // --- SOCIALS ---
-          const Text("SOCIALS (Optional)", style: TextStyle(color: cCyan, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          _buildTextField(_telegramController, "Telegram Handle", Icons.send),
-          const SizedBox(height: 10),
-          _buildTextField(_twitterController, "Twitter / X Handle", Icons.alternate_email),
-
-          const SizedBox(height: 40),
+          // SPEICHERN
           SizedBox(
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _saveAndVerify,
-              child: const Text("SPEICHERN & ZUR PRÜFUNG"),
+              onPressed: _saveProfile,
+              child: const Text("PROFIL SPEICHERN"),
             ),
           ),
-          const SizedBox(height: 300),
+          const SizedBox(height: 100),
         ],
       ),
     );
@@ -762,9 +762,7 @@ class _MeetupSearchSheetState extends State<MeetupSearchSheet> {
                 itemBuilder: (context, index) {
                   final meetup = _filtered[index];
                   return ListTile(
-                    leading: const Icon(Icons.location_city, color: cOrange),
                     title: Text(meetup.city, style: const TextStyle(color: Colors.white)),
-                    subtitle: Text(meetup.country, style: TextStyle(color: Colors.grey.shade400)),
                     onTap: () {
                       widget.onSelect(meetup.city);
                       Navigator.pop(context);
