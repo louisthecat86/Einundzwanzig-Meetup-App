@@ -1,4 +1,3 @@
-// ============================================
 // MEETUP VERIFICATION — Badge Scanner
 // ============================================
 // Scannt NFC-Tags und Rolling-QR-Codes.
@@ -17,6 +16,7 @@
 //     wird gegen die Admin Registry geprüft.
 //   - Unbekannte Signer werden deutlich als ✗ markiert.
 //   - Legacy v1 Badges werden als unsicher gekennzeichnet.
+//   - NFC-Simulation ENTFERNT — kein Fake-Badge mehr möglich.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -67,15 +67,80 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   // =============================================
   // NFC LESEN
   // =============================================
+  // FIX: Bei fehlendem/deaktiviertem NFC wird jetzt ein
+  // Dialog angezeigt statt einen Fake-Badge zu erstellen.
+  // =============================================
 
   void _startNfcRead() async {
-    setState(() => _statusText = "Warte auf NFC Tag...");
+    setState(() => _statusText = "Prüfe NFC...");
 
     final availability = await NfcManager.instance.checkAvailability();
+
     if (availability != NfcAvailability.enabled) {
-      _simulateScan();
+      // ── NFC nicht verfügbar → Dialog statt Simulation ──
+      if (!mounted) return;
+
+      final bool isNotSupported = availability == NfcAvailability.notSupported;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: cCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          icon: Icon(
+            Icons.nfc_rounded,
+            size: 48,
+            color: isNotSupported ? Colors.red : cOrange,
+          ),
+          title: Text(
+            isNotSupported ? "NFC nicht verfügbar" : "NFC ist deaktiviert",
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            isNotSupported
+                ? "Dieses Gerät unterstützt kein NFC.\n\n"
+                  "Nutze stattdessen den QR-Code-Scanner, "
+                  "um dein Badge zu erhalten."
+                : "Bitte aktiviere NFC in deinen Geräteeinstellungen, "
+                  "um den Tag zu scannen.\n\n"
+                  "Android: Einstellungen → Verbindungen → NFC\n"
+                  "iOS: Einstellungen → NFC",
+            style: const TextStyle(color: Colors.grey, height: 1.5),
+          ),
+          actions: [
+            if (!isNotSupported)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("EINSTELLUNGEN ÖFFNEN",
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            if (isNotSupported)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _startQRScan(); // Direkt QR-Scanner starten
+                },
+                child: const Text("QR-CODE SCANNEN",
+                    style: TextStyle(color: cCyan)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("OK", style: TextStyle(color: cOrange)),
+            ),
+          ],
+        ),
+      );
+
+      setState(() {
+        _statusText = isNotSupported
+            ? "Dieses Gerät hat kein NFC. Nutze den QR-Scanner."
+            : "NFC ist deaktiviert. Bitte einschalten.";
+      });
       return;
     }
+
+    // ── NFC verfügbar → Normal scannen ──
+    setState(() => _statusText = "Warte auf NFC Tag...");
 
     try {
       await NfcManager.instance.startSession(
@@ -333,23 +398,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   }
 
   // =============================================
-  // SIMULATION (kein NFC verfügbar)
+  // _simulateScan() ENTFERNT — Sicherheitslücke geschlossen
   // =============================================
-
-  void _simulateScan() async {
-    setState(() => _statusText = "Simuliere Badge-Scan...");
-    await Future.delayed(const Duration(seconds: 1));
-
-    final simData = {
-      'v': 2,
-      't': 'B',
-      'm': 'sim-meetup-de',
-      'b': 850000, // Echte Blockzahl für Simulation eingefügt
-      'x': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 21600,
-      'delivery': 'nfc',
-    };
-    _processFoundTagData(tagData: simData);
-  }
 
   // =============================================
   // UI

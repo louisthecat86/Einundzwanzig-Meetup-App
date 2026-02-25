@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
-import 'package:encrypt/encrypt.dart' as enc; // Das neue Verschlüsselungspaket
+import 'package:encrypt/encrypt.dart' as enc;
 import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
@@ -14,68 +15,164 @@ import 'secure_key_store.dart';
 import 'dart:typed_data';
 
 class BackupService {
-  // --- HILFSFUNKTIONEN FÜR VERSCHLÜSSELUNG ---
+  // =============================================
+  // PBKDF2-HMAC-SHA256 KEY DERIVATION
+  // =============================================
+  //
+  // VORHER (UNSICHER):
+  //   sha256(password) → 1 Iteration, kein Salt
+  //   → Milliarden Versuche/Sekunde auf GPU
+  //
+  // JETZT (SICHER):
+  //   PBKDF2-HMAC-SHA256(password, salt, 600000 Iterationen)
+  //   → ~0.3 Sekunden pro Versuch auf moderner Hardware
+  //   → Brute-Force wirtschaftlich sinnlos
+  //
+  // OWASP Empfehlung 2024: ≥600.000 Iterationen für PBKDF2-SHA256
+  // =============================================
+  static const int _pbkdf2Iterations = 600000;
+  static const int _saltLengthBytes = 32;
+  static const int _keyLengthBytes = 32; // AES-256
 
-  /// Leitet aus dem Nutzerpasswort einen 32-Byte (256 Bit) AES-Schlüssel ab.
-  static enc.Key _deriveKey(String password) {
-    // SHA-256 erzeugt immer genau 32 Bytes
-    final bytes = utf8.encode(password);
-    final digest = sha256.convert(bytes);
-    return enc.Key(Uint8List.fromList(digest.bytes));
+  /// PBKDF2-HMAC-SHA256 Key Derivation
+  /// Erzeugt einen 256-Bit AES-Key aus Passwort + Salt
+  static enc.Key _deriveKey(String password, Uint8List salt) {
+    // PBKDF2 Implementation mit HMAC-SHA256
+    final passwordBytes = utf8.encode(password);
+    final hmac = Hmac(sha256, passwordBytes);
+
+    // PBKDF2: Key = T1 || T2 || ... || T_ceil(keyLen/hashLen)
+    // Für 32 Byte Key und SHA-256 (32 Byte Output) brauchen wir nur T1
+    final derivedKey = _pbkdf2F(hmac, salt, _pbkdf2Iterations, 1);
+
+    return enc.Key(Uint8List.fromList(derivedKey));
+  }
+
+  /// PBKDF2 F-Funktion: F(Password, Salt, c, i)
+  /// = U1 XOR U2 XOR ... XOR Uc
+  static List<int> _pbkdf2F(Hmac hmac, Uint8List salt, int iterations, int blockIndex) {
+    // U1 = HMAC(Password, Salt || INT_32_BE(i))
+    final saltWithIndex = Uint8List(salt.length + 4);
+    saltWithIndex.setRange(0, salt.length, salt);
+    saltWithIndex[salt.length + 0] = (blockIndex >> 24) & 0xFF;
+    saltWithIndex[salt.length + 1] = (blockIndex >> 16) & 0xFF;
+    saltWithIndex[salt.length + 2] = (blockIndex >> 8) & 0xFF;
+    saltWithIndex[salt.length + 3] = (blockIndex) & 0xFF;
+
+    var u = hmac.convert(saltWithIndex).bytes;
+    final result = List<int>.from(u);
+
+    // U2 ... Uc
+    for (int i = 1; i < iterations; i++) {
+      u = hmac.convert(u).bytes;
+      for (int j = 0; j < result.length; j++) {
+        result[j] ^= u[j];
+      }
+    }
+
+    return result;
+  }
+
+  /// Erzeugt kryptographisch sicheren Zufalls-Salt
+  static Uint8List _generateSalt() {
+    final random = Random.secure();
+    final salt = Uint8List(_saltLengthBytes);
+    for (int i = 0; i < _saltLengthBytes; i++) {
+      salt[i] = random.nextInt(256);
+    }
+    return salt;
   }
 
   /// Zeigt den Dialog zur Passwort-Eingabe (für Export und Import)
   static Future<String?> _promptForPassword(BuildContext context, {required bool isExport}) async {
     String password = '';
+    String passwordConfirm = '';
+    String? errorText;
+
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(
-          isExport ? 'Backup verschlüsseln' : 'Backup entschlüsseln',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isExport 
-                  ? 'Vergib ein Passwort, um deinen privaten Schlüssel (nsec) im Backup zu schützen. Wenn du dieses Passwort vergisst, ist das Backup wertlos!'
-                  : 'Dieses Backup ist verschlüsselt. Bitte gib das Passwort ein.',
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Passwort',
-                hintStyle: TextStyle(color: Colors.white30),
-                filled: true,
-                fillColor: Color(0xFF0A0A0A),
-                border: OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: Text(
+            isExport ? 'Backup verschlüsseln' : 'Backup entschlüsseln',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isExport
+                    ? 'Vergib ein Passwort, um deinen privaten Schlüssel (nsec) im Backup zu schützen.\n\n'
+                      '⚠️ Wenn du dieses Passwort vergisst, ist das Backup UNWIEDERBRINGLICH verloren!'
+                    : 'Dieses Backup ist verschlüsselt. Bitte gib das Passwort ein.',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
               ),
-              onChanged: (val) => password = val,
+              const SizedBox(height: 16),
+              TextField(
+                obscureText: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Passwort',
+                  hintStyle: const TextStyle(color: Colors.white30),
+                  filled: true,
+                  fillColor: const Color(0xFF0A0A0A),
+                  border: const OutlineInputBorder(),
+                  errorText: errorText,
+                ),
+                onChanged: (val) {
+                  password = val;
+                  setDialogState(() => errorText = null);
+                },
+              ),
+              if (isExport) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Passwort bestätigen',
+                    hintStyle: TextStyle(color: Colors.white30),
+                    filled: true,
+                    fillColor: Color(0xFF0A0A0A),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (val) => passwordConfirm = val,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Abbrechen', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+              onPressed: () {
+                if (password.isEmpty) {
+                  setDialogState(() => errorText = 'Passwort darf nicht leer sein');
+                  return;
+                }
+                if (isExport && password.length < 8) {
+                  setDialogState(() => errorText = 'Mindestens 8 Zeichen');
+                  return;
+                }
+                if (isExport && password != passwordConfirm) {
+                  setDialogState(() => errorText = 'Passwörter stimmen nicht überein');
+                  return;
+                }
+                Navigator.pop(context, password);
+              },
+              child: Text(
+                isExport ? 'Verschlüsseln & Speichern' : 'Entschlüsseln & Laden',
+                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: const Text('Abbrechen', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            onPressed: () {
-              if (password.isNotEmpty) {
-                Navigator.pop(context, password);
-              }
-            },
-            child: Text(isExport ? 'Verschlüsseln & Speichern' : 'Entschlüsseln & Laden', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }
@@ -106,10 +203,10 @@ class BackupService {
       final adminList = await AdminRegistry.getAdminList();
 
       Map<String, dynamic> backupData = {
-        'version': 3, // v3: AES Encrypted
+        'version': 4, // v4: PBKDF2-AES-GCM (vorher v3: SHA256-AES-GCM)
         'timestamp': DateTime.now().toIso8601String(),
         'app': 'Einundzwanzig Meetup App',
-        
+
         'user': {
           'nickname': user.nickname,
           'fullName': user.fullName,
@@ -126,6 +223,14 @@ class BackupService {
           'meetupName': b.meetupName,
           'date': b.date.toIso8601String(),
           'blockHeight': b.blockHeight,
+          // NEU: Kryptographischen Beweis mitsichern
+          'sig': b.sig,
+          'sigId': b.sigId,
+          'adminPubkey': b.adminPubkey,
+          'sigVersion': b.sigVersion,
+          'sigContent': b.sigContent,
+          'signerNpub': b.signerNpub,
+          'delivery': b.delivery,
         }).toList(),
         'nostr': {
           'nsec': nsec ?? '',
@@ -138,21 +243,26 @@ class BackupService {
 
       String jsonString = jsonEncode(backupData);
 
-      // --- VERSCHLÜSSELUNG (AES-GCM) ---
-      final key = _deriveKey(password);
-      final iv = enc.IV.fromLength(16); // Initialization Vector
+      // =============================================
+      // VERSCHLÜSSELUNG: PBKDF2-HMAC-SHA256 + AES-256-GCM
+      // =============================================
+      final salt = _generateSalt();
+      final key = _deriveKey(password, salt);
+      final iv = enc.IV.fromSecureRandom(16);
       final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
-
       final encrypted = encrypter.encrypt(jsonString, iv: iv);
-      
-      // Wir speichern das IV zusammen mit dem verschlüsselten Base64 String
-      // Format: "enc_v1:[IV_BASE64]:[CIPHERTEXT_BASE64]"
-      final finalPayload = "enc_v1:${iv.base64}:${encrypted.base64}";
+
+      // Format: "enc_v2:[SALT_BASE64]:[IV_BASE64]:[CIPHERTEXT_BASE64]"
+      //
+      // enc_v2 = PBKDF2 Key Derivation (enc_v1 war SHA-256 direkt)
+      // Salt wird für die Ableitung des Keys benötigt
+      // IV wird für AES-GCM benötigt
+      final finalPayload = "enc_v2:${base64Encode(salt)}:${iv.base64}:${encrypted.base64}";
 
       // Speichern
       final directory = await getTemporaryDirectory();
       String dateStr = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
-      final file = File('${directory.path}/21_backup_$dateStr.21bkp'); // Eigene Endung optional, hier zur Unterscheidung
+      final file = File('${directory.path}/21_backup_$dateStr.21bkp');
 
       await file.writeAsString(finalPayload);
 
@@ -164,7 +274,6 @@ class BackupService {
         subject: 'Einundzwanzig App Backup (Verschlüsselt)',
         text: 'Dein verschlüsseltes Backup. Halte dein Passwort bereit, um es wiederherzustellen.',
       );
-
     } catch (e) {
       print("Backup Fehler: $e");
       if (context.mounted) {
@@ -180,19 +289,53 @@ class BackupService {
   static Future<bool> restoreBackup(BuildContext context) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any, // Erlaubt auch die neue Endung
+        type: FileType.any,
       );
 
       if (result != null && result.files.single.path != null) {
         File file = File(result.files.single.path!);
         String content = await file.readAsString();
-        
+
         String decryptedJson = content;
 
-        // Prüfen, ob es ein verschlüsseltes Backup (v3) ist
-        if (content.startsWith("enc_v1:")) {
+        // =============================================
+        // enc_v2: PBKDF2 + AES-GCM (neues Format)
+        // =============================================
+        if (content.startsWith("enc_v2:")) {
           final password = await _promptForPassword(context, isExport: false);
-          if (password == null) return false; // Abgebrochen
+          if (password == null) return false;
+
+          try {
+            final parts = content.split(':');
+            if (parts.length != 4) throw Exception("Backup-Datei ist beschädigt (Formatfehler).");
+
+            final salt = Uint8List.fromList(base64Decode(parts[1]));
+            final iv = enc.IV.fromBase64(parts[2]);
+            final cipherText = parts[3];
+
+            final key = _deriveKey(password, salt);
+            final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+
+            decryptedJson = encrypter.decrypt64(cipherText, iv: iv);
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Falsches Passwort oder Datei beschädigt!"),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return false;
+          }
+        }
+        // =============================================
+        // enc_v1: Legacy SHA-256 + AES-GCM (altes Format)
+        // Rückwärtskompatibilität — wird trotzdem entschlüsselt
+        // =============================================
+        else if (content.startsWith("enc_v1:")) {
+          final password = await _promptForPassword(context, isExport: false);
+          if (password == null) return false;
 
           try {
             final parts = content.split(':');
@@ -201,14 +344,20 @@ class BackupService {
             final iv = enc.IV.fromBase64(parts[1]);
             final cipherText = parts[2];
 
-            final key = _deriveKey(password);
+            // Legacy: SHA-256 direkt (kein Salt, keine Iterationen)
+            final bytes = utf8.encode(password);
+            final digest = sha256.convert(bytes);
+            final key = enc.Key(Uint8List.fromList(digest.bytes));
             final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
 
             decryptedJson = encrypter.decrypt64(cipherText, iv: iv);
           } catch (e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Falsches Passwort oder Datei beschädigt!"), backgroundColor: Colors.red),
+                const SnackBar(
+                  content: Text("Falsches Passwort oder Datei beschädigt!"),
+                  backgroundColor: Colors.red,
+                ),
               );
             }
             return false;
@@ -254,6 +403,14 @@ class BackupService {
             date: DateTime.parse(b['date']),
             iconPath: "assets/badge_icon.png",
             blockHeight: b['blockHeight'] ?? 0,
+            // Kryptographischen Beweis wiederherstellen (v4)
+            sig: b['sig'] as String? ?? '',
+            sigId: b['sigId'] as String? ?? '',
+            adminPubkey: b['adminPubkey'] as String? ?? '',
+            sigVersion: b['sigVersion'] as int? ?? 0,
+            sigContent: b['sigContent'] as String? ?? '',
+            signerNpub: b['signerNpub'] as String? ?? '',
+            delivery: b['delivery'] as String? ?? 'nfc',
           ));
         }
         await MeetupBadge.saveBadges(restoredBadges);
@@ -303,7 +460,7 @@ class BackupService {
             SnackBar(
               content: Text(
                 hasNostr
-                    ? "✅ Verschlüsseltes Backup geladen! Nostr-Key wiederhergestellt."
+                    ? "✅ Backup geladen! Nostr-Key wiederhergestellt."
                     : "✅ Backup erfolgreich eingespielt!",
               ),
               backgroundColor: Colors.green,

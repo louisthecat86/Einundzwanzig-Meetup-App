@@ -186,7 +186,7 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
     if (myBadges.isEmpty) return;
 
     final user = await UserProfile.load();
-    final json =
+    final json = await
         MeetupBadge.exportBadgesForReputation(
           myBadges,
           user.nostrNpub,
@@ -196,7 +196,7 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
         );
 
     try {
-      await Share.share(json, subject: 'Einundzwanzig Reputation (JSON)');
+      await Share.share(json, subject: 'Einundzwanzig Reputation (v4, signiert)');
     } catch (e) {
       await Clipboard.setData(ClipboardData(text: json));
       if (mounted) {
@@ -251,7 +251,7 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
               leading: const Icon(Icons.code, color: cPurple),
               title: const Text("Als JSON exportieren",
                   style: TextStyle(color: Colors.white)),
-              subtitle: const Text("Mit Checksumme zur Verifizierung",
+              subtitle: const Text("Signierter Export mit Schnorr-Beweis",
                   style: TextStyle(color: cTextSecondary, fontSize: 12)),
               onTap: () {
                 Navigator.pop(context);

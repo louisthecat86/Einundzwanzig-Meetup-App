@@ -1,5 +1,5 @@
 // ============================================
-// ROLLING QR SERVICE v3 — UNIFIED SESSION
+// ROLLING QR SERVICE v3.1 — UNIFIED SESSION
 // ============================================
 //
 // Kombiniert zwei Sicherheitskonzepte und erzwingt EINE
@@ -15,15 +15,41 @@
 //    → Hängt nonce = HMAC(sessionSeed, zeitschritt) an
 //    → Hängt timeStep an
 //
+// ÄNDERUNG v3.1:
+//   Session-Seed wird mit Random.secure() erzeugt statt
+//   aus dem Private Key abgeleitet. Der Private Key darf
+//   NUR zum Signieren verwendet werden, NIEMALS als
+//   Seed-Material für andere Zwecke.
+//
+//   VORHER (unsicher):
+//     seed = SHA256("$privHex:$meetupId:$now")
+//     → Leakt Information über den Private Key
+//     → Gleiche Inputs = gleicher Seed (deterministisch)
+//
+//   JETZT (sicher):
+//     seed = hex(Random.secure().nextInt(256) * 32)
+//     → 256 Bit kryptographisch sicherer Zufall
+//     → Keine Verbindung zum Private Key
+//     → Jede Session hat garantiert einzigartigen Seed
+//
+// HINWEIS ZUR NONCE-VALIDIERUNG:
+//   Die Scanner-Seite kann die HMAC-Nonce NICHT verifizieren,
+//   da sie den Session-Seed nicht kennt (by design — sonst
+//   wäre der Anti-Screenshot-Schutz wirkungslos).
+//   Die Nonce-Validierung prüft daher NUR die Zeitnähe.
+//   Die eigentliche Sicherheit kommt von der Schnorr-Signatur
+//   des Base-Payloads + dem Ablaufzeitpunkt (x).
+//
 // ============================================
 
 import 'dart:convert';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'nostr_service.dart';
 import 'badge_security.dart';
 import 'secure_key_store.dart';
-import 'mempool.dart'; // NEU: Für initialen Fetch
+import 'mempool.dart';
 
 class RollingQRService {
   // Wie oft sich der QR ändert
@@ -45,8 +71,24 @@ class RollingQRService {
   static const String _keySessionBlockHeight = 'rqr_session_block_height';
   static const String _keySessionPubkey = 'rqr_session_pubkey';
   
-  // NEU: Hier speichern wir den EINMALIG signierten Base-Payload
+  // Hier speichern wir den EINMALIG signierten Base-Payload
   static const String _keySessionBasePayload = 'rqr_session_base_payload';
+
+  // =============================================
+  // KRYPTOGRAPHISCH SICHERER SEED-GENERATOR
+  // =============================================
+  //
+  // Erzeugt 32 Bytes (256 Bit) kryptographisch sicheren
+  // Zufall als Hex-String. Verwendet dart:math Random.secure()
+  // das auf /dev/urandom (Linux), CryptGenRandom (Windows),
+  // SecRandomCopyBytes (iOS/macOS) mapped.
+  //
+  // =============================================
+  static String _generateSecureSeed() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(32, (_) => random.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
 
   // =============================================
   // SESSION MANAGEMENT
@@ -124,17 +166,21 @@ class RollingQRService {
     required String meetupCountry,
     required int blockHeight,
   }) async {
-    // 1. Keys laden
-    final privHex = await SecureKeyStore.getPrivHex() ?? '';
+    // 1. Keys laden (nur pubkey für die Session-Metadaten)
     final pubkey = await NostrService.getNpub() ?? '';
     
     // 2. Zeitstempel
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final expiresAt = now + (sessionValidityHours * 3600);
 
-    // 3. Session-Seed generieren
-    final seedInput = '$privHex:$meetupId:$now';
-    final seed = sha256.convert(utf8.encode(seedInput)).toString();
+    // 3. Session-Seed: CSPRNG statt Private-Key-Ableitung
+    //
+    // VORHER (v3.0 — unsicher):
+    //   final seedInput = '$privHex:$meetupId:$now';
+    //   final seed = sha256.convert(utf8.encode(seedInput)).toString();
+    //
+    // JETZT (v3.1 — sicher):
+    final seed = _generateSecureSeed();
 
     // 4. BASE-PAYLOAD EINMALIG SIGNIEREN
     Map<String, dynamic> basePayload;
@@ -174,7 +220,7 @@ class RollingQRService {
     await prefs.setInt(_keySessionBlockHeight, blockHeight);
     await prefs.setString(_keySessionPubkey, pubkey);
     
-    // NEU: Base-Payload speichern (Für QR und NFC)
+    // Base-Payload speichern (Für QR und NFC)
     await prefs.setString(_keySessionBasePayload, jsonEncode(basePayload));
 
     return session;
@@ -249,6 +295,9 @@ class RollingQRService {
     final nonce = _generateNonce(session.seed, timeStep);
 
     // 3. Rolling-Felder an den bestehenden Payload anhängen
+    //    HINWEIS: Diese Felder sind NICHT von der Schnorr-Signatur
+    //    abgedeckt (werden vor Verify entfernt). Sie dienen nur
+    //    dem Anti-Screenshot-Schutz via Zeitnähe-Check.
     payload['n'] = nonce;       // Rolling Nonce (16 hex)
     payload['ts'] = timeStep;   // Time-Step (für Validierung)
     payload['d'] = 'rolling_qr';// delivery methode
@@ -269,6 +318,21 @@ class RollingQRService {
 
   // =============================================
   // NONCE VALIDIEREN (Scanner-Seite)
+  // =============================================
+  //
+  // WICHTIGER HINWEIS:
+  // Der Scanner kann die HMAC-Nonce NICHT kryptographisch
+  // verifizieren, da er den Session-Seed nicht kennt.
+  // Er prüft NUR die Zeitnähe des timeStep.
+  //
+  // Das ist eine bewusste Design-Entscheidung:
+  // - Den Seed zu verteilen würde den Anti-Screenshot-
+  //   Schutz komplett aushebeln
+  // - Die echte Sicherheit kommt von der Schnorr-Signatur
+  //   im Base-Payload + dem Ablaufzeitpunkt
+  // - Die Nonce verhindert nur Screenshot-Weitergabe
+  //   (zeitlich begrenzt, nicht kryptographisch)
+  //
   // =============================================
 
   static NonceValidation validateNonce(Map<String, dynamic> payload) {

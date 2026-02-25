@@ -11,6 +11,7 @@
 //   • 6h Ablaufzeit → Überschreibbar für nächstes Meetup
 //   • Payload-Größe wird VOR dem Schreiben angezeigt
 //   • Funktioniert mit NTAG213 (137B), 215 (492B), 216 (872B)
+//   • NFC-Simulation ENTFERNT — kein Fake-Schreiben mehr möglich.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -98,6 +99,13 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     }
   }
 
+  // =============================================
+  // NFC TAG SCHREIBEN
+  // =============================================
+  // FIX: Bei fehlendem/deaktiviertem NFC wird jetzt ein
+  // Dialog angezeigt statt einen Erfolg zu simulieren.
+  // =============================================
+
   void _writeTag() async {
     if (_homeMeetup == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,7 +131,55 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     // NFC verfügbar?
     final availability = await NfcManager.instance.checkAvailability();
     if (availability != NfcAvailability.enabled) {
-      await _simulateWriteTag();
+      // ── NFC nicht verfügbar → Dialog statt Simulation ──
+      if (!mounted) return;
+
+      final bool isNotSupported = availability == NfcAvailability.notSupported;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: cCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          icon: Icon(
+            Icons.nfc_rounded,
+            size: 48,
+            color: isNotSupported ? Colors.red : cOrange,
+          ),
+          title: Text(
+            isNotSupported ? "NFC nicht verfügbar" : "NFC ist deaktiviert",
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            isNotSupported
+                ? "Dieses Gerät unterstützt kein NFC.\n\n"
+                  "Du kannst stattdessen Rolling QR-Codes "
+                  "für dein Meetup verwenden."
+                : "Bitte aktiviere NFC in deinen Geräteeinstellungen, "
+                  "um den Tag zu beschreiben.\n\n"
+                  "Android: Einstellungen → Verbindungen → NFC",
+            style: const TextStyle(color: Colors.grey, height: 1.5),
+          ),
+          actions: [
+            if (!isNotSupported)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("EINSTELLUNGEN ÖFFNEN",
+                    style: TextStyle(color: Colors.grey)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("OK", style: TextStyle(color: cOrange)),
+            ),
+          ],
+        ),
+      );
+
+      setState(() {
+        _statusText = isNotSupported
+            ? "Dieses Gerät hat kein NFC. Nutze Rolling QR-Codes."
+            : "NFC ist deaktiviert. Bitte einschalten.";
+      });
       return;
     }
 
@@ -249,11 +305,9 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     setState(() => _statusText = "❌ $error");
   }
 
-  Future<void> _simulateWriteTag() async {
-    setState(() => _statusText = "Schreibe Tag... (SIM)");
-    await Future.delayed(const Duration(seconds: 2));
-    _handleSuccessInUI(_payloadSize > 10 ? _payloadSize - 10 : 285);
-  }
+  // =============================================
+  // _simulateWriteTag() ENTFERNT — Sicherheitslücke geschlossen
+  // =============================================
 
   @override
   Widget build(BuildContext context) {
