@@ -33,6 +33,8 @@ import '../models/user.dart';
 import 'badge_security.dart';
 import 'relay_config.dart';
 import 'secure_key_store.dart';
+import 'social_graph_service.dart';
+import 'zap_verification_service.dart';
 
 class ReputationPublisher {
   // Nostr Event Konfiguration
@@ -101,11 +103,25 @@ class ReputationPublisher {
       // User-Profil laden
       final user = await UserProfile.load();
 
+      // Social & Lightning Stats im Hintergrund laden (optional, best-effort)
+      SocialStats? socialStats;
+      ZapStats? zapStats;
+      try {
+        socialStats = await SocialGraphService.getMyStats()
+            .timeout(const Duration(seconds: 10), onTimeout: () => SocialStats.empty());
+      } catch (_) {}
+      try {
+        zapStats = await ZapVerificationService.getMyStats()
+            .timeout(const Duration(seconds: 10), onTimeout: () => ZapStats.empty());
+      } catch (_) {}
+
       // Event-Content erstellen (datenschutzkonform!)
       final content = _buildContent(
         badges: badges,
         user: user,
         platformProofs: platformProofs,
+        socialStats: socialStats,
+        zapStats: zapStats,
       );
 
       // Nostr-Event signieren
@@ -153,6 +169,8 @@ class ReputationPublisher {
     required List<MeetupBadge> badges,
     required UserProfile user,
     Map<String, PlatformProof>? platformProofs,
+    SocialStats? socialStats,
+    ZapStats? zapStats,
   }) {
     // Badge-Statistiken
     final stats = MeetupBadge.getReputationStats(badges);
@@ -212,6 +230,16 @@ class ReputationPublisher {
       },
       'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
     };
+
+    // Social-Layer (nur wenn Daten vorhanden)
+    if (socialStats != null && socialStats.followCount > 0) {
+      content['social'] = socialStats.toJson();
+    }
+
+    // Lightning-Layer (nur wenn Daten vorhanden)
+    if (zapStats != null && zapStats.totalCount > 0) {
+      content['lightning'] = zapStats.toJson();
+    }
 
     // Plattform-Proofs (nur wenn vorhanden)
     if (platformProofs != null && platformProofs.isNotEmpty) {
@@ -541,6 +569,12 @@ class ReputationEvent {
   // Plattform-Proofs
   final Map<String, dynamic> platformProofs;
 
+  // Social-Layer (Phase 5)
+  final SocialStats? socialStats;
+
+  // Lightning-Layer (Phase 5)
+  final ZapStats? zapStats;
+
   // Update-Zeitpunkt
   final int updatedAt;
 
@@ -565,6 +599,8 @@ class ReputationEvent {
     this.badgeProofHash = '',
     this.proofVersion = 1,
     this.platformProofs = const {},
+    this.socialStats,
+    this.zapStats,
     this.updatedAt = 0,
   });
 
@@ -577,6 +613,8 @@ class ReputationEvent {
     final stats = content['stats'] as Map<String, dynamic>? ?? {};
     final proof = content['proof'] as Map<String, dynamic>? ?? {};
     final platforms = content['platform_proofs'] as Map<String, dynamic>? ?? {};
+    final socialJson = content['social'] as Map<String, dynamic>?;
+    final lightningJson = content['lightning'] as Map<String, dynamic>?;
 
     String npub = '';
     try { npub = Nip19.encodePubkey(event.pubkey); } catch (_) {}
@@ -602,6 +640,8 @@ class ReputationEvent {
       badgeProofHash: proof['badge_proof_hash'] as String? ?? '',
       proofVersion: proof['proof_version'] as int? ?? 1,
       platformProofs: platforms,
+      socialStats: socialJson != null ? SocialStats.fromJson(socialJson) : null,
+      zapStats: lightningJson != null ? ZapStats.fromJson(lightningJson) : null,
       updatedAt: content['updated_at'] as int? ?? event.createdAt,
     );
   }
