@@ -1,5 +1,8 @@
 // ============================================
-// REPUTATION QR-CODE SCREEN v4 — CLEAN & PRO
+// REPUTATION QR-CODE SCREEN v5 — PROOF OF REPUTATION
+// ============================================
+// v5: Badge-Proof v2 (gebundene Badges), Plattform-Proofs,
+//     Remote-Verifikation, Relay-Publishing
 // ============================================
 
 import 'dart:ui' as ui;
@@ -18,7 +21,11 @@ import '../models/user.dart';
 import '../services/badge_security.dart';
 import '../services/nostr_service.dart';
 import '../services/trust_score_service.dart';
+import '../services/reputation_publisher.dart';
+import '../services/platform_proof_service.dart';
 import 'qr_scanner.dart';
+import 'reputation_verify_screen.dart';
+import 'platform_proof_screen.dart';
 
 class ReputationQRScreen extends StatefulWidget {
   const ReputationQRScreen({super.key});
@@ -30,9 +37,13 @@ class ReputationQRScreen extends StatefulWidget {
 class _ReputationQRScreenState extends State<ReputationQRScreen> {
   String _qrData = '';
   bool _isLoading = true;
+  bool _isPublishing = false;
   UserProfile _user = UserProfile();
   TrustScore? _trustScore;
   int _verifiedBadgeCount = 0;
+  int _boundBadgeCount = 0;
+  int _platformProofCount = 0;
+  String? _lastPublishInfo;
 
   // Key für QR-Screenshot
   final GlobalKey _qrRepaintKey = GlobalKey();
@@ -46,10 +57,14 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
   void _generateQRData() async {
     final user = await UserProfile.load();
 
+    // Plattform-Proofs zählen
+    final proofs = await PlatformProofService.getSavedProofs();
+
     // Kein QR generieren wenn keine Badges vorhanden
     if (myBadges.isEmpty) {
       setState(() {
         _user = user;
+        _platformProofCount = proofs.length;
         _isLoading = false;
       });
       return;
@@ -69,9 +84,12 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       coAttestorMap: null,
     );
 
-    // Badge-Proof
-    final badgeProof = MeetupBadge.generateBadgeProof(myBadges);
+    // Badge-Proof (v2 wenn gebundene Badges vorhanden, sonst v1)
+    final badgeProofV2 = MeetupBadge.generateBadgeProofV2(myBadges);
+    final badgeProofV1 = MeetupBadge.generateBadgeProof(myBadges);
+    final badgeProof = badgeProofV2.isNotEmpty ? badgeProofV2 : badgeProofV1;
     final verifiedCount = MeetupBadge.countVerifiedBadges(myBadges);
+    final boundCount = MeetupBadge.countBoundBadges(myBadges);
 
     // Payload
     final Map<String, dynamic> identity = {
@@ -93,15 +111,19 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
     if (uniqueMeetups.isNotEmpty) {
       reputation['ml'] = uniqueMeetups.take(10).toList();
     }
+    // NEU: Gebundene Badges
+    reputation['bb'] = boundCount;
 
     final Map<String, dynamic> proof = {
       'bp': badgeProof,
+      'pv': badgeProofV2.isNotEmpty ? 2 : 1,
       'vc': verifiedCount,
       'tc': myBadges.length,
+      'bb': boundCount,
     };
 
     final Map<String, dynamic> qrPayload = {
-      'v': 3,
+      'v': 4,  // v4: mit Badge-Binding
       'id': identity,
       'rp': reputation,
       'pf': proof,
@@ -128,6 +150,8 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       _user = user;
       _trustScore = trustScore;
       _verifiedBadgeCount = verifiedCount;
+      _boundBadgeCount = boundCount;
+      _platformProofCount = proofs.length;
       _isLoading = false;
     });
   }
@@ -167,6 +191,38 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
           SnackBar(content: Text('Fehler beim Teilen: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  // =============================================
+  // REPUTATION AUF RELAYS PUBLIZIEREN
+  // =============================================
+  void _publishToRelays() async {
+    setState(() {
+      _isPublishing = true;
+      _lastPublishInfo = null;
+    });
+
+    final proofs = await PlatformProofService.getProofsForPublishing();
+    final result = await ReputationPublisher.publish(
+      badges: myBadges,
+      platformProofs: proofs,
+      force: true,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isPublishing = false;
+        _lastPublishInfo = result.message;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: result.success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -245,12 +301,12 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Badge-Proof Status
+                  // Badge-Proof Status (erweitert)
                   _buildProofStatus(),
 
                   const SizedBox(height: 24),
 
-                  // Action Buttons
+                  // Action Buttons (erweitert)
                   _buildActions(),
 
                   const SizedBox(height: 40),
@@ -287,6 +343,28 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
               style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 32),
+
+            // Remote Verify — auch ohne eigene Badges nutzbar
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
+                ),
+                icon: const Icon(Icons.verified_user),
+                label: const Text("REPUTATION PRÜFEN"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cCyan,
+                  side: const BorderSide(color: cCyan, width: 1.5),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // QR Scanner
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -296,10 +374,10 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                   MaterialPageRoute(builder: (context) => const SecureQRScanner()),
                 ),
                 icon: const Icon(Icons.qr_code_scanner),
-                label: const Text("REPUTATION PRÜFEN"),
+                label: const Text("QR-CODE SCANNEN"),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: cCyan,
-                  side: const BorderSide(color: cCyan, width: 1.5),
+                  foregroundColor: Colors.grey,
+                  side: BorderSide(color: Colors.grey.shade700, width: 1),
                 ),
               ),
             ),
@@ -418,7 +496,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       const SizedBox(width: 10),
       _buildStat(Icons.people_outline, "${score?.uniqueSigners ?? 0}", "Signer", cPurple),
       const SizedBox(width: 10),
-      _buildStat(Icons.calendar_today, "${score?.accountAgeDays ?? 0}", "Tage", Colors.green),
+      _buildStat(Icons.link, "$_boundBadgeCount", "Gebunden", Colors.green),
     ]);
   }
 
@@ -445,15 +523,37 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
   Widget _buildProofStatus() {
     final total = myBadges.length;
     final verified = _verifiedBadgeCount;
+    final bound = _boundBadgeCount;
+    final allBound = total > 0 && bound == total;
     final allVerified = total > 0 && verified == total;
 
-    final Color c = allVerified ? Colors.green : (verified > 0 ? cOrange : Colors.grey);
-    final IconData icon = allVerified ? Icons.verified : (verified > 0 ? Icons.shield_outlined : Icons.info_outline);
-    final String text = allVerified
-        ? "Alle $total Badges kryptographisch verifiziert"
-        : verified > 0
-            ? "$verified von $total Badges mit Schnorr-Beweis"
-            : "Noch keine kryptographischen Beweise";
+    // Höchste Stufe bestimmen
+    final Color c;
+    final IconData icon;
+    final String text;
+
+    if (allBound) {
+      c = Colors.green;
+      icon = Icons.verified;
+      text = "Alle $total Badges gebunden und verifiziert";
+    } else if (bound > 0) {
+      c = cCyan;
+      icon = Icons.link;
+      text = "$bound von $total Badges identitätsgebunden"
+          "${verified > bound ? ' ($verified kryptographisch verifiziert)' : ''}";
+    } else if (allVerified) {
+      c = cOrange;
+      icon = Icons.shield_outlined;
+      text = "Alle $total Badges kryptographisch verifiziert (noch nicht gebunden)";
+    } else if (verified > 0) {
+      c = cOrange;
+      icon = Icons.shield_outlined;
+      text = "$verified von $total Badges mit Schnorr-Beweis";
+    } else {
+      c = Colors.grey;
+      icon = Icons.info_outline;
+      text = "Noch keine kryptographischen Beweise";
+    }
 
     return Container(
       width: double.infinity,
@@ -463,13 +563,33 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: c.withOpacity(0.25)),
       ),
-      child: Row(children: [
-        Icon(icon, color: c, size: 22),
-        const SizedBox(width: 12),
-        Expanded(child: Text(text, style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600))),
-      ]),
+      child: Column(
+        children: [
+          Row(children: [
+            Icon(icon, color: c, size: 22),
+            const SizedBox(width: 12),
+            Expanded(child: Text(text, style: TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w600))),
+          ]),
+          // Plattform-Proofs Info
+          if (_platformProofCount > 0) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.language, color: Colors.green.shade400, size: 16),
+              const SizedBox(width: 12),
+              Text(
+                "$_platformProofCount Plattform-Verknüpfung${_platformProofCount > 1 ? 'en' : ''} aktiv",
+                style: TextStyle(color: Colors.green.shade400, fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ]),
+          ],
+        ],
+      ),
     );
   }
+
+  // =============================================
+  // ACTION BUTTONS (erweitert)
+  // =============================================
 
   Widget _buildActions() {
     return Column(children: [
@@ -487,6 +607,126 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
           ),
         ),
       ),
+
+      const SizedBox(height: 12),
+
+      // Relay-Publish
+      SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton.icon(
+          onPressed: _isPublishing ? null : _publishToRelays,
+          icon: _isPublishing
+              ? const SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.cloud_upload, size: 20),
+          label: Text(_isPublishing ? "PUBLIZIERE..." : "AUF RELAYS AKTUALISIEREN"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: cCyan.withOpacity(0.15),
+            foregroundColor: cCyan,
+            disabledBackgroundColor: cCyan.withOpacity(0.08),
+          ),
+        ),
+      ),
+
+      // Letzter Publish-Status
+      if (_lastPublishInfo != null) ...[
+        const SizedBox(height: 6),
+        Text(
+          _lastPublishInfo!,
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+          textAlign: TextAlign.center,
+        ),
+      ],
+
+      const SizedBox(height: 16),
+      const Divider(color: Colors.white10),
+      const SizedBox(height: 16),
+
+      // Sekundäre Actions als Grid
+      Row(
+        children: [
+          // Plattform-Verknüpfung
+          Expanded(
+            child: _buildActionTile(
+              icon: Icons.link,
+              label: "PLATTFORM",
+              subtitle: _platformProofCount > 0
+                  ? "$_platformProofCount aktiv"
+                  : "Verknüpfen",
+              color: Colors.green,
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
+                );
+                // Proofs neu laden
+                _generateQRData();
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Remote-Verifikation
+          Expanded(
+            child: _buildActionTile(
+              icon: Icons.verified_user,
+              label: "PRÜFEN",
+              subtitle: "Remote-Verify",
+              color: cCyan,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     ]);
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cCard,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(height: 10),
+              Text(label,
+                style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

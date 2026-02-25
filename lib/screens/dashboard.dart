@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
 import '../models/user.dart';
@@ -8,6 +9,9 @@ import '../services/meetup_service.dart';
 import '../services/trust_score_service.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
+import '../services/badge_claim_service.dart';               // NEU: Badge-Binding
+import '../services/reputation_publisher.dart';              // NEU: Auto-Publish
+import '../services/rolling_qr_service.dart';               // NEU: Session-Check
 import 'meetup_verification.dart';
 import 'meetup_selection.dart'; 
 import 'badge_details.dart'; 
@@ -15,9 +19,11 @@ import 'badge_wallet.dart';
 import 'profile_edit.dart'; 
 import 'intro.dart'; 
 import 'admin_panel.dart'; 
+import 'rolling_qr_screen.dart';                            // NEU: Aktives Meetup
 
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
+import 'relay_settings_screen.dart';
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
@@ -35,18 +41,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
   TrustScore? _trustScore;
   bool _justPromoted = false;
   
+  // Aktive Meetup-Session
+  MeetupSession? _activeSession;
+  Timer? _sessionTimer;
+  String _sessionTimeLeft = '';
+  
   @override
   void initState() {
     super.initState();
     _loadAll();
   }
 
+  @override
+  void dispose() {
+    _sessionTimer?.cancel();
+    super.dispose();
+  }
+
   void _loadAll() async {
     await _loadUser();
     await _loadBadges();
     await _calculateTrustScore();
+    _checkActiveSession();
     // Organic Admins von Nostr laden und verifizieren
     _syncOrganicAdminsInBackground();
+  }
+
+  // =============================================
+  // AKTIVE MEETUP-SESSION PRÜFEN
+  // =============================================
+  void _checkActiveSession() async {
+    final session = await RollingQRService.loadSession();
+    if (session != null && !session.isExpired) {
+      setState(() => _activeSession = session);
+      _startSessionTimer();
+    } else {
+      _sessionTimer?.cancel();
+      if (mounted) setState(() => _activeSession = null);
+    }
+  }
+
+  void _startSessionTimer() {
+    _sessionTimer?.cancel();
+    _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_activeSession == null || _activeSession!.isExpired) {
+        _sessionTimer?.cancel();
+        if (mounted) setState(() => _activeSession = null);
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          final r = _activeSession!.remainingTime;
+          _sessionTimeLeft = '${r.inHours}h ${(r.inMinutes % 60).toString().padLeft(2, '0')}m';
+        });
+      }
+    });
   }
 
   /// Lädt Admin Claims von Nostr Relays und verifiziert sie.
@@ -64,10 +113,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadBadges() async {
     final badges = await MeetupBadge.loadBadges();
+
+    // =============================================
+    // NEU: Retroaktives Claiming (Badge-Binding)
+    // Bindet alte Badges (vor dem Update) an den Nutzer.
+    // Läuft einmalig beim ersten App-Start nach Update.
+    // Retroaktive Claims werden markiert (reduzierter Wert).
+    // =============================================
+    final claimedCount = await BadgeClaimService.ensureBadgesClaimed(badges);
+    if (claimedCount > 0) {
+      print('[Dashboard] $claimedCount Badges retroaktiv gebunden');
+    }
+
     setState(() {
       myBadges.clear();
       myBadges.addAll(badges);
     });
+
+    // NEU: Reputation im Hintergrund auf Relays aktualisieren
+    // Publiziert nur wenn sich etwas geändert hat (Change-Detection)
+    if (badges.isNotEmpty) {
+      ReputationPublisher.publishInBackground(badges);
+    }
   }
 
   Future<void> _loadUser() async {
@@ -394,6 +461,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Divider(color: Colors.white10),
             const SizedBox(height: 10),
             
+            const Text("NOSTR-NETZWERK", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 10),
+
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: cCyan.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.hub, color: cCyan),
+              ),
+              title: const Text("Nostr-Relays", style: TextStyle(color: Colors.white)),
+              subtitle: const Text("Relays für Reputation konfigurieren.", style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const RelaySettingsScreen()));
+              },
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 10),
+            
             const Text("ACCOUNT", style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 10),
 
@@ -479,6 +567,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 20),
             ],
 
+            // --- AKTIVES MEETUP (Session-Kachel) ---
+            if (_activeSession != null) ...[
+              _buildActiveSessionCard(),
+              const SizedBox(height: 20),
+            ],
+
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -556,11 +650,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         context,
                         MaterialPageRoute(builder: (context) => const AdminPanelScreen()),
                       );
+                      _checkActiveSession(); // Session-Status aktualisieren
                     }
                   ),
               ],
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  // =============================================
+  // AKTIVES MEETUP CARD
+  // =============================================
+  Widget _buildActiveSessionCard() {
+    final session = _activeSession!;
+    
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const RollingQRScreen()),
+          );
+          _checkActiveSession(); // Nach Rückkehr Status prüfen
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: cCard,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.green.withOpacity(0.5), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.green.withOpacity(0.1),
+                blurRadius: 20,
+                spreadRadius: 0,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Pulsierendes Icon
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.qr_code, color: Colors.green, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8, height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          "MEETUP AKTIV",
+                          style: TextStyle(
+                            color: Colors.green.shade300,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      session.meetupName.isNotEmpty 
+                          ? session.meetupName.toUpperCase()
+                          : "LAUFENDE SESSION",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "Noch $_sessionTimeLeft",
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, color: Colors.green, size: 16),
+            ],
+          ),
         ),
       ),
     );

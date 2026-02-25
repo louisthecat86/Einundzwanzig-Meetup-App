@@ -289,12 +289,14 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
           "Springe zum QR-Code...";
     });
     
-    // THE FIX: Automatischer Sprung zum QR-Code Screen
+    // Automatischer Sprung zum QR-Code Screen
+    // pushAndRemoveUntil: Entfernt Wizard + AdminPanel vom Stack
+    // → Zurück-Button im RollingQR führt direkt zum Dashboard
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (context) => const RollingQRScreen()),
+          (route) => route.isFirst, // Nur Dashboard behalten
         );
       }
     });

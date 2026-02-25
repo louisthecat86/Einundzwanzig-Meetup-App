@@ -1,38 +1,24 @@
 // ============================================
-// BADGE MODEL v4 — MIT CO-SIGNATUR-PROTOKOLL
+// BADGE MODEL v4 — MIT CLAIM-BINDING
 // ============================================
+// Jedes Badge hat jetzt ZWEI Signaturen:
+//   1. Organisator-Signatur → "Dieses Meetup fand statt"
+//   2. Claim-Signatur (NEU) → "Ich war dabei"
 //
-// ÄNDERUNGEN v4 (gegenüber v3):
+// Ohne Claim-Signatur zählt ein Badge NICHT
+// für die Reputation. Die Claim-Signatur bindet
+// das Badge kryptographisch an den Sammler.
 //
-// 1. CO-SIGNATUR:
-//    Nach dem Scannen signiert der Teilnehmer den Badge-Hash
-//    mit seinem eigenen Nostr-Key. Dadurch:
-//    → Badge ist NICHT übertragbar
-//    → Besitz ist kryptographisch beweisbar
-//    → Manipulation der Badge-Liste ist erkennbar
-//
-//    Kette:
-//      Organisator signiert Badge → sig (Schnorr)
-//      Teilnehmer signiert Badge-Hash → participantSig (Schnorr)
-//      Export: User signiert ALLE Badges → exportSig (Schnorr)
-//
-// 2. SIGNIERTER EXPORT:
-//    Der Export wird vom User mit Schnorr signiert.
-//    Manipulation des Exports (Badges hinzufügen/entfernen/ändern)
-//    bricht die Export-Signatur.
-//
-// 3. BADGE-PROOF:
-//    Hash-Chain über alle Badge-Signaturen.
-//    Änderung eines Badges → Proof-Hash ändert sich.
-//
+// Die Kette:
+//   Organisator signiert Tag → Schnorr-Signatur (unfälschbar)
+//   Teilnehmer scannt Tag → Claim-Signatur (bindet an Sammler)
+//   Reputation → Nur gebundene Badges zählen
+//   Verifizierer prüft → Beide Signaturen + Proof-Hash
 // ============================================
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
-import 'package:nostr/nostr.dart';
-import '../services/secure_key_store.dart';
-import '../services/badge_security.dart';
 
 class MeetupBadge {
   final String id;
@@ -45,7 +31,7 @@ class MeetupBadge {
   final String delivery;        // 'nfc' oder 'rolling_qr'
 
   // =============================================
-  // ORGANISATOR-BEWEIS (v3)
+  // KRYPTOGRAPHISCHER BEWEIS (Organisator)
   // =============================================
   final String sig;             // Schnorr-Signatur des Organisators (128 hex chars)
   final String sigId;           // Nostr Event-ID (SHA-256 Hash, 64 hex chars)
@@ -54,26 +40,15 @@ class MeetupBadge {
   final String sigContent;      // Der signierte Content (für Re-Verifikation)
 
   // =============================================
-  // TEILNEHMER-CO-SIGNATUR (NEU in v4)
+  // CLAIM-BINDING (NEU in v4)
+  // Bindet das Badge kryptographisch an den Sammler.
+  // Ohne Claim → Badge zählt nicht für Reputation.
   // =============================================
-  //
-  // Nach dem Scannen signiert der Teilnehmer den Badge-Hash
-  // mit seinem eigenen Nostr-Key.
-  //
-  // participantSig beweist:
-  //   "ICH (mit diesem Pubkey) habe DIESES Badge erhalten"
-  //
-  // Format:
-  //   participantSig = SchnorrSign(SHA256(badgeProofId + participantPubkey), participantPrivKey)
-  //
-  // Dadurch:
-  //   - Badge kann nicht auf anderen User übertragen werden
-  //   - Verifier kann prüfen: participantPubkey + participantSig + proofId
-  //   - Ohne den Private Key des Teilnehmers: keine gültige Co-Signatur
-  //
-  // =============================================
-  final String participantPubkey;   // Hex-Pubkey des Teilnehmers (64 hex chars)
-  final String participantSig;      // Schnorr Co-Signatur des Teilnehmers (128 hex chars)
+  final String claimSig;        // Schnorr-Signatur des Sammlers
+  final String claimEventId;    // Nostr Event-ID des Claim-Events
+  final String claimPubkey;     // Hex-Pubkey des Sammlers
+  final int claimTimestamp;     // Unix-Timestamp des Claims
+  final bool isRetroactive;     // true = nachträglich geclaimed (reduzierter Vertrauenswert)
 
   MeetupBadge({
     required this.id,
@@ -90,23 +65,25 @@ class MeetupBadge {
     this.adminPubkey = '',
     this.sigVersion = 0,
     this.sigContent = '',
-    // Teilnehmer-Co-Signatur
-    this.participantPubkey = '',
-    this.participantSig = '',
+    // Claim-Binding
+    this.claimSig = '',
+    this.claimEventId = '',
+    this.claimPubkey = '',
+    this.claimTimestamp = 0,
+    this.isRetroactive = false,
   });
 
-  /// Hat dieses Badge einen kryptographischen Beweis vom Organisator?
+  /// Hat dieses Badge einen kryptographischen Beweis (Organisator)?
   bool get hasCryptoProof => sig.isNotEmpty && sigVersion > 0;
 
   /// Ist dieses Badge Nostr-signiert (v2)?
   bool get isNostrSigned => sigVersion == 2 && sig.length == 128 && adminPubkey.isNotEmpty;
 
-  /// Hat dieses Badge eine Teilnehmer-Co-Signatur?
-  bool get hasParticipantSig => participantSig.isNotEmpty && participantPubkey.isNotEmpty;
+  /// Hat dieses Badge ein Claim-Binding?
+  bool get isClaimed => claimSig.isNotEmpty && claimPubkey.isNotEmpty;
 
-  /// Ist dieses Badge vollständig verifizierbar?
-  /// (Organisator-Signatur + Teilnehmer-Co-Signatur)
-  bool get isFullyBound => isNostrSigned && hasParticipantSig;
+  /// Vollständig verifizierbar: Organisator-Signatur UND Claim-Binding
+  bool get isFullyBound => hasCryptoProof && isClaimed;
 
   /// Badge-ID für den Proof-Hash (eindeutig pro Badge)
   String get proofId {
@@ -117,113 +94,18 @@ class MeetupBadge {
     return sha256.convert(utf8.encode(data)).toString().substring(0, 64);
   }
 
-  // =============================================
-  // CO-SIGNATUR ERSTELLEN
-  // =============================================
-  //
-  // Wird aufgerufen nachdem ein Badge gescannt wurde.
-  // Der Teilnehmer signiert: SHA256(proofId + participantPubkey)
-  //
-  // Returns: MeetupBadge mit gesetzter Co-Signatur
-  //          oder null wenn kein Nostr-Key vorhanden
-  //
-  // =============================================
-  static Future<MeetupBadge> createWithCoSignature(MeetupBadge badge) async {
-    final privHex = await SecureKeyStore.getPrivHex();
-    if (privHex == null) return badge; // Kein Key → Badge ohne Co-Signatur
-
-    try {
-      // Participant Pubkey aus dem Private Key ableiten
-      final keyPair = Keychain(privHex);
-      final participantPubkey = keyPair.public;
-
-      // Co-Signatur-Nachricht: SHA256(proofId + participantPubkey)
-      // Das bindet die Signatur an DIESES spezifische Badge UND DIESEN Teilnehmer
-      final message = '${badge.proofId}:$participantPubkey';
-      final messageHash = sha256.convert(utf8.encode(message)).toString();
-
-      // Nostr Event für die Co-Signatur erstellen
-      // Kind 21002 = Badge Co-Signatur (nicht auf Relays publiziert)
-      final event = Event.from(
-        kind: 21002,
-        tags: [
-          ['badge_proof', badge.proofId],
-          ['participant', participantPubkey],
-        ],
-        content: messageHash,
-        privkey: privHex,
-      );
-
-      return MeetupBadge(
-        id: badge.id,
-        meetupName: badge.meetupName,
-        date: badge.date,
-        iconPath: badge.iconPath,
-        blockHeight: badge.blockHeight,
-        signerNpub: badge.signerNpub,
-        meetupEventId: badge.meetupEventId,
-        delivery: badge.delivery,
-        // Organisator-Beweis
-        sig: badge.sig,
-        sigId: badge.sigId,
-        adminPubkey: badge.adminPubkey,
-        sigVersion: badge.sigVersion,
-        sigContent: badge.sigContent,
-        // Teilnehmer-Co-Signatur
-        participantPubkey: participantPubkey,
-        participantSig: event.sig,
-      );
-    } catch (e) {
-      print('[Badge] Co-Signatur fehlgeschlagen: $e');
-      return badge; // Fallback: Badge ohne Co-Signatur
-    }
+  /// Claim-Proof-ID: Kombination aus Organisator-Sig + Claim-Sig + Claim-Pubkey
+  /// Für den datenschutzkonformen badge_proof_hash
+  String get claimProofId {
+    if (!isClaimed) return '';
+    final data = '$sig|$claimSig|$claimPubkey';
+    return sha256.convert(utf8.encode(data)).toString();
   }
 
   // =============================================
-  // CO-SIGNATUR VERIFIZIEREN
+  // SERIALISIERUNG
   // =============================================
-  //
-  // Prüft ob die Co-Signatur zu diesem Badge und
-  // diesem Teilnehmer passt.
-  //
-  // =============================================
-  bool verifyCoSignature() {
-    if (!hasParticipantSig) return false;
 
-    try {
-      // Co-Signatur-Nachricht rekonstruieren
-      final message = '$proofId:$participantPubkey';
-      final messageHash = sha256.convert(utf8.encode(message)).toString();
-
-      // Nostr Event rekonstruieren
-      final tags = [
-        ['badge_proof', proofId],
-        ['participant', participantPubkey],
-      ];
-      final serialized = jsonEncode([0, participantPubkey, 0, 21002, tags, messageHash]);
-      // HINWEIS: createdAt ist 0, da wir ihn nicht gespeichert haben.
-      // Für die lokale Verifikation reicht die Signatur über den Content.
-      // Für eine vollständige Nostr-Event-Verifikation müsste createdAt
-      // mitgespeichert werden. Das ist ein bekannter Tradeoff:
-      // Weniger Speicherplatz vs. vollständige Event-Rekonstruierbarkeit.
-      //
-      // Alternativ: Direkte Schnorr-Verifikation über den messageHash
-      // ohne Event-Wrapper. Das ist was wir tatsächlich tun:
-
-      // Schnorr direkt verifizieren (via nostr package)
-      // Wir bauen ein minimales Event nur um event.isValid() nutzen zu können
-      final eventId = sha256.convert(utf8.encode(
-        jsonEncode([0, participantPubkey, 0, 21002, tags, messageHash])
-      )).toString();
-
-      final event = Event(eventId, participantPubkey, 0, 21002, tags, messageHash, participantSig);
-      return event.isValid();
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Serialisierung
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -240,9 +122,12 @@ class MeetupBadge {
       'adminPubkey': adminPubkey,
       'sigVersion': sigVersion,
       'sigContent': sigContent,
-      // Teilnehmer-Co-Signatur (v4)
-      'participantPubkey': participantPubkey,
-      'participantSig': participantSig,
+      // Claim-Binding
+      'claimSig': claimSig,
+      'claimEventId': claimEventId,
+      'claimPubkey': claimPubkey,
+      'claimTimestamp': claimTimestamp,
+      'isRetroactive': isRetroactive,
     };
   }
 
@@ -262,61 +147,132 @@ class MeetupBadge {
       adminPubkey: json['adminPubkey'] as String? ?? '',
       sigVersion: json['sigVersion'] as int? ?? 0,
       sigContent: json['sigContent'] as String? ?? '',
-      // Teilnehmer-Co-Signatur (v4, backward-compatible)
-      participantPubkey: json['participantPubkey'] as String? ?? '',
-      participantSig: json['participantSig'] as String? ?? '',
+      // Claim-Binding (backward-compatible: alte Badges ohne Claim laden auch)
+      claimSig: json['claimSig'] as String? ?? '',
+      claimEventId: json['claimEventId'] as String? ?? '',
+      claimPubkey: json['claimPubkey'] as String? ?? '',
+      claimTimestamp: json['claimTimestamp'] as int? ?? 0,
+      isRetroactive: json['isRetroactive'] as bool? ?? false,
     );
   }
 
-  // Badges speichern
+  /// Erstellt eine Kopie des Badges MIT Claim-Daten
+  MeetupBadge withClaim({
+    required String claimSig,
+    required String claimEventId,
+    required String claimPubkey,
+    required int claimTimestamp,
+    bool isRetroactive = false,
+  }) {
+    return MeetupBadge(
+      id: id,
+      meetupName: meetupName,
+      date: date,
+      iconPath: iconPath,
+      blockHeight: blockHeight,
+      signerNpub: signerNpub,
+      meetupEventId: meetupEventId,
+      delivery: delivery,
+      sig: sig,
+      sigId: sigId,
+      adminPubkey: adminPubkey,
+      sigVersion: sigVersion,
+      sigContent: sigContent,
+      // Claim-Daten
+      claimSig: claimSig,
+      claimEventId: claimEventId,
+      claimPubkey: claimPubkey,
+      claimTimestamp: claimTimestamp,
+      isRetroactive: isRetroactive,
+    );
+  }
+
+  // =============================================
+  // PERSISTENZ
+  // =============================================
+
   static Future<void> saveBadges(List<MeetupBadge> badges) async {
     final prefs = await SharedPreferences.getInstance();
     final List<String> badgesJson = badges.map((b) => jsonEncode(b.toJson())).toList();
     await prefs.setStringList('badges', badgesJson);
   }
 
-  // Badges laden
   static Future<List<MeetupBadge>> loadBadges() async {
     final prefs = await SharedPreferences.getInstance();
     final List<String>? badgesJson = prefs.getStringList('badges');
-
+    
     if (badgesJson == null || badgesJson.isEmpty) {
       return [];
     }
-
+    
     return badgesJson.map((String json) {
       return MeetupBadge.fromJson(jsonDecode(json) as Map<String, dynamic>);
     }).toList();
   }
 
   // =============================================
-  // BADGE PROOF: Kryptographischer Beweis über ALLE Badges
+  // BADGE PROOF v2: Datenschutzkonform
   // =============================================
-  static String generateBadgeProof(List<MeetupBadge> badges) {
-    if (badges.isEmpty) return '';
+  // Erzeugt einen Hash der beweist:
+  // "Genau DIESE Badges mit genau DIESEN Claims
+  //  wurden für die Reputation verwendet."
+  //
+  // Verrät NICHT welche Meetups oder Orte.
+  // =============================================
 
-    // Sortieren nach Datum (deterministisch!)
-    final sorted = List<MeetupBadge>.from(badges)
-      ..sort((a, b) => a.date.compareTo(b.date));
-
-    // Proof-IDs aller Badges verketten
-    final proofChain = sorted.map((b) => b.proofId).join('|');
-
+  /// Badge-Proof-Hash über ALLE gebundenen Badges (datenschutzkonform)
+  /// Nur Badges mit Claim-Binding werden einbezogen.
+  static String generateBadgeProofV2(List<MeetupBadge> badges) {
+    // Nur gebundene Badges zählen
+    final bound = badges.where((b) => b.isFullyBound).toList();
+    if (bound.isEmpty) return '';
+    
+    // Sortieren nach Claim-Timestamp (deterministisch)
+    bound.sort((a, b) => a.claimTimestamp.compareTo(b.claimTimestamp));
+    
+    // Claim-Proof-IDs verketten
+    final proofChain = bound.map((b) => b.claimProofId).join('|');
+    
     // SHA-256 über die gesamte Kette
-    final hash = sha256.convert(utf8.encode(proofChain));
-    return hash.toString();
+    return sha256.convert(utf8.encode(proofChain)).toString();
   }
 
+  /// Legacy Badge-Proof (v1) für Rückwärtskompatibilität
+  static String generateBadgeProof(List<MeetupBadge> badges) {
+    if (badges.isEmpty) return '';
+    
+    final sorted = List<MeetupBadge>.from(badges)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    
+    final proofChain = sorted.map((b) => b.proofId).join('|');
+    return sha256.convert(utf8.encode(proofChain)).toString();
+  }
+
+  /// Prüft ob ein Badge-Proof zu einer Badge-Liste passt
   static bool verifyBadgeProof(List<MeetupBadge> badges, String expectedProof) {
     final actualProof = generateBadgeProof(badges);
     return actualProof == expectedProof;
   }
 
+  /// Badge-Statistiken für Reputation
+  static Map<String, int> getReputationStats(List<MeetupBadge> badges) {
+    final bound = badges.where((b) => b.isFullyBound).toList();
+    final retroactive = bound.where((b) => b.isRetroactive).length;
+    return {
+      'total': badges.length,
+      'crypto_proof': badges.where((b) => b.hasCryptoProof).length,
+      'claimed': bound.length,
+      'retroactive': retroactive,
+      'fully_trusted': bound.length - retroactive,
+    };
+  }
+
+  /// Wie viele Badges haben einen echten kryptographischen Beweis?
   static int countVerifiedBadges(List<MeetupBadge> badges) {
     return badges.where((b) => b.hasCryptoProof).length;
   }
 
-  /// Wie viele Badges haben eine Teilnehmer-Co-Signatur?
+  /// Wie viele Badges sind vollständig gebunden?
   static int countBoundBadges(List<MeetupBadge> badges) {
     return badges.where((b) => b.isFullyBound).length;
   }
@@ -327,7 +283,8 @@ class MeetupBadge {
            'Meetup: $meetupName\n'
            'Datum: ${date.day}.${date.month}.${date.year}\n'
            'Block: $blockHeight\n'
-           '${isFullyBound ? "🔐 Gebunden & verifiziert" : isNostrSigned ? "🔐 Nostr-verifiziert" : "Verifiziert"} bei Einundzwanzig';
+           '${isNostrSigned ? "🔐 Nostr-verifiziert" : "Verifiziert"} bei Einundzwanzig'
+           '${isClaimed ? "\n🔗 Gebunden" : ""}';
   }
 
   // Badge-Hash für Verifizierung (Legacy)
@@ -339,108 +296,60 @@ class MeetupBadge {
   }
 
   // =============================================
-  // SIGNIERTER EXPORT v4
+  // EXPORT: Vollständige Badge-Daten mit Beweisen
   // =============================================
-  //
-  // Der Export wird mit dem Private Key des Users signiert.
-  //
-  // Kette:
-  //   1. Alle Badge-Daten + Beweise werden in JSON gepackt
-  //   2. SHA-256 Hash über den gesamten Export (ohne Signatur)
-  //   3. User signiert diesen Hash mit Schnorr
-  //   4. Signatur wird an den Export angehängt
-  //
-  // Manipulation (Badges hinzufügen/entfernen/ändern)
-  //   → Hash ändert sich → Signatur wird ungültig
-  //
-  // =============================================
-  static Future<String> exportBadgesForReputation(
+  static String exportBadgesForReputation(
     List<MeetupBadge> badges,
     String userNpub, {
     String nickname = '',
     String telegram = '',
     String twitter = '',
-  }) async {
+  }) {
     final Map<String, dynamic> identity = {};
     if (nickname.isNotEmpty) identity['nickname'] = nickname;
     if (userNpub.isNotEmpty) identity['nostr_npub'] = userNpub;
     if (telegram.isNotEmpty) identity['telegram'] = telegram;
     if (twitter.isNotEmpty) identity['twitter'] = twitter;
 
-    // User Pubkey für den Export
-    String userPubkeyHex = '';
-    try {
-      if (userNpub.isNotEmpty) {
-        userPubkeyHex = Nip19.decodePubkey(userNpub);
-      }
-    } catch (_) {}
+    final stats = getReputationStats(badges);
 
     final data = {
       'version': '4.0',
       'identity': identity.isNotEmpty ? identity : {'status': 'anonymous'},
-      'user_pubkey': userPubkeyHex,
       'total_badges': badges.length,
       'verified_badges': countVerifiedBadges(badges),
       'bound_badges': countBoundBadges(badges),
       'meetups_visited': badges.map((b) => b.meetupName).toSet().length,
       'unique_signers': badges.map((b) => b.signerNpub).where((s) => s.isNotEmpty).toSet().length,
       'badge_proof': generateBadgeProof(badges),
+      'badge_proof_v2': generateBadgeProofV2(badges),
+      'stats': stats,
       'badges': badges.map((b) => {
         'meetup': b.meetupName,
         'date': b.date.toIso8601String(),
         'block': b.blockHeight,
         'signer_npub': b.signerNpub,
         'sig_version': b.sigVersion,
-        // Organisator-Beweis
+        'is_bound': b.isFullyBound,
+        'is_retroactive': b.isRetroactive,
         if (b.hasCryptoProof) ...{
           'sig': b.sig,
           'sig_id': b.sigId,
           'admin_pubkey': b.adminPubkey,
-          'sig_content': b.sigContent,
         },
-        // Teilnehmer-Co-Signatur (v4)
-        if (b.hasParticipantSig) ...{
-          'participant_pubkey': b.participantPubkey,
-          'participant_sig': b.participantSig,
+        if (b.isClaimed) ...{
+          'claim_sig': b.claimSig,
+          'claim_event_id': b.claimEventId,
+          'claim_pubkey': b.claimPubkey,
         },
         'hash': b.getVerificationHash(),
       }).toList(),
       'exported_at': DateTime.now().toIso8601String(),
     };
 
-    // =============================================
-    // EXPORT SIGNIEREN
-    // =============================================
-    final privHex = await SecureKeyStore.getPrivHex();
-    if (privHex != null && userPubkeyHex.isNotEmpty) {
-      // Canonical JSON des Exports (ohne Signaturfelder)
-      final canonicalExport = BadgeSecurity.canonicalJsonEncode(data);
-      final exportHash = sha256.convert(utf8.encode(canonicalExport)).toString();
-
-      try {
-        // Schnorr-Signatur über den Export-Hash
-        final event = Event.from(
-          kind: 21003, // Badge Export Signatur
-          tags: [
-            ['export_hash', exportHash],
-            ['badge_count', badges.length.toString()],
-          ],
-          content: exportHash,
-          privkey: privHex,
-        );
-
-        data['export_signature'] = {
-          'sig': event.sig,
-          'sig_id': event.id,
-          'pubkey': event.pubkey,
-          'created_at': event.createdAt,
-          'hash': exportHash,
-        };
-      } catch (e) {
-        print('[Badge] Export-Signatur fehlgeschlagen: $e');
-        // Export ohne Signatur — besser als gar kein Export
-      }
-    }
+    final jsonString = jsonEncode(data);
+    final checksum = sha256.convert(utf8.encode(jsonString)).toString().substring(0, 8);
+    data['checksum'] = checksum;
 
     return const JsonEncoder.withIndent('  ').convert(data);
   }

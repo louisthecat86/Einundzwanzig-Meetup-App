@@ -50,7 +50,10 @@ class MeetupSessionWizard extends StatelessWidget {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black),
                 onPressed: () {
-                  // Leitet zum NFC Writer weiter
+                  // NFC Writer öffnen
+                  // Nach erfolgreichem Schreiben springt der NFCWriter
+                  // automatisch zum RollingQR (mit pushAndRemoveUntil).
+                  // Der Wizard wird dabei vom Stack entfernt.
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const NFCWriterScreen()),
@@ -70,11 +73,12 @@ class MeetupSessionWizard extends StatelessWidget {
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () {
-                  // Überspringt NFC und geht direkt zum Rolling QR Screen.
-                  // Ersetzt den aktuellen Screen, damit "Zurück" ins Admin Panel führt.
-                  Navigator.pushReplacement(
-                    context,
+                  // Direkt zum Rolling QR — Stack aufräumen!
+                  // pushAndRemoveUntil: Entfernt Wizard + AdminPanel
+                  // → Zurück-Button im RollingQR führt zum Dashboard
+                  Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const RollingQRScreen()),
+                    (route) => route.isFirst, // Nur Dashboard behalten
                   );
                 },
                 child: const Text("ÜBERSPRINGEN / NUR QR NUTZEN"),

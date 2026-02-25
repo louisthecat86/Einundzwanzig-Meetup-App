@@ -10,6 +10,8 @@
 //   4. AdminRegistry.checkAdminByPubkey() → Signer bekannt?
 //   5. Normalisieren (kompakt → volle Feldnamen)
 //   6. Badge MIT kryptographischem Beweis speichern
+//   7. NEU: Claim-Signatur erstellen (Badge-Binding)
+//   8. NEU: Reputation auf Relays aktualisieren (Auto-Publish)
 //
 // SICHERHEIT:
 //   - Signatur allein reicht NICHT — der Signer-Pubkey
@@ -30,6 +32,8 @@ import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../models/user.dart';
 import '../services/badge_security.dart';
+import '../services/badge_claim_service.dart';               // NEU: Claim-Binding
+import '../services/reputation_publisher.dart';              // NEU: Auto-Publish
 import '../services/nostr_service.dart';
 import '../services/mempool.dart';
 import '../services/rolling_qr_service.dart';
@@ -344,6 +348,36 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       contentData.remove('_verified_by');
       final sigContent = jsonEncode(contentData);
 
+      // =============================================
+      // NEU: CLAIM-SIGNATUR ERSTELLEN (Badge-Binding)
+      // Bindet das Badge kryptographisch an den Sammler.
+      // Passiert automatisch im Hintergrund.
+      // =============================================
+      String claimSig = '';
+      String claimEventId = '';
+      String claimPubkey = '';
+      int claimTimestamp = 0;
+      String claimInfo = '';
+
+      if (sig.isNotEmpty && sigVersion >= 2) {
+        final claimResult = await BadgeClaimService.createClaim(
+          orgSig: sig,
+          orgEventId: sigId,
+          orgPubkey: adminPubkey,
+          blockHeight: currentBlockHeight,
+        );
+
+        if (claimResult.success) {
+          claimSig = claimResult.claimSig;
+          claimEventId = claimResult.claimEventId;
+          claimPubkey = claimResult.claimPubkey;
+          claimTimestamp = claimResult.claimTimestamp;
+          claimInfo = '🔗 Badge gebunden';
+        } else {
+          claimInfo = '⚠ Binding: ${claimResult.message}';
+        }
+      }
+
       myBadges.add(MeetupBadge(
         id: meetupId,
         meetupName: fullName,
@@ -353,22 +387,32 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         signerNpub: signerNpub,
         meetupEventId: meetupEventId,
         delivery: delivery,
-        // Kryptographischer Beweis
+        // Organisator-Beweis
         sig: sig,
         sigId: sigId,
         adminPubkey: adminPubkey,
         sigVersion: sigVersion,
         sigContent: sigContent,
+        // Claim-Binding (NEU)
+        claimSig: claimSig,
+        claimEventId: claimEventId,
+        claimPubkey: claimPubkey,
+        claimTimestamp: claimTimestamp,
+        isRetroactive: false,
       ));
 
       await MeetupBadge.saveBadges(myBadges);
+
+      // NEU: Reputation automatisch auf Relays aktualisieren
+      ReputationPublisher.publishInBackground(myBadges);
 
       // --- NEUES, CLEANES STRING FORMAT ---
       msg = "BADGE GESAMMELT!\n\n";
       msg += "Ort: $fullName\n";
       if (currentBlockHeight > 0) msg += "Block: $currentBlockHeight\n";
       if (tagData['_verified_by'] != null) msg += "Signiert von: ${tagData['_verified_by']}\n";
-      if (sigVersion == 2) msg += "Beweis: Schnorr (BIP-340)";
+      if (sigVersion == 2) msg += "Beweis: Schnorr (BIP-340)\n";
+      if (claimInfo.isNotEmpty) msg += claimInfo;
 
       // Admin-Registry Ergebnis anzeigen
       if (adminCheckInfo.isNotEmpty) {
