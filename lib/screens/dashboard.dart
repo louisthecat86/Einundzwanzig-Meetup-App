@@ -82,7 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _platformProofCount = proofs.length;
-          _platformNames = proofs.keys.toList();
+          _platformNames = proofs.map((p) => p.platform).toList();
           _humanityVerified = humanity.verified;
         });
       }
