@@ -70,6 +70,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _loadAll() async {
     await _loadUser();
+
+    // Guard: Unvollständiges Profil → erst zur Registrierung
+    if (_user.nickname == 'Anon' || _user.nickname.isEmpty) {
+      if (mounted) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
+        );
+        // Nach Rückkehr: User neu laden
+        await _loadUser();
+      }
+    }
+
     await _loadBadges();
     await _calculateTrustScore();
     _loadIdentityData();

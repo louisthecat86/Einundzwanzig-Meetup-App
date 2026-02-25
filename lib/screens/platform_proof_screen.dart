@@ -1,20 +1,20 @@
 // ============================================
 // PLATFORM PROOF SCREEN — Plattform-Verknüpfung
 // ============================================
-// Erstellt signierte Verify-Strings für Plattformen.
+// Erstellt signierte Plattform-Beweise.
 //
-// UX: Plattform wählen → Username eingeben → String kopieren
-// Einmalig pro Plattform. String wird automatisch im
+// UX: Plattform wählen → Username eingeben → fertig!
+// Proof wird automatisch in den Reputation-QR eingebettet.
+// Kein manuelles Kopieren von Verify-Strings nötig.
+// Einmalig pro Plattform. Proof wird auch im
 // Reputation-Event auf Relays gespeichert.
 // ============================================
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../theme.dart';
 import '../models/badge.dart';
 import '../services/platform_proof_service.dart';
 import '../services/reputation_publisher.dart';
-import '../services/secure_key_store.dart';
 
 class PlatformProofScreen extends StatefulWidget {
   const PlatformProofScreen({super.key});
@@ -76,7 +76,7 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
               const Text("AUF PLATTFORM TEILEN",
                 style: TextStyle(color: cOrange, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const SizedBox(height: 6),
-              Text("Erstelle einen Verify-String für eine Plattform.",
+              Text("Verknüpfe deinen Account mit einer Plattform. Der Beweis wird automatisch in deinen Reputation-QR eingebettet.",
                 style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
               const SizedBox(height: 20),
 
@@ -182,7 +182,7 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
                       );
                     },
                     icon: const Icon(Icons.lock, size: 18),
-                    label: const Text("VERIFY-STRING ERSTELLEN"),
+                    label: const Text("VERKNÜPFUNG ERSTELLEN"),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: cOrange,
                       foregroundColor: Colors.black,
@@ -224,92 +224,25 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
       );
 
       _loadProofs();
-      _showVerifyString(result.verifyString, platformId, username);
+      
+      // Kein Verify-String mehr nötig — Proof wird automatisch in den
+      // Reputation-QR-Code eingebettet. Andere scannen deinen QR und
+      // sehen die verifizierte Plattform-Verknüpfung direkt.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Verknüpfung gespeichert! Wird automatisch in deinen Reputation-QR eingebettet."),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        Navigator.pop(context); // Dialog schließen
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(result.message), backgroundColor: Colors.red),
       );
     }
-  }
-
-  void _showVerifyString(String verifyString, String platform, String username) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: cCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 24),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Text("VERIFY-STRING ERSTELLT",
-                style: TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.w800)),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Kopiere diesen String in dein Profil oder deine Anzeige auf der Plattform:",
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.5)),
-            const SizedBox(height: 16),
-
-            // Verify-String Box
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: SelectableText(
-                verifyString,
-                style: const TextStyle(
-                  color: Colors.green,
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  height: 1.4,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-            Text(
-              "Andere können diesen String in der Einundzwanzig-App prüfen und sehen deine verifizierte Reputation.",
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 11, height: 1.4),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("SCHLIEẞEN", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: verifyString));
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Verify-String kopiert!"),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text("KOPIEREN"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   // =============================================
@@ -324,7 +257,7 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
         title: const Text("VERKNÜPFUNG AUFHEBEN?", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
         content: Text(
           "Die Plattform-Verknüpfung für \"${proof.username}\" auf ${proof.platform} "
-          "wird gelöscht. Der Verify-String wird ungültig.\n\n"
+          "wird gelöscht.\n\n"
           "Du musst dein Reputation-Event danach aktualisieren.",
           style: const TextStyle(color: Colors.white70),
         ),
@@ -390,9 +323,9 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
                         const SizedBox(height: 10),
                         Text(
                           "1. Wähle eine Plattform und gib deinen Usernamen ein\n"
-                          "2. Die App erstellt einen signierten Verify-String\n"
-                          "3. Kopiere den String in dein Plattform-Profil\n"
-                          "4. Andere können deinen String prüfen und sehen deine Reputation",
+                          "2. Die App erstellt einen kryptographischen Beweis\n"
+                          "3. Der Beweis wird automatisch in deinen Reputation-QR eingebettet\n"
+                          "4. Andere scannen deinen QR und sehen die verifizierte Verknüpfung",
                           style: TextStyle(color: Colors.grey.shade500, fontSize: 12, height: 1.6),
                         ),
                       ],
@@ -470,24 +403,16 @@ class _PlatformProofScreenState extends State<PlatformProofScreen> {
                 ],
               ),
             ),
-            // Kopieren
-            IconButton(
-              icon: const Icon(Icons.copy, color: Colors.grey, size: 18),
-              tooltip: 'Verify-String kopieren',
-              onPressed: () async {
-                // String aus den gespeicherten Daten regenerieren
-                final npub = await SecureKeyStore.getNpub();
-                if (npub != null) {
-                  final verifyString = '21rep::$npub::${proof.platform}::${proof.username}::sig=${proof.proofSig}';
-                  await Clipboard.setData(ClipboardData(text: verifyString));
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Kopiert!"), backgroundColor: Colors.green, duration: Duration(seconds: 1)),
-                    );
-                  }
-                }
-              },
+            // Status-Icon (eingebettet in QR)
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.qr_code, color: Colors.green, size: 16),
             ),
+            const SizedBox(width: 4),
             // Widerrufen
             IconButton(
               icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 18),

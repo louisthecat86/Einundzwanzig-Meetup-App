@@ -1,8 +1,8 @@
 // ============================================
-// REPUTATION QR-CODE SCREEN v5 — PROOF OF REPUTATION
+// REPUTATION QR-CODE SCREEN v6 — PROOF OF REPUTATION
 // ============================================
-// v5: Badge-Proof v2 (gebundene Badges), Plattform-Proofs,
-//     Remote-Verifikation, Relay-Publishing
+// v6: Privacy-Meetups (gehashte Namen), eingebettete
+//     Plattform-Proofs, kein separater Verify-String nötig
 // ============================================
 
 import 'dart:ui' as ui;
@@ -23,8 +23,8 @@ import '../services/nostr_service.dart';
 import '../services/trust_score_service.dart';
 import '../services/reputation_publisher.dart';
 import '../services/platform_proof_service.dart';
+import 'package:crypto/crypto.dart';
 import 'qr_scanner.dart';
-import 'reputation_verify_screen.dart';
 
 class ReputationQRScreen extends StatefulWidget {
   const ReputationQRScreen({super.key});
@@ -108,7 +108,13 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       'ad': trustScore.accountAgeDays,
     };
     if (uniqueMeetups.isNotEmpty) {
-      reputation['ml'] = uniqueMeetups.take(10).toList();
+      // Privacy: Meetup-Namen hashen — Beweis der Teilnahme
+      // ohne zu verraten welches Meetup genau.
+      // Verifizierer mit gleichem Meetup-Namen kann den Hash reproduzieren.
+      reputation['ml'] = uniqueMeetups.take(10).map((name) {
+        final hash = sha256.convert(utf8.encode('21meetup:$name')).toString();
+        return hash.substring(0, 12); // 12 Hex-Zeichen = 48 Bit
+      }).toList();
     }
     // NEU: Gebundene Badges
     reputation['bb'] = boundCount;
@@ -132,7 +138,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
     }
 
     final Map<String, dynamic> qrPayload = {
-      'v': 5,  // v5: mit eingebetteten Platform-Proofs
+      'v': 6,  // v6: Privacy-Meetups + eingebettete Platform-Proofs
       'id': identity,
       'rp': reputation,
       'pf': proof,
@@ -355,43 +361,23 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
           ),
           const SizedBox(height: 32),
 
-          // Remote Verify
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
-              ),
-              icon: const Icon(Icons.verified_user),
-              label: const Text("REPUTATION PRÜFEN"),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: cCyan,
-                side: const BorderSide(color: cCyan, width: 1.5),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
           // QR Scanner
           SizedBox(
             width: double.infinity,
             height: 50,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SecureQRScanner()),
-                ),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text("QR-CODE SCANNEN"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey,
-                  side: BorderSide(color: Colors.grey.shade700, width: 1),
-                ),
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SecureQRScanner()),
+              ),
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text("QR-CODE SCANNEN"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cCyan.withOpacity(0.15),
+                foregroundColor: cCyan,
               ),
             ),
+          ),
           ],
         ),
     );
@@ -652,25 +638,6 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       ],
 
       const SizedBox(height: 16),
-      const Divider(color: Colors.white10),
-      const SizedBox(height: 16),
-
-      // Remote-Verifikation
-      SizedBox(
-        width: double.infinity,
-        child: _buildActionTile(
-          icon: Icons.verified_user,
-          label: "PRÜFEN",
-          subtitle: "Remote-Verify",
-          color: cCyan,
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
-            );
-          },
-        ),
-      ),
     ]);
   }
 
