@@ -32,6 +32,7 @@ import '../models/badge.dart';
 import '../models/user.dart';
 import 'badge_security.dart';
 import 'relay_config.dart';
+import 'secure_key_store.dart';
 
 class ReputationPublisher {
   // Nostr Event Konfiguration

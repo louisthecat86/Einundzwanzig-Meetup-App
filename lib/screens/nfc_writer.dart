@@ -131,10 +131,11 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
     // NFC verfügbar?
     final availability = await NfcManager.instance.checkAvailability();
     if (availability != NfcAvailability.enabled) {
-      // ── NFC nicht verfügbar → Dialog statt Simulation ──
+      // ── NFC nicht verfügbar → Dialog ──
       if (!mounted) return;
 
-      final bool isNotSupported = availability == NfcAvailability.notSupported;
+      // NFC könnte deaktiviert oder nicht unterstützt sein
+      final bool isNotSupported = availability.toString().toLowerCase().contains('not');
 
       showDialog(
         context: context,

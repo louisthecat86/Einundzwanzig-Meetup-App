@@ -21,6 +21,7 @@ import 'package:nostr/nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'badge_security.dart';
 import 'reputation_publisher.dart';
+import 'secure_key_store.dart';
 
 class PlatformProofService {
   // Nostr Event Kind für Platform Proofs (intern)

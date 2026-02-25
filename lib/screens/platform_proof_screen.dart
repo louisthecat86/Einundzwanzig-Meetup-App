@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../models/badge.dart';
 import '../services/platform_proof_service.dart';
 import '../services/reputation_publisher.dart';
+import '../services/secure_key_store.dart';
 
 class PlatformProofScreen extends StatefulWidget {
   const PlatformProofScreen({super.key});

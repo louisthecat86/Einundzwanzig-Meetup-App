@@ -22,6 +22,7 @@ import 'package:crypto/crypto.dart';
 import '../models/badge.dart';
 import 'nostr_service.dart';
 import 'badge_security.dart';
+import 'secure_key_store.dart';
 
 // Nostr Event und Nip19 Imports (aus dem nostr package)
 // Diese sind bereits in der App vorhanden über badge_security.dart
