@@ -25,8 +25,6 @@ import '../services/reputation_publisher.dart';
 import '../services/platform_proof_service.dart';
 import 'qr_scanner.dart';
 import 'reputation_verify_screen.dart';
-import 'platform_proof_screen.dart';
-import 'humanity_proof_screen.dart';
 
 class ReputationQRScreen extends StatefulWidget {
   const ReputationQRScreen({super.key});
@@ -339,55 +337,14 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            "Besuche ein Meetup und scanne einen Badge um deine Reputation aufzubauen. "
-            "In der Zwischenzeit kannst du schon deine Plattformen verknüpfen "
-            "und deine Menschlichkeit per Lightning beweisen.",
+            "Besuche ein Meetup und scanne einen Badge um "
+            "deine Reputation aufzubauen.",
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
           ),
           const SizedBox(height: 32),
 
-          // Plattform-Verknüpfung — AUCH ohne Badges
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
-              ),
-              icon: const Icon(Icons.link, size: 20),
-              label: const Text("PLATTFORMEN VERKNÜPFEN"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Proof of Humanity — AUCH ohne Badges
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HumanityProofScreen()),
-              ),
-              icon: const Icon(Icons.bolt),
-              label: const Text("PROOF OF HUMANITY"),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.amber,
-                side: const BorderSide(color: Colors.amber, width: 1.5),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Remote Verify — auch ohne eigene Badges nutzbar
+          // Remote Verify
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -687,45 +644,21 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       const Divider(color: Colors.white10),
       const SizedBox(height: 16),
 
-      // Sekundäre Actions als Grid
-      Row(
-        children: [
-          // Plattform-Verknüpfung
-          Expanded(
-            child: _buildActionTile(
-              icon: Icons.link,
-              label: "PLATTFORM",
-              subtitle: _platformProofCount > 0
-                  ? "$_platformProofCount aktiv"
-                  : "Verknüpfen",
-              color: Colors.green,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
-                );
-                // Proofs neu laden
-                _generateQRData();
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Remote-Verifikation
-          Expanded(
-            child: _buildActionTile(
-              icon: Icons.verified_user,
-              label: "PRÜFEN",
-              subtitle: "Remote-Verify",
-              color: cCyan,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
-                );
-              },
-            ),
-          ),
-        ],
+      // Remote-Verifikation
+      SizedBox(
+        width: double.infinity,
+        child: _buildActionTile(
+          icon: Icons.verified_user,
+          label: "PRÜFEN",
+          subtitle: "Remote-Verify",
+          color: cCyan,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ReputationVerifyScreen()),
+            );
+          },
+        ),
       ),
     ]);
   }

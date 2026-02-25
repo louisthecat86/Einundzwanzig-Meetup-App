@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:nostr/nostr.dart';
 import '../theme.dart';
 import '../models/user.dart';
 import '../models/meetup.dart';
@@ -29,6 +30,7 @@ import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
 import '../services/platform_proof_service.dart';
 import '../services/humanity_proof_service.dart';
+import '../services/nip05_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -46,6 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Identity Layer State
   int _platformProofCount = 0;
   bool _humanityVerified = false;
+  bool _nip05Verified = false;
   List<String> _platformNames = [];
   
   // Aktive Meetup-Session
@@ -79,11 +82,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final proofs = await PlatformProofService.getSavedProofs();
       final humanity = await HumanityProofService.getStatus();
+
+      // NIP-05 prüfen (nur wenn Nostr-Key vorhanden)
+      bool nip05 = false;
+      if (_user.hasNostrKey && _user.nostrNpub.isNotEmpty) {
+        try {
+          final relays = ['wss://relay.damus.io', 'wss://nos.lol'];
+          final pubkeyHex = Nip19.decodePubkey(_user.nostrNpub);
+          final nip05Str = await Nip05Service.fetchNip05FromProfile(pubkeyHex, relays)
+              .timeout(const Duration(seconds: 8), onTimeout: () => null);
+          if (nip05Str != null && nip05Str.isNotEmpty) {
+            final result = await Nip05Service.verify(nip05Str, pubkeyHex);
+            nip05 = result.valid;
+          }
+        } catch (_) {}
+      }
+
       if (mounted) {
         setState(() {
           _platformProofCount = proofs.length;
           _platformNames = proofs.map((p) => p.platform).toList();
           _humanityVerified = humanity.verified;
+          _nip05Verified = nip05;
         });
       }
     } catch (_) {}
@@ -802,28 +822,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       default: levelColor = Colors.grey;
     }
 
-    // Zähle aktive Identity-Layer
-    final identityCount = _platformProofCount + (_humanityVerified ? 1 : 0);
-    final hasIdentityGaps = _platformProofCount == 0 || !_humanityVerified;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: levelColor.withOpacity(0.25),
-          width: 1,
-        ),
+        border: Border.all(color: levelColor.withOpacity(0.2), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ===== HEADER: Level + Score =====
+          // ===== HEADER =====
           Row(
             children: [
-              // Level Icon
               Container(
                 width: 44, height: 44,
                 decoration: BoxDecoration(
@@ -833,36 +845,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Icon(_levelIcon(score.level), color: levelColor, size: 22),
               ),
               const SizedBox(width: 12),
-              // Level + Label
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(score.level,
+                      style: TextStyle(color: levelColor, fontSize: 17, fontWeight: FontWeight.w800)),
                     Text(
-                      score.level,
-                      style: TextStyle(color: levelColor, fontSize: 17, fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      "${score.totalBadges} Badges · ${score.uniqueMeetups} Meetups · ${score.uniqueSigners} Ersteller",
+                      score.meetsPromotionThreshold
+                          ? "Organisator-Status erreicht"
+                          : "Nächstes Ziel: Organisator",
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                     ),
                   ],
                 ),
               ),
-              // Score Zahl
               Text(
                 score.totalScore.toStringAsFixed(1),
-                style: TextStyle(
-                  color: levelColor,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  fontFamily: 'monospace',
-                ),
+                style: TextStyle(color: levelColor, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
               ),
             ],
           ),
 
-          // ===== PROGRESS BAR (nur wenn noch nicht Organisator) =====
+          // ===== GESAMTFORTSCHRITT =====
           if (!score.meetsPromotionThreshold) ...[
             const SizedBox(height: 14),
             ClipRRect(
@@ -874,93 +879,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 minHeight: 4,
               ),
             ),
-          ] else ...[
+          ],
+
+          // ===== BADGE-FORTSCHRITT =====
+          const SizedBox(height: 16),
+          Text("MEETUP-AKTIVITÄT",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
+          const SizedBox(height: 8),
+
+          // Kriterien als kompakte Zeilen
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: score.progress.entries.map((entry) {
+              final p = entry.value;
+              return _buildCriterion(p.label, p.current, p.required, p.met);
+            }).toList(),
+          ),
+
+          if (score.meetsPromotionThreshold) ...[
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.verified, color: Colors.green, size: 15),
+                const Icon(Icons.verified, color: Colors.green, size: 14),
                 const SizedBox(width: 6),
-                Text("Organisator", style: TextStyle(color: Colors.green.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text("Du kannst NFC-Tags und Rolling-QR-Codes erstellen.",
+                  style: TextStyle(color: Colors.green.shade400, fontSize: 11)),
               ],
             ),
           ],
 
-          // ===== IDENTITY LAYER =====
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Identity Dots
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 8,
-                  children: [
-                    _buildIdDot(
-                      Icons.bolt,
-                      "Lightning",
-                      _humanityVerified,
-                      _humanityVerified ? Colors.amber : null,
-                    ),
-                    ..._buildPlatformDots(),
-                    if (_platformProofCount == 0)
-                      _buildIdDot(Icons.link, "Plattform", false, null),
-                  ],
-                ),
+          // ===== IDENTITÄTS-LAYER =====
+          const SizedBox(height: 16),
+          Text("IDENTITÄT",
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)),
+          const SizedBox(height: 8),
 
-                // Hint
-                if (hasIdentityGaps) ...[
-                  const SizedBox(height: 10),
-                  GestureDetector(
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
-                      );
-                      _loadAll();
-                    },
-                    child: Row(
-                      children: [
-                        Icon(Icons.arrow_forward_ios, color: cOrange.withOpacity(0.5), size: 10),
-                        const SizedBox(width: 4),
-                        Text(
-                          "Verknüpfe Plattformen in deinem Profil um Trust aufzubauen",
-                          style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              _buildIdDot(Icons.bolt, "Lightning", _humanityVerified, Colors.amber),
+              _buildIdDot(Icons.alternate_email, "NIP-05", _nip05Verified, cCyan),
+              ..._buildPlatformDots(),
+              if (_platformProofCount == 0)
+                _buildIdDot(Icons.link, "Plattform", false, Colors.grey),
+            ],
           ),
+
+          // Hint
+          if (!_humanityVerified || !_nip05Verified || _platformProofCount == 0) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () async {
+                await Navigator.push(context,
+                  MaterialPageRoute(builder: (context) => const ProfileEditScreen()));
+                _loadAll();
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.arrow_forward_ios, color: cOrange.withOpacity(0.5), size: 10),
+                  const SizedBox(width: 4),
+                  Text("Identität im Profil stärken",
+                    style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10)),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // Einzelner Identity-Dot
-  Widget _buildIdDot(IconData icon, String label, bool active, Color? activeColor) {
-    final color = active ? (activeColor ?? Colors.green) : Colors.grey.shade700;
+  // Badge-Kriterium (kompakt)
+  Widget _buildCriterion(String label, int current, int required, bool met) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          met ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: met ? Colors.green : Colors.grey.shade700,
+          size: 14,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          "$label $current/$required",
+          style: TextStyle(
+            color: met ? Colors.green.shade400 : Colors.grey.shade600,
+            fontSize: 11,
+            fontWeight: met ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Identity-Dot
+  Widget _buildIdDot(IconData icon, String label, bool active, Color activeColor) {
+    final color = active ? activeColor : Colors.grey.shade700;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: color, size: 14),
         const SizedBox(width: 4),
-        Text(
-          label,
+        Text(label,
           style: TextStyle(
             color: active ? color : Colors.grey.shade600,
             fontSize: 11,
             fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
+          )),
         if (active) ...[
           const SizedBox(width: 3),
           Icon(Icons.check_circle, color: color, size: 11),
@@ -969,19 +996,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Platform-Proof Dots generieren
+  // Platform-Dots
   List<Widget> _buildPlatformDots() {
     final iconMap = {
       'telegram': Icons.send,
       'twitter': Icons.alternate_email,
-      'nostr': Icons.key,
-      'kleinanzeigen': Icons.storefront,
+      'satoshikleinanzeigen': Icons.storefront,
+      'robosats': Icons.smart_toy,
+      'nostr': Icons.hub,
     };
     final labelMap = {
       'telegram': 'Telegram',
       'twitter': 'X',
-      'nostr': 'NIP-05',
-      'kleinanzeigen': 'Kleinanzeigen',
+      'satoshikleinanzeigen': 'Kleinanzeigen',
+      'robosats': 'RoboSats',
+      'nostr': 'Nostr',
     };
 
     return _platformNames.map((name) {
