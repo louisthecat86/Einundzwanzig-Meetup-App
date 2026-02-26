@@ -34,6 +34,7 @@ class ReputationLayersWidget extends StatelessWidget {
   // Layer 4: Identität
   final Nip05Result? nip05;
   final int? platformProofCount;
+  final Map<String, dynamic>? platformProofs; // NEU: Volle Plattform-Details
   final int? accountAgeDays;
 
   // Gesamtscore
@@ -52,6 +53,7 @@ class ReputationLayersWidget extends StatelessWidget {
     this.socialAnalysis,
     this.nip05,
     this.platformProofCount,
+    this.platformProofs, // NEU
     this.accountAgeDays,
     this.totalScore,
   });
@@ -197,6 +199,7 @@ class ReputationLayersWidget extends StatelessWidget {
           weight: "10%",
           score: _identityScore,
           children: [
+            // NIP-05 Status
             if (nip05 != null && nip05!.valid)
               _buildDetail(Icons.verified, nip05!.nip05,
                 nip05!.domainLabel, Colors.green)
@@ -206,7 +209,14 @@ class ReputationLayersWidget extends StatelessWidget {
             else
               _buildDetail(Icons.help_outline, "Kein NIP-05",
                 "Keine Internet-Identifikation", Colors.grey),
-            if (platformProofCount != null && platformProofCount! > 0)
+
+            // ========================================
+            // NEU: Plattform-Proofs einzeln mit Handle
+            // ========================================
+            if (platformProofs != null && platformProofs!.isNotEmpty)
+              ..._buildPlatformProofDetails()
+            else if (platformProofCount != null && platformProofCount! > 0)
+              // Fallback: Nur Anzahl (Abwärtskompatibilität)
               _buildDetail(Icons.link, "$platformProofCount Plattform${platformProofCount! > 1 ? 'en' : ''}",
                 "Aktive Verknüpfungen", Colors.green),
           ],
@@ -387,6 +397,61 @@ class ReputationLayersWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // =============================================
+  // PLATTFORM-PROOF DETAILS (NEU)
+  // =============================================
+  // Zeigt jede verknüpfte Plattform einzeln an
+  // mit Icon, Plattformname und @Handle.
+  //
+  // Daten kommen aus dem Reputation-Event:
+  //   platform_proofs: {
+  //     "telegram": {"username": "satoshi", "proof_sig": "abc...", "created_at": 1234},
+  //     "robosats": {"username": "robot42", "proof_sig": "def...", "created_at": 5678},
+  //   }
+  // =============================================
+
+  List<Widget> _buildPlatformProofDetails() {
+    if (platformProofs == null || platformProofs!.isEmpty) return [];
+
+    return platformProofs!.entries.map((entry) {
+      final platform = entry.key;
+      final data = entry.value as Map<String, dynamic>? ?? {};
+      final username = data['username'] as String? ?? '';
+      final hasSig = (data['proof_sig'] as String? ?? '').isNotEmpty;
+
+      return _buildDetail(
+        _platformIcon(platform),
+        '${_platformLabel(platform)}${username.isNotEmpty ? ': @$username' : ''}',
+        hasSig ? 'Signatur verifiziert' : 'Verknüpft',
+        hasSig ? Colors.green : Colors.amber,
+      );
+    }).toList();
+  }
+
+  /// Icon für bekannte Plattformen
+  /// (Muss mit PlatformProofService.platforms übereinstimmen)
+  IconData _platformIcon(String platform) {
+    switch (platform) {
+      case 'telegram': return Icons.send;
+      case 'satoshikleinanzeigen': return Icons.shopping_cart;
+      case 'robosats': return Icons.smart_toy;
+      case 'nostr': return Icons.hub;
+      default: return Icons.language;
+    }
+  }
+
+  /// Anzeigename für bekannte Plattformen
+  String _platformLabel(String platform) {
+    switch (platform) {
+      case 'telegram': return 'Telegram';
+      case 'satoshikleinanzeigen': return 'Satoshi-Kleinanzeigen';
+      case 'robosats': return 'RoboSats';
+      case 'nostr': return 'Nostr';
+      case 'other': return 'Andere';
+      default: return platform;
+    }
   }
 
   // =============================================

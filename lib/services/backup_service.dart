@@ -8,10 +8,13 @@ import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:shared_preferences/shared_preferences.dart'; // NEU: Für Humanity-Proof Restore
 import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
 import 'secure_key_store.dart';
+import 'platform_proof_service.dart'; // NEU
+import 'humanity_proof_service.dart'; // NEU
 import 'dart:typed_data';
 
 class BackupService {
@@ -202,8 +205,14 @@ class BackupService {
       final privHex = await SecureKeyStore.getPrivHex();
       final adminList = await AdminRegistry.getAdminList();
 
+      // =============================================
+      // NEU: Platform Proofs & Humanity Proof laden
+      // =============================================
+      final platformProofs = await PlatformProofService.getSavedProofs();
+      final humanityStatus = await HumanityProofService.getStatus();
+
       Map<String, dynamic> backupData = {
-        'version': 4, // v4: PBKDF2-AES-GCM (vorher v3: SHA256-AES-GCM)
+        'version': 5, // v5: + Platform Proofs + Humanity Proof
         'timestamp': DateTime.now().toIso8601String(),
         'app': 'Einundzwanzig Meetup App',
 
@@ -223,7 +232,7 @@ class BackupService {
           'meetupName': b.meetupName,
           'date': b.date.toIso8601String(),
           'blockHeight': b.blockHeight,
-          // NEU: Kryptographischen Beweis mitsichern
+          // Kryptographischen Beweis mitsichern
           'sig': b.sig,
           'sigId': b.sigId,
           'adminPubkey': b.adminPubkey,
@@ -239,6 +248,35 @@ class BackupService {
           'has_key': nsec != null,
         },
         'admin_registry': adminList.map((a) => a.toJson()).toList(),
+
+        // =============================================
+        // NEU: Platform Proofs sichern
+        // =============================================
+        // Enthält alle verknüpften Plattform-Accounts mit
+        // signierten Verify-Strings. Ohne diese müsste der
+        // User nach dem Restore alle Plattformen neu verknüpfen.
+        // =============================================
+        'platform_proofs': platformProofs.map((p) => {
+          'platform': p.platform,
+          'username': p.username,
+          'proof_sig': p.proofSig,
+          'created_at': p.createdAt,
+        }).toList(),
+
+        // =============================================
+        // NEU: Humanity Proof sichern
+        // =============================================
+        // Der Humanity-Proof beweist, dass der Nutzer eine
+        // echte Lightning-Zahlung getätigt hat. Ohne Backup
+        // muss er nach Restore erneut auf Relays gesucht
+        // werden — was unnötig lange dauert und evtl. fehlschlägt.
+        // =============================================
+        'humanity_proof': {
+          'verified': humanityStatus.verified,
+          'first_zap_at': humanityStatus.firstZapAt,
+          'receipt_event_id': humanityStatus.receiptEventId,
+          'checked_at': humanityStatus.lastCheckedAt,
+        },
       };
 
       String jsonString = jsonEncode(backupData);
@@ -454,16 +492,81 @@ class BackupService {
           }
         }
 
+        // =============================================
+        // NEU: PLATFORM PROOFS WIEDERHERSTELLEN (v5+)
+        // =============================================
+        // Stellt alle verknüpften Plattform-Accounts wieder
+        // her, damit der User nicht alle Verknüpfungen
+        // (Telegram, RoboSats, Satoshi-Kleinanzeigen etc.)
+        // nach einem Restore neu anlegen muss.
+        //
+        // Die Proof-Signaturen sind an den privaten Schlüssel
+        // gebunden — da dieser ebenfalls restored wird,
+        // bleiben die Signaturen gültig.
+        // =============================================
+        if (data['platform_proofs'] != null) {
+          final proofList = data['platform_proofs'] as List<dynamic>;
+          if (proofList.isNotEmpty) {
+            final prefs = await SharedPreferences.getInstance();
+            // Direkt als JSON speichern (gleiches Format wie PlatformProofService._saveAllProofs)
+            await prefs.setString('platform_proofs', jsonEncode(proofList));
+          }
+        }
+
+        // =============================================
+        // NEU: HUMANITY PROOF WIEDERHERSTELLEN (v5+)
+        // =============================================
+        // Stellt den Lightning-Zahlungsbeweis wieder her.
+        // Ohne Restore müsste die App den Beweis erneut
+        // auf Nostr-Relays suchen — was langsam ist und
+        // fehlschlagen kann wenn die Relays den alten
+        // Zap-Receipt nicht mehr vorhalten.
+        // =============================================
+        if (data['humanity_proof'] != null) {
+          final hp = data['humanity_proof'] as Map<String, dynamic>;
+          final hpVerified = hp['verified'] as bool? ?? false;
+
+          if (hpVerified) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('humanity_verified', true);
+            final firstZapAt = hp['first_zap_at'] as int? ?? 0;
+            if (firstZapAt > 0) {
+              await prefs.setInt('humanity_first_zap_at', firstZapAt);
+            }
+            final receiptId = hp['receipt_event_id'] as String? ?? '';
+            if (receiptId.isNotEmpty) {
+              await prefs.setString('humanity_receipt_id', receiptId);
+            }
+            final checkedAt = hp['checked_at'] as int? ?? 0;
+            if (checkedAt > 0) {
+              await prefs.setInt('humanity_checked_at', checkedAt);
+            }
+          }
+        }
+
+        // --- ERFOLGSMELDUNG ---
         if (context.mounted) {
+          // Zähle was wiederhergestellt wurde
           final hasNostr = version >= 2 && data['nostr'] != null && (data['nostr']['has_key'] ?? false);
+          final hasPlatformProofs = data['platform_proofs'] != null &&
+              (data['platform_proofs'] as List<dynamic>).isNotEmpty;
+          final hasHumanity = data['humanity_proof'] != null &&
+              (data['humanity_proof']['verified'] as bool? ?? false);
+
+          // Detaillierte Erfolgsmeldung
+          final List<String> restored = ['Profil', '${restoredBadges.length} Badges'];
+          if (hasNostr) restored.add('Nostr-Key');
+          if (hasPlatformProofs) {
+            final count = (data['platform_proofs'] as List<dynamic>).length;
+            restored.add('$count Plattform-Proofs');
+          }
+          if (hasHumanity) restored.add('Humanity-Proof');
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                hasNostr
-                    ? "✅ Backup geladen! Nostr-Key wiederhergestellt."
-                    : "✅ Backup erfolgreich eingespielt!",
-              ),
+              content: Text("✅ Backup geladen! ${restored.join(', ')} wiederhergestellt."),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
             ),
           );
         }

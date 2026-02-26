@@ -412,33 +412,52 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.25)),
       ),
-      child: Column(children: [
-        // Icon statt Emoji
-        Container(
-          width: 56, height: 56,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
-            shape: BoxShape.circle,
+      child: Row(
+        children: [
+          // Level Icon (kleiner)
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 18),
           ),
-          child: Icon(icon, color: color, size: 28),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          score.level,
-          style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Score ${score.totalScore.toStringAsFixed(1)}",
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
-      ]),
+          const SizedBox(width: 12),
+          // Level + Stats
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  score.level,
+                  style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1),
+                ),
+                Text(
+                  "${score.totalBadges} Badges · ${score.uniqueMeetups} Meetups · ${score.uniqueSigners} Signer",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+          // Score Zahl (rechts)
+          Text(
+            score.totalScore.toStringAsFixed(1),
+            style: TextStyle(
+              color: color,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -855,7 +855,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ===== HEADER: Level + Score =====
+          // ===== HEADER: Level + Score + Info-Button =====
           Row(
             children: [
               // Level Icon
@@ -892,6 +892,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   fontSize: 26,
                   fontWeight: FontWeight.w900,
                   fontFamily: 'monospace',
+                ),
+              ),
+              // ========================================
+              // NEU: Info-Button
+              // ========================================
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _showScoreInfoSheet,
+                child: Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.info_outline, color: Colors.grey.shade500, size: 16),
                 ),
               ),
             ],
@@ -981,6 +996,301 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showScoreInfoSheet() {
+    final score = _trustScore;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: cCard,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.80,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Drag Handle
+              Center(child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+              )),
+              const SizedBox(height: 20),
+
+              const Text("DEIN TRUST SCORE",
+                style: TextStyle(color: cOrange, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 6),
+              Text(
+                "Der Trust Score misst deine Vertrauenswürdigkeit in der Bitcoin-Community. "
+                "Er basiert auf kryptographischen Beweisen — niemand kann ihn fälschen.",
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+
+              // ===== LEVEL-ÜBERSICHT =====
+              const Text("TRUST LEVEL",
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+
+              _scoreLevel(Icons.fiber_new, "NEU", "Score < 3", Colors.grey,
+                "Startlevel. Besuche Meetups um Badges zu sammeln.",
+                isActive: score != null && score.level == 'NEU'),
+              _scoreLevel(Icons.eco, "STARTER", "Score 3 – 9", cOrange,
+                "Du bist dabei. Deine ersten Badges zeigen, dass du Teil der Community bist.",
+                isActive: score != null && score.level == 'STARTER'),
+              _scoreLevel(Icons.local_fire_department, "AKTIV", "Score 10 – 19", cCyan,
+                "Regelmäßiger Teilnehmer. Verschiedene Meetups und Organisatoren stärken dein Profil.",
+                isActive: score != null && score.level == 'AKTIV'),
+              _scoreLevel(Icons.shield, "ETABLIERT", "Score 20 – 39", Colors.green,
+                "Vertrauenswürdiges Community-Mitglied. Du bist breit vernetzt und lange dabei.",
+                isActive: score != null && score.level == 'ETABLIERT'),
+              _scoreLevel(Icons.bolt, "VETERAN", "Score 40+", Colors.amber,
+                "Höchstes Trust Level. Deine Reputation hat sich über Monate bewiesen.",
+                isActive: score != null && score.level == 'VETERAN'),
+
+              const SizedBox(height: 24),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 16),
+
+              // ===== WIE WIRD DER SCORE BERECHNET =====
+              const Text("WIE WIRD DER SCORE BERECHNET?",
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+
+              _scoreFactorTile(Icons.military_tech, cOrange,
+                "Meetup-Badges",
+                "Jedes Badge hat einen Basiswert. Badges von gut besuchten Meetups "
+                "mit erfahrenen Teilnehmern sind mehr wert."),
+              _scoreFactorTile(Icons.location_on, cCyan,
+                "Verschiedene Meetups & Städte",
+                "Diversität wird belohnt. Badges aus verschiedenen Städten und "
+                "von verschiedenen Organisatoren zählen mehr als immer das gleiche Meetup."),
+              _scoreFactorTile(Icons.people_outline, cPurple,
+                "Verschiedene Organisatoren",
+                "Badges von mehreren unabhängigen Signern beweisen, dass du nicht nur "
+                "von einer Person bestätigt wirst — das schützt vor Manipulation."),
+              _scoreFactorTile(Icons.schedule, Colors.green,
+                "Regelmäßigkeit & Alter",
+                "Ein älterer Account mit regelmäßiger Teilnahme bekommt einen Reife-Bonus. "
+                "Alte Badges verlieren langsam an Wert (Halbwertszeit ~6 Monate)."),
+              _scoreFactorTile(Icons.speed, Colors.red.shade300,
+                "Frequency Cap",
+                "Maximal 2 Badges pro Woche zählen zum Score. "
+                "Das verhindert, dass jemand in einer Woche endlos Badges sammelt."),
+
+              const SizedBox(height: 24),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 16),
+
+              // ===== ORGANISATOR WERDEN =====
+              const Text("ORGANISATOR WERDEN",
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              Text(
+                "Wenn dein Trust Score hoch genug ist, wirst du automatisch "
+                "zum Organisator befördert. Dann kannst du selbst NFC-Tags und "
+                "Rolling QR-Codes für dein Meetup erstellen — keine Anmeldung nötig.",
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 16),
+
+              // Aktuelle Promotion-Anforderungen
+              if (score != null && !score.meetsPromotionThreshold) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: cOrange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: cOrange.withOpacity(0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "DEIN FORTSCHRITT (${score.activeThresholds.name})",
+                        style: TextStyle(color: cOrange, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 10),
+                      ...score.progress.entries.map((entry) => _progressRow(entry.value)),
+                    ],
+                  ),
+                ),
+              ] else if (score != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.withOpacity(0.25)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.verified, color: Colors.green, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(
+                      "Du bist bereits Organisator! Du kannst eigene Meetups verifizieren.",
+                      style: TextStyle(color: Colors.green.shade300, fontSize: 13),
+                    )),
+                  ]),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+              const Divider(color: Colors.white10),
+              const SizedBox(height: 16),
+
+              // ===== SCORE ERHÖHEN =====
+              const Text("SO ERHÖHST DU DEINEN SCORE",
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              _tipRow(Icons.event, "Besuche regelmäßig verschiedene Meetups"),
+              _tipRow(Icons.explore, "Scanne Badges bei Meetups in anderen Städten"),
+              _tipRow(Icons.group_add, "Sammle Badges von verschiedenen Organisatoren"),
+              _tipRow(Icons.bolt, "Verifiziere deine Identität mit einem Lightning-Zap"),
+              _tipRow(Icons.alternate_email, "Richte NIP-05 ein (z.B. name@einundzwanzig.space)"),
+              _tipRow(Icons.link, "Verknüpfe Plattformen (Telegram, RoboSats, etc.)"),
+              _tipRow(Icons.link, "Binde deine Badges (stärkt den kryptographischen Beweis)"),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Helper-Widgets für Score Info Sheet ---
+
+  Widget _scoreLevel(IconData icon, String name, String range, Color color, String description, {bool isActive = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: isActive ? Border.all(color: color.withOpacity(0.3)) : null,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: color.withOpacity(isActive ? 0.15 : 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: isActive ? color : color.withOpacity(0.5), size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(name, style: TextStyle(
+                    color: isActive ? color : Colors.white.withOpacity(0.7),
+                    fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(width: 8),
+                  Text(range, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                  if (isActive) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text("DU", style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 2),
+                Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 11, height: 1.3)),
+              ],
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _scoreFactorTile(IconData icon, Color color, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 12, height: 1.4)),
+            ],
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _progressRow(PromotionProgress p) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Icon(
+          p.met ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: p.met ? Colors.green : Colors.grey.shade600,
+          size: 16,
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Text(
+          "${p.label}: ${p.current}/${p.required}",
+          style: TextStyle(
+            color: p.met ? Colors.green.shade300 : Colors.grey.shade400,
+            fontSize: 12,
+            fontWeight: p.met ? FontWeight.w600 : FontWeight.normal,
+          ),
+        )),
+        // Mini Progress
+        SizedBox(
+          width: 40, height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: p.percentage,
+              backgroundColor: Colors.white.withOpacity(0.06),
+              valueColor: AlwaysStoppedAnimation(p.met ? Colors.green : cOrange),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _tipRow(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: cOrange.withOpacity(0.6), size: 16),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text, style: TextStyle(color: Colors.grey.shade400, fontSize: 12, height: 1.4))),
         ],
       ),
     );

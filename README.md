@@ -1,8 +1,8 @@
-# ⚡ Einundzwanzig Meetup App
+# Einundzwanzig Meetup App
 
 **Kryptographisch verifizierbare Reputation für die Bitcoin-Community — ohne Server, ohne KYC, ohne Vertrauen.**
 
-Eine Flutter-App, die Meetup-Teilnahme über NFC-Tags und QR-Codes erfasst, jeden Badge mit einer Schnorr-Signatur versiegelt und daraus einen Trust Score berechnet — alles lokal auf dem Gerät, alles verifizierbar, alles Open Source.
+Eine Flutter-Applikation, die Meetup-Teilnahme über NFC-Tags und QR-Codes erfasst, jeden Besuch mit einer Schnorr-Signatur (BIP-340) versiegelt und daraus einen Trust Score berechnet. Alles läuft lokal auf dem Gerät, alles ist verifizierbar, alles ist Open Source.
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.41+-blue)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.7+-blue)](https://dart.dev)
@@ -11,174 +11,78 @@ Eine Flutter-App, die Meetup-Teilnahme über NFC-Tags und QR-Codes erfasst, jede
 
 ---
 
-## Das Problem
+## Inhaltsverzeichnis
 
-Du willst Bitcoin P2P kaufen oder verkaufen — auf [satoshikleinanzeigen.space](https://satoshikleinanzeigen.space), in einer Telegram-Gruppe oder bei einem Meetup. Aber woher weißt du, dass dein Gegenüber kein Scammer ist?
-
-- Zentrale Bewertungssysteme (eBay, Amazon) funktionieren nur mit einer zentralen Instanz
-- KYC-Verifizierung widerspricht dem Grundgedanken von Bitcoin
-- Pseudonyme Identitäten sind leicht zu faken
-- "Vertraue mir" reicht nicht
-
-**Die Lösung:** Physische Anwesenheit bei Bitcoin-Meetups als Vertrauensbeweis — kryptographisch gesichert, dezentral gespeichert, von jedem verifizierbar.
+1. [Das Problem und die Lösung](#das-problem-und-die-lösung)
+2. [Kernkonzept in 60 Sekunden](#kernkonzept-in-60-sekunden)
+3. [Architekturübersicht](#architekturübersicht)
+4. [Die kryptographische Kette](#die-kryptographische-kette)
+5. [Badge-System](#badge-system)
+6. [Trust Score](#trust-score)
+7. [Admin-System und Web of Trust](#admin-system-und-web-of-trust)
+8. [Rolling QR-Code](#rolling-qr-code)
+9. [Identitätsschichten (Reputation Layers)](#identitätsschichten-reputation-layers)
+10. [Backup und Wiederherstellung](#backup-und-wiederherstellung)
+11. [Schlüsselmanagement und Sicherheit](#schlüsselmanagement-und-sicherheit)
+12. [Reputation Publishing](#reputation-publishing)
+13. [Screens und Navigation](#screens-und-navigation)
+14. [Datenmodelle](#datenmodelle)
+15. [Services im Detail](#services-im-detail)
+16. [Externe APIs und Abhängigkeiten](#externe-apis-und-abhängigkeiten)
+17. [Installation und Build](#installation-und-build)
+18. [Kryptographie-Referenz](#kryptographie-referenz)
 
 ---
 
-## Wie es funktioniert
+## Das Problem und die Lösung
 
-### Die Idee in 30 Sekunden
+### Das Problem
 
-Ein Meetup-Organisator legt einen NFC-Tag oder einen QR-Code auf den Tisch. Jeder Teilnehmer scannt ihn mit der App und erhält ein **Badge** — ein kryptographisch signiertes Zertifikat das beweist: "Diese Person war am 15. Januar 2026 beim Einundzwanzig Meetup in ... , bei Bitcoin-Block 879.432."
+Beim Peer-to-Peer Bitcoin-Handel (z.B. auf Satoshi-Kleinanzeigen, in Telegram-Gruppen oder bei Meetups) fehlt ein vertrauenswürdiger Mechanismus, um die Seriosität des Gegenübers einzuschätzen. Zentrale Bewertungssysteme (eBay, Amazon) benötigen eine zentrale Instanz, KYC-Verifizierung widerspricht dem Bitcoin-Grundgedanken, und pseudonyme Identitäten sind leicht zu fälschen.
 
-Dieses Badge kann nicht gefälscht werden, weil es eine **Schnorr-Signatur** (BIP-340) des Organisators enthält. Es kann nicht kopiert werden, weil der NFC-Tag nur vor Ort lesbar ist und der QR-Code sich alle 10 Sekunden ändert. Und es braucht keinen Server, weil alles lokal auf dem Gerät gespeichert wird.
+### Die Lösung
 
-Nach ein paar Meetups hat der Nutzer eine verifizierbare Reputation: "5 Badges, 3 verschiedene Meetups, 2 verschiedene Organisatoren, seit 4 Monaten aktiv." Das zeigt er per QR-Code bei einem P2P-Trade — und sein Gegenüber kann die Echtheit in Sekunden prüfen.
+Physische Anwesenheit bei Bitcoin-Meetups dient als Vertrauensbeweis. Die App erzeugt für jeden Meetup-Besuch ein kryptographisch signiertes **Badge** — ein unfälschbares Zertifikat, das beweist: „Diese Person war zu einem bestimmten Zeitpunkt physisch bei einem bestimmten Meetup." Aus der Summe dieser Badges entsteht eine verifizierbare Reputation, die per QR-Code bei P2P-Trades vorgezeigt und von jedem geprüft werden kann.
 
-### Die kryptographische Kette
+---
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  ORGANISATOR (hat Nostr-Keypair)                            │
-│                                                             │
-│  1. Erstellt Badge-Daten:                                   │
-│     { meetup: "aschaffenburg-de", block: 879432, ... }      │
-│                                                             │
-│  2. Erstellt Nostr-Event (Kind 21000):                      │
-│     event_id = SHA-256([0, pubkey, created_at, 21000,       │
-│                         tags, content])                     │
-│                                                             │
-│  3. Signiert mit Schnorr (BIP-340):                         │
-│     sig = schnorr_sign(privkey, event_id)                   │
-│                                                             │
-│  4. Schreibt auf NFC-Tag / zeigt als Rolling QR:            │
-│     { v:2, t:"B", m:"aschaffenburg-de", b:879432,           │
-│       x:1739927280, c:1739905680,                           │
-│       p:"64hex_pubkey", s:"128hex_sig" }                    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       ▼  Teilnehmer scannt
-┌─────────────────────────────────────────────────────────────┐
-│  TEILNEHMER (App)                                           │
-│                                                             │
-│  1. Liest Payload (NFC oder QR)                             │
-│                                                             │
-│  2. Prüft Ablauf: now > x? → "Abgelaufen"                   │
-│                                                             │
-│  3. Prüft Rolling Nonce (nur bei QR):                       │
-│     Zeitschritt aktuell? (±10 Sekunden Toleranz)            │
-│                                                             │
-│  4. Rekonstruiert Nostr-Event aus Payload                   │
-│     → SHA-256 → event_id                                    │
-│                                                             │
-│  5. Schnorr-Verifikation: verify(pubkey, event_id, sig)     │
-│     → true = Badge ist echt, Signatur vom Organisator       │
-│                                                             │
-│  6. Badge wird lokal gespeichert (SharedPreferences)        │
-└─────────────────────────────────────────────────────────────┘
+## Kernkonzept in 60 Sekunden
 
-Jedes Badge enthält einen Bitcoin-Block-Height als Zeitstempel. Das ist kein Zufall — der Block-Height ist ein öffentlich verifizierbarer, unmanipulierbarer Zeitbeweis. Block 879.432 wurde an einem bestimmten Tag gemined, und das kann jeder auf mempool.space oder in der eigenen Node nachprüfen.
+1. Ein **Meetup-Organisator** legt einen NFC-Tag auf den Tisch oder zeigt einen Rolling QR-Code auf seinem Handy.
+2. Jeder **Teilnehmer** scannt ihn mit der App und erhält ein **Badge** — ein kryptographisch signiertes Nostr-Event (Kind 21000) mit Schnorr-Signatur des Organisators.
+3. Das Badge enthält einen **Bitcoin-Block-Height** als unmanipulierbaren Zeitbeweis (verifizierbar auf mempool.space).
+4. Der Teilnehmer erstellt zusätzlich eine **Claim-Signatur** (Kind 21002), die das Badge kryptographisch an seine Identität bindet.
+5. Aus allen gesammelten Badges berechnet die App einen **Trust Score**, der Diversität, Regelmäßigkeit und Alter berücksichtigt.
+6. Die Reputation wird als Nostr-Event (Kind 30078) auf Relays publiziert und kann von jedem verifiziert werden.
 
-Features
+---
 
-🏷️ Badge-System mit Schnorr-Signaturen
+## Architekturübersicht
 
-Jedes Badge ist ein vollständiges Nostr-Event (Kind 21000), signiert mit dem Schnorr-Algorithmus nach BIP-340. Die Signatur beweist kryptographisch, welcher Organisator das Badge erstellt hat — ohne dass ein Server dazwischen steht.
+### Ordnerstruktur
 
-Zwei Wege zum Badge:
-Methode	          Anti-Screenshot	           Offline	                 Tag-Kosten
-NFC-Tag (NTAG215) ✅ Physisch vor Ort	       ✅ Kein Internet nötig	   ~0,50€
-Rolling QR	      ✅ Ändert sich alle 10s	   ❌ Braucht Internet	     Kostenlos
-
-📊 Trust Score
-
-Ein lokaler Algorithmus berechnet aus den gesammelten Badges einen Vertrauenswert. Der Score berücksichtigt:
-
-    Diversität — Verschiedene Meetups zählen mehr als immer das gleiche
-
-    Verschiedene Organisatoren — Badges von unterschiedlichen Signern sind wertvoller
-
-    Alter — Ein Account, der seit 6 Monaten aktiv ist, hat mehr Gewicht
-
-    Time Decay — Alte Badges verlieren langsam an Wert (Halbwertszeit 26 Wochen)
-
-    Frequency Cap — Maximal 2 Badges pro Woche zählen (gegen Farming)
-
-Der Score ist bewusst lokal berechenbar — verschiedene Apps können verschiedene Gewichtungen nutzen. Es gibt keinen "offiziellen" Score, nur einen Algorithmus, den jeder forken und anpassen kann.
-
-🔐 Dezentrales Web of Trust (Admin-System)
-
-Kein zentraler Server, keine statische Datenbank. Organisatoren werden über kryptographische Vertrauensketten via Nostr (Kind 30078) verwaltet. Die App durchläuft dabei autonome Phasen:
-
-    Bootstrap-Phase: Zu Beginn existiert ein hartcodierter Super-Admin (Entwickler), der die ersten "Seed-Organisatoren" delegiert, um das Netzwerk zu starten.
-
-    Der "Bootstrap-Sunset": Sobald das Netzwerk eine kritische Masse an verifizierten Organisatoren erreicht hat (z.B. 20 Admins), löst die App lokal den "Sunset" aus. Der Super-Admin verliert ab diesem Moment dauerhaft seinen zentralen Sonderstatus.
-
-    Peer-to-Peer Vouching (Ritterschlag): Ab dem Sunset wächst das Netzwerk autonom. Etablierte Organisatoren können das Vertrauen an neue Co-Admins weitergeben. Sie scannen den npub (QR-Code) des neuen Organisators und veröffentlichen eine kryptografische Bürgschaft auf den Nostr-Relays. Das Netzwerk verifiziert diese Delegationen rekursiv.
-
-📱 Rolling QR mit Session-Persistenz
-
-Der Rolling QR löst ein praktisches Problem: Wie verhindert man, dass jemand ein Foto vom QR-Code macht und es an einen Freund zu Hause schickt?
-
-Lösung: Der QR-Code ändert sich alle 10 Sekunden. Jeder Code enthält eine HMAC-Nonce, die vom Scanner auf Aktualität geprüft wird. Ein Screenshot ist nach 10 Sekunden wertlos.
-Gleichzeitig bleibt die Session für 6 Stunden aktiv — auch wenn der Organisator die App schließt und wieder öffnet. Der Session-Seed wird in SharedPreferences gespeichert und daraus werden die Rolling Nonces deterministisch abgeleitet.
-
-🌐 Weitere Features
-
-    Hochsichere Backups (AES-GCM): Komplettes Profil, Badges und private Nostr-Keys (nsec) werden exportiert. Die .21bkp-Datei wird zwingend mit einem User-Passwort AES-256-GCM verschlüsselt. Ohne Passwort kein Restore!
-
-    Reputation teilen per QR-Code, Text oder JSON-Export mit Checksumme
-
-    Meetup-Radar mit Live-Daten von portal.einundzwanzig.space
-
-    Badge Verifier — standalone HTML-Tool zur externen Verifizierung
-
-    Kalender-Integration mit Einundzwanzig-Meetup-Terminen
-
-Architektur
-Ordnerstruktur
-Plaintext
-
+```
 lib/
-├── main.dart                       # App-Entry, Session-Check, Routing
-├── theme.dart                      # Material Design 3 (Dark Theme, Orange Akzent)
+├── main.dart                       # App-Entry, SplashScreen, Session-Check, Key-Migration
+├── theme.dart                      # Material Design 3 (Dark Theme, Bitcoin-Orange Akzent)
 │
 ├── models/
-│   ├── user.dart                   # Profil (Nickname, npub, Home-Meetup)
-│   ├── badge.dart                  # MeetupBadge + Reputation-Export
-│   ├── meetup.dart                 # Meetup-Daten (Stadt, Land, Telegram, Coords)
-│   └── calendar_event.dart         # Kalender-Events
+│   ├── user.dart                   # UserProfile (Nickname, npub, Admin-Status, Home-Meetup)
+│   ├── badge.dart                  # MeetupBadge v4 mit Dual-Signatur (Organisator + Claim)
+│   ├── meetup.dart                 # Meetup-Daten (Stadt, Land, Telegram, Koordinaten)
+│   └── calendar_event.dart         # Kalender-Events (ICS-Parsing)
 │
-├── screens/
-│   ├── intro.dart                  # Onboarding (Name, npub, Home-Meetup)
-│   ├── dashboard.dart              # Hauptscreen mit Feature-Kacheln
-│   ├── meetup_verification.dart    # NFC-Scan + QR-Scan für Badge-Empfang
-│   ├── nfc_writer.dart             # NFC-Tag beschreiben (Admin)
-│   ├── rolling_qr_screen.dart      # Rolling QR anzeigen (Admin)
-│   ├── admin_panel.dart            # Admin-Dashboard
-│   ├── admin_management.dart       # Web of Trust & P2P Vouching (Ritterschlag)
-│   ├── badge_wallet.dart           # Alle gesammelten Badges
-│   ├── badge_details.dart          # Einzelnes Badge mit Crypto-Details
-│   ├── reputation_qr.dart          # Reputation als QR teilen
-│   ├── qr_scanner.dart             # Universeller QR-Scanner
-│   ├── radar.dart                  # Meetup-Karte
-│   ├── events.dart                 # Meetup-Liste
-│   ├── meetup_details.dart         # Meetup-Infos (Logo, Links, Telegram)
-│   ├── profile_edit.dart           # Profil bearbeiten + Nostr-Key Management
-│   └── calendar_screen.dart        # Meetup-Kalender
+├── screens/                        # 25 Screens (siehe Abschnitt "Screens und Navigation")
 │
-└── services/
-    ├── badge_security.dart         # Schnorr-Sign/Verify, Legacy-Compat
-    ├── rolling_qr_service.dart     # HMAC-Nonce, Session-Management
-    ├── trust_score_service.dart    # Lokale Trust-Score-Berechnung
-    ├── admin_registry.dart         # Nostr Web of Trust (Sunset & P2P Fetching)
-    ├── nostr_service.dart          # Keypair-Generierung, Nip19, Relay
-    ├── meetup_service.dart         # API zu portal.einundzwanzig.space
-    ├── mempool.dart                # Block-Height von mempool.space
-    └── backup_service.dart         # AES-GCM verschlüsselter JSON-Export/Import
+├── services/                       # 18 Services (siehe Abschnitt "Services im Detail")
+│
+└── widgets/
+    └── reputation_layers_widget.dart  # Visuelle Darstellung der Identitätsschichten
+```
 
-Datenfluss
-Plaintext
+### Datenfluss
 
+```
                     portal.einundzwanzig.space
                               │
                     Meetup-Liste (JSON API)
@@ -187,13 +91,20 @@ Plaintext
 ┌──────────────────────────────────────────────┐
 │                    APP                       │
 │                                              │
-│   SharedPreferences                          │
-│   ├── User Profile (nickname, npub, ...)     │
+│   flutter_secure_storage (Hardware-Schutz)   │
+│   ├── Nostr Private Key (nsec)               │
+│   ├── Nostr Public Key (npub)                │
+│   └── Private Key Hex                        │
+│                                              │
+│   SharedPreferences (Klartext)               │
+│   ├── User Profile (Nickname, ...)           │
 │   ├── Badges (signierte JSON-Objekte)        │
-│   ├── Nostr Keys (AES-gesichert im OS)       │
 │   ├── Admin Registry Cache (WoT)             │
 │   ├── Bootstrap Sunset Flag                  │
-│   └── Rolling QR Session                     │
+│   ├── Rolling QR Session                     │
+│   ├── Platform Proofs                        │
+│   ├── Humanity Proof Status                  │
+│   └── Relay-Konfiguration                    │
 │                                              │
 │   Nostr Relays ◄──── Web of Trust (Kind 30078)
 │   mempool.space ◄── Block Height             │
@@ -204,205 +115,694 @@ Plaintext
           ▼                         ▼
     NTAG215 Tag              Bildschirm
     (492 Bytes)             (alle 10 Sek)
+```
 
-Kryptographie
-Komponente	Algorithmus	Zweck
-Badge-Signatur	Schnorr / BIP-340	Beweis, dass Organisator X dieses Badge erstellt hat
-Event-ID	SHA-256	Eindeutige Identifikation des Nostr-Events
-Rolling Nonce	HMAC-SHA256	Anti-Screenshot (Freshness-Check)
-Backups	AES-256 GCM	Sichere Verwahrung von nsec und Profildaten
-Trust Score Hash	SHA-256	Checksumme für Reputation-Export
-Admin Registry	Schnorr / BIP-340	Vouchings/Delegationen sind signierte Nostr-Events
-Installation
-Voraussetzungen
+---
 
-    Flutter SDK ≥ 3.38
+## Die kryptographische Kette
 
-    Dart ≥ 3.7
+Jedes Badge durchläuft eine vollständige kryptographische Verifikationskette:
 
-    Android SDK (für Android-Build)
+### Schritt 1: Organisator signiert (Tag-Erstellung)
 
-    Xcode (für iOS, nur auf macOS)
+Der Organisator erstellt einen kompakten Payload, der auf einen NFC-Tag passt (~285 Bytes):
 
-Setup
-Bash
+```json
+{
+  "v": 2,          // Signatur-Version
+  "t": "B",        // Typ: Badge
+  "m": "city-cc",  // Meetup-ID
+  "b": 879432,     // Bitcoin Block Height
+  "x": 1739927280, // Ablaufzeitpunkt (Unix)
+  "c": 1739905680, // Erstellungszeitpunkt (createdAt des Nostr-Events)
+  "p": "64hex...",  // Public Key des Organisators (32 Bytes)
+  "s": "128hex..."  // Schnorr-Signatur (64 Bytes)
+}
+```
 
-git clone [https://github.com/louisthecat86/Einundzwanzig-Meetup-App.git](https://github.com/louisthecat86/Einundzwanzig-Meetup-App.git)
+Der Content (`v`, `t`, `m`, `b`, `x`) wird als Nostr-Event (Kind 21000) signiert. Die JSON-Keys werden vor dem Signieren **alphabetisch sortiert** (Kanonisierung), um deterministisches Hashing zu gewährleisten.
+
+### Schritt 2: Teilnehmer scannt (Badge-Empfang)
+
+Die App des Teilnehmers führt folgende Prüfungen durch:
+
+1. **Ablauf-Check**: Ist `x` (expires_at) in der Zukunft?
+2. **Rolling Nonce** (nur bei QR): Ist der Zeitschritt aktuell? (±10 Sekunden Toleranz)
+3. **Event-Rekonstruktion**: Aus dem Payload wird das Nostr-Event rekonstruiert
+4. **SHA-256 Hash**: Der Event-Hash wird berechnet
+5. **Schnorr-Verifikation**: `verify(pubkey, event_id, sig)` → Beweis, dass genau dieser Organisator signiert hat
+6. **Admin-Registry-Check**: Ist der Signer ein bekannter, vertrauenswürdiger Organisator?
+
+### Schritt 3: Claim-Binding (Identitätsbindung)
+
+Nach erfolgreicher Verifikation erstellt die App automatisch eine **Claim-Signatur** (Nostr Kind 21002):
+
+```json
+{
+  "action": "claim_badge",
+  "org_sig": "...",        // Referenz zur Organisator-Signatur
+  "org_event_id": "...",   // Event-ID des Badge-Events
+  "org_pubkey": "...",     // Pubkey des Organisators
+  "block_height": 879432,
+  "claimed_at": 1739905700
+}
+```
+
+Damit ist das Badge kryptographisch an den Sammler gebunden. Ohne Claim-Signatur zählt ein Badge **nicht** für die Reputation.
+
+### Schritt 4: Verifizierung durch Dritte
+
+Ein Verifizierer prüft:
+- Die Organisator-Signatur (BIP-340 Schnorr)
+- Die Claim-Signatur des Sammlers
+- Den `badge_proof_hash` (SHA-256 über alle gebundenen Badges)
+- Ob der Signer in der Admin-Registry steht
+
+---
+
+## Badge-System
+
+### Badge-Modell (v4)
+
+Jedes Badge (`MeetupBadge`) hat zwei Signaturen:
+
+| Feld | Beschreibung |
+|------|-------------|
+| `sig` | Schnorr-Signatur des Organisators (128 Hex-Zeichen) |
+| `sigId` | Nostr Event-ID (SHA-256 Hash, 64 Hex-Zeichen) |
+| `adminPubkey` | Hex-Pubkey des Organisators (64 Hex-Zeichen) |
+| `sigVersion` | 1 = Legacy (HMAC, unsicher), 2 = Nostr (Schnorr) |
+| `sigContent` | Der signierte Content (für Re-Verifikation) |
+| `claimSig` | Schnorr-Signatur des Sammlers |
+| `claimEventId` | Event-ID des Claim-Events |
+| `claimPubkey` | Hex-Pubkey des Sammlers |
+| `claimTimestamp` | Unix-Timestamp des Claims |
+| `isRetroactive` | true = nachträglich geclaimed (reduzierter Wert) |
+
+Zusätzlich: `meetupName`, `date`, `blockHeight`, `delivery` (nfc/rolling_qr), `meetupEventId`.
+
+### Zwei Auslieferungswege
+
+| Methode | Anti-Screenshot | Offline | Kosten |
+|---------|----------------|---------|--------|
+| **NFC-Tag** (NTAG215) | Physisch vor Ort nötig | Kein Internet nötig | ~0,50 € |
+| **Rolling QR** | Ändert sich alle 10s | Braucht Internet | Kostenlos |
+
+### Badge Proof Hash (Datenschutzkonform)
+
+Die App erzeugt einen `badge_proof_hash` (SHA-256), der beweist, welche Badges für die Reputation verwendet wurden, **ohne** die Meetup-Namen, Orte oder Daten zu verraten. Nur gebundene Badges (mit Claim-Signatur) werden einbezogen.
+
+### Legacy v1 Badges
+
+Ältere Badges mit Signatur-Version 1 nutzen ein HMAC-Shared-Secret. Diese sind als **unsicher** markiert, da das Secret im Quellcode steht. Die App zeigt sie als "Legacy — nicht vertrauenswürdig" an. Neue Badges verwenden ausschließlich Schnorr/BIP-340.
+
+---
+
+## Trust Score
+
+### Berechnungsalgorithmus
+
+Der Trust Score wird lokal berechnet und berücksichtigt mehrere Faktoren:
+
+**Einzelner Badge-Wert:**
+```
+badge_value = base × co_attestor_bonus × signer_bonus × decay_factor
+```
+
+- **Co-Attestor Bonus**: `log₂(teilnehmer + 1)` — Ein gut besuchtes Meetup zählt mehr
+- **Signer Bonus**: `1.0 + (veteran_count × 0.3)` — Badges von vertrauenswürdigen Signern wiegen schwerer
+- **Time Decay**: `0.5^(alter_wochen / 26)` — Halbwertszeit von 26 Wochen (~6 Monate)
+- **Frequency Cap**: Maximal 2 Badges pro Woche zählen (Anti-Farming)
+
+**Aggregierte Scores:**
+- **Maturity**: `min(1.0, account_alter_tage / 180)` — Ältere Accounts sind vertrauenswürdiger
+- **Diversity**: `log₂(unique_meetups + 1) × log₂(unique_signers + 1)` — Verschiedene Meetups und Organisatoren
+- **Quality**: Durchschnittlicher Signer-Bonus
+- **Activity**: Summe aller Badge-Werte
+
+**Gesamtscore:**
+```
+total = activity × (1 + maturity) × (1 + diversity × 0.1)
+```
+
+### Trust Level
+
+| Score | Level | Bedeutung |
+|-------|-------|-----------|
+| ≥ 40 | VETERAN | Langfristig etabliertes Community-Mitglied |
+| ≥ 20 | ETABLIERT | Regelmäßiger Meetup-Besucher |
+| ≥ 10 | AKTIV | Aktives Community-Mitglied |
+| ≥ 3 | STARTER | Erste Badges gesammelt |
+| < 3 | NEU | Neuer Nutzer |
+
+### Sybil-Erkennung
+
+Die App erkennt verdächtige Muster automatisch:
+
+- Alle Badges von nur einem einzigen Signer
+- Mehr als 3 Badges an einem einzigen Tag
+- Kein Badge hat Co-Attestors (andere Teilnehmer am selben Meetup)
+
+---
+
+## Admin-System und Web of Trust
+
+Das Admin-System durchläuft drei autonome Phasen:
+
+### Phase 1: Bootstrap (Keimphase)
+
+Ein **hartcodierter Super-Admin** (der Entwickler) delegiert die ersten Organisatoren ("Seed-Admins"). Die Admin-Liste wird als signiertes Nostr-Event (Kind 30078, d-Tag: `einundzwanzig-admins`) auf Relays publiziert.
+
+Schwellenwerte in der Keimphase sind niedrig: 3 Badges, 2 Meetups, 1 Signer, 14 Tage Account-Alter.
+
+### Phase 2: Wachstum
+
+Mit 2–5 aktiven Signern steigen die Anforderungen: 4 Badges, 3 Meetups, 2 Signer, 30 Tage.
+
+### Phase 3: Bootstrap Sunset (Dezentralisierung)
+
+Sobald das Netzwerk **20 verifizierte Organisatoren** erreicht, wird der "Sunset" **irreversibel aktiviert**:
+
+- Der Super-Admin verliert seinen Sonderstatus dauerhaft
+- Das Flag `bootstrap_permanently_sunset` wird gesetzt und nie wieder zurückgesetzt
+- Ab jetzt wächst das Netzwerk rein über Peer-to-Peer-Mechanismen
+
+### Auto-Promotion (Proof of Reputation)
+
+Nutzer, die die Schwellenwerte erreichen (abhängig von der aktuellen Bootstrap-Phase), werden **automatisch** zum Organisator befördert. Die App:
+
+1. Erkennt die Schwellenwert-Erfüllung im Trust Score
+2. Setzt den Admin-Status lokal
+3. Publiziert einen "Admin Claim" (Kind 21004) auf Nostr-Relays mit den Badge-Beweisen
+4. Andere App-Instanzen laden und verifizieren diese Claims mathematisch
+
+### Peer-to-Peer Vouching (Ritterschlag)
+
+Etablierte Organisatoren können neue Co-Admins manuell bürgen: Sie scannen den npub (QR-Code) des neuen Organisators und veröffentlichen eine kryptographische Bürgschaft auf den Nostr-Relays. Das Admin-Management-Screen bietet dafür eine dedizierte UI.
+
+### Admin-Registry Caching
+
+Die Admin-Liste wird lokal gecacht (offline-fähig). Bei jedem App-Start wird im Hintergrund ein Relay-Update angestoßen. Der Cache wird mit den Relay-Daten zusammengeführt.
+
+---
+
+## Rolling QR-Code
+
+### Problem
+
+Wie verhindert man, dass jemand ein Foto vom QR-Code macht und es an jemanden schickt, der nicht vor Ort ist?
+
+### Lösung
+
+Der QR-Code ändert sich alle **10 Sekunden**. Jeder Code enthält den originalen (einmalig signierten) Badge-Payload plus eine **HMAC-Nonce**, die auf Aktualität geprüft wird.
+
+### Technische Details
+
+1. **Session-Start**: Der Organisator startet eine 6-Stunden-Session für ein bestimmtes Meetup
+2. **Session-Seed**: 256 Bit kryptographisch sicherer Zufall (CSPRNG via `Random.secure()`)
+3. **Base-Payload**: Wird einmalig mit Schnorr signiert (über `BadgeSecurity.signCompact()`)
+4. **Rolling Nonce**: Alle 10 Sekunden wird eine neue HMAC-SHA256-Nonce berechnet: `HMAC(seed, zeitschritt)`
+5. **QR-Payload**: `base_payload + { "n": nonce, "ts": zeitschritt }`
+6. **Validierung beim Scanner**: Prüft ob der Zeitschritt aktuell ist (±1 Intervall Toleranz = max 20 Sekunden)
+
+Die eigentliche Sicherheit kommt von der Schnorr-Signatur des Base-Payloads und dem Ablaufzeitpunkt. Der Scanner kann die HMAC-Nonce nicht kryptographisch verifizieren (er kennt den Seed nicht), prüft aber die Zeitnähe.
+
+### Session-Persistenz
+
+Die Session überlebt App-Neustarts: Seed, Start-/Ablaufzeit, Meetup-Daten und der signierte Base-Payload werden in SharedPreferences gespeichert.
+
+---
+
+## Identitätsschichten (Reputation Layers)
+
+Die Reputation besteht aus mehreren unabhängigen Ebenen, die zusammen ein Gesamtbild ergeben:
+
+### Layer 1: Meetup-Badges
+
+Physische Anwesenheitsnachweise, kryptographisch signiert. Dies ist die Kernfunktion der App.
+
+### Layer 2: Humanity Proof (Lightning Anti-Bot)
+
+Die App prüft, ob der Nutzer **jemals einen echten Nostr-Zap** (Lightning-Zahlung) gesendet oder empfangen hat. Dafür werden Zap-Receipts (Kind 9735) und Zap-Requests (Kind 9734) auf Nostr-Relays gesucht.
+
+Ein einziges Receipt reicht als Beweis:
+- Der Nutzer besitzt eine echte Lightning-Wallet
+- Er hat echte Sats ausgegeben
+- Die Zahlung ist kryptographisch verifizierbar
+
+Wem er gezappt hat, ist irrelevant. Die App speichert nur: `humanity_verified: true, method: lightning_zap, first_zap_at: timestamp`.
+
+### Layer 3: NIP-05 Verifikation
+
+Die App ruft das Nostr-Profil (Kind 0) des Nutzers von Relays ab und prüft den NIP-05 Identifier. Domain-Typen werden unterschiedlich gewichtet:
+
+| Domain-Typ | Score | Beispiel |
+|-----------|-------|---------|
+| Community | 1.0 | einundzwanzig.space |
+| Eigene Domain | 0.7 | dein-name.de |
+| Public Provider | 0.3 | nostrplebs.com |
+
+### Layer 4: Plattform-Proofs
+
+Nutzer können ihre Accounts auf externen Plattformen (Satoshi-Kleinanzeigen, Telegram, RoboSats, Nostr) kryptographisch an ihren npub binden. Dafür wird ein signierter Verify-String erzeugt:
+
+```
+21rep::npub1abc...::satoshikleinanzeigen::username::sig=hex...
+```
+
+Dieser String wird als signiertes Nostr-Event (Kind 21003) erstellt. Der Nutzer kopiert ihn in sein Plattform-Profil. Verifizierer können die Schnorr-Signatur prüfen und den Username-Match bestätigen.
+
+### Layer 5: Social Graph
+
+Die App analysiert die Nostr-Follow-Listen (Kind 3) und prüft, ob der Nutzer von bekannten Community-Mitgliedern gefolgt wird. Folgen von bekannten Organisatoren wiegen besonders schwer.
+
+---
+
+## Backup und Wiederherstellung
+
+### Export
+
+Die App exportiert ein verschlüsseltes Backup als `.21bkp`-Datei:
+
+1. **Profildaten**: Nickname, Telegram, Twitter, Home-Meetup, Admin-Status
+2. **Alle Badges**: Inklusive aller kryptographischen Beweise (Signaturen, Event-IDs)
+3. **Nostr-Keypair**: nsec, npub, privHex (sensibel!)
+4. **Admin-Registry**: Lokaler Cache aller bekannten Organisatoren
+
+### Verschlüsselung
+
+- **Schlüsselableitung**: PBKDF2-SHA256 mit hoher Iterationsanzahl (100.000 Runden)
+- **Verschlüsselung**: AES-256-GCM
+- **Salt und IV**: Werden zufällig generiert und im Backup-Header gespeichert
+- **Ohne Passwort kein Restore** — es gibt keine Hintertür
+
+### Import
+
+Beim Restore werden alle Daten wiederhergestellt, inklusive der Nostr-Keys in den SecureKeyStore (Hardware-geschützt).
+
+---
+
+## Schlüsselmanagement und Sicherheit
+
+### SecureKeyStore
+
+Private Schlüssel werden **niemals** im Klartext in SharedPreferences gespeichert. Der `SecureKeyStore` nutzt:
+
+- **Android**: `EncryptedSharedPreferences` (API 23+) mit Android Keystore Backend. Auf älteren Geräten (API < 23): AES-Verschlüsselung mit RSA-wrapped Key im Android Keystore.
+- **iOS**: iOS Keychain mit `kSecAttrAccessibleWhenUnlocked`
+
+### Key-Migration
+
+Beim ersten App-Start nach einem Update werden vorhandene Klartext-Keys aus SharedPreferences automatisch in den SecureKeyStore migriert und anschließend aus SharedPreferences gelöscht. Die Migration wird über ein Flag als erledigt markiert.
+
+### Schlüssel-Generierung und Import
+
+- **Neue Keys**: `Keychain.generate()` erzeugt ein secp256k1-Keypair, das als npub/nsec (Bech32) gespeichert wird
+- **Import**: Der Nutzer kann seinen bestehenden nsec eingeben; der öffentliche Schlüssel wird daraus abgeleitet
+
+---
+
+## Reputation Publishing
+
+### Automatisches Relay-Publishing
+
+Nach jedem Badge-Scan wird die Reputation automatisch im Hintergrund auf Nostr-Relays aktualisiert. Das geschieht als **Parameterized Replaceable Event** (Kind 30078, d-Tag: `einundzwanzig-reputation`), das sich bei jedem Update selbst überschreibt.
+
+### Datenschutz
+
+Auf den Relays landen **nur aggregierte Zahlen**:
+
+- Trust Score, Anzahl Badges, Unique Meetups, Unique Signers
+- Account-Alter, Bridge Score
+- `badge_proof_hash` (kryptographischer Beweis ohne Details)
+- Plattform-Proofs (nur wenn vom Nutzer explizit erstellt)
+- Humanity-Proof-Status
+
+**Nicht** publiziert werden: Meetup-Namen, Besuchsdaten, Orte, Teilnehmer.
+
+### Spam-Schutz
+
+Zwischen zwei Publishes müssen mindestens 5 Minuten liegen. Change-Detection verhindert unnötige Updates.
+
+### Relay-Konfiguration
+
+Die App nutzt standardmäßig vier Relays: `relay.damus.io`, `nos.lol`, `relay.nostr.band`, `nostr.einundzwanzig.space`. Der Nutzer kann über den Relay-Settings-Screen eigene Relays hinzufügen oder Default-Relays deaktivieren.
+
+---
+
+## Screens und Navigation
+
+### App-Start und Onboarding
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **SplashScreen** | `main.dart` | Key-Migration, Session-Check, Routing zu Intro oder Dashboard |
+| **IntroScreen** | `intro.dart` | Onboarding für neue Nutzer: Erklärung des Konzepts |
+| **ProfileEditScreen** | `profile_edit.dart` | Profil erstellen/bearbeiten: Nickname, Nostr-Key generieren/importieren, Home-Meetup wählen, nsec-Backup |
+
+### Hauptnavigation
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **DashboardScreen** | `dashboard.dart` | Zentrale Übersicht: Trust Score, Badge-Zähler, Identity Layers, aktive Session, Feature-Kacheln, Auto-Promotion |
+| **BadgeWalletScreen** | `badge_wallet.dart` | Alle gesammelten Badges mit Filter- und Sortieroptionen |
+| **BadgeDetailsScreen** | `badge_details.dart` | Einzelnes Badge mit allen kryptographischen Details, Signatur-Verifikation, Claim-Status |
+
+### Badge-Empfang
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **MeetupVerificationScreen** | `meetup_verification.dart` | NFC-Scan und QR-Scan zum Badge-Empfang; Signatur-Verifikation, Claim-Binding, Admin-Check |
+| **QRScannerScreen** | `qr_scanner.dart` | Universeller QR-Scanner (für Badges, Vouching, Reputation-Verifikation) |
+
+### Admin-Funktionen
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **AdminPanelScreen** | `admin_panel.dart` | Admin-Dashboard: NFC-Tag beschreiben, Rolling QR starten, Meetup-Session verwalten |
+| **MeetupSessionWizard** | `meetup_session_wizard.dart` | Schritt-für-Schritt-Assistent zum Starten einer Meetup-Session |
+| **MeetupSelectionScreen** | `meetup_selection.dart` | Meetup-Auswahl für neue Session oder Badge-Erstellung |
+| **NFCWriterScreen** | `nfc_writer.dart` | NFC-Tags mit signiertem Badge-Payload beschreiben |
+| **RollingQRScreen** | `rolling_qr_screen.dart` | Rolling QR-Code anzeigen (ändert sich alle 10s) |
+| **AdminManagementScreen** | `admin_management.dart` | Web of Trust verwalten: P2P Vouching, Admin-Liste, Sunset-Status |
+
+### Reputation und Verifikation
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **ReputationQRScreen** | `reputation_qr.dart` | Reputation als QR-Code teilen (JSON mit Checksumme), Text-Export, Relay-Publishing |
+| **ReputationVerifyScreen** | `reputation_verify_screen.dart` | Reputation eines anderen Nutzers prüfen (QR-Scan oder npub-Eingabe) |
+| **HumanityProofScreen** | `humanity_proof_screen.dart` | Lightning Zap-Beweis prüfen und Status anzeigen |
+| **PlatformProofScreen** | `platform_proof_screen.dart` | Plattform-Proofs erstellen und verwalten |
+
+### Meetup-Entdeckung
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **RadarScreen** | `radar.dart` | Meetup-Karte mit Live-Daten von portal.einundzwanzig.space |
+| **EventsScreen** | `events.dart` | Meetup-Liste zum Durchsuchen |
+| **MeetupDetailsScreen** | `meetup_details.dart` | Einzelnes Meetup: Logo, Links, Telegram, Twitter, Nostr |
+| **MeetupListScreen** | `meetup_list_screen.dart` | Listenansicht aller verfügbaren Meetups |
+| **CalendarScreen** | `calendar_screen.dart` | Meetup-Kalender (ICS-Feed von portal.einundzwanzig.space) |
+| **CreateMeetupScreen** | `create_meetup.dart` | Neues Meetup erstellen |
+
+### Einstellungen
+
+| Screen | Datei | Funktion |
+|--------|-------|----------|
+| **RelaySettingsScreen** | `relay_settings_screen.dart` | Nostr-Relays verwalten: Defaults an/aus, Custom-Relays hinzufügen/entfernen |
+| **MarketScreen** | `market.dart` | Marktplatz-Integration (Placeholder) |
+| **POSScreen** | `pos.dart` | Point of Sale (Placeholder) |
+
+---
+
+## Datenmodelle
+
+### UserProfile (`models/user.dart`)
+
+Speichert das Nutzerprofil in SharedPreferences. Felder: `nickname`, `fullName`, `telegramHandle`, `nostrNpub`, `twitterHandle`, `isNostrVerified`, `isAdminVerified`, `isAdmin`, `homeMeetupId`, `hasNostrKey`, `promotionSource` (trust_score / seed_admin / leer).
+
+Beim Laden wird der npub prioritär aus dem SecureKeyStore genommen (falls ein Keypair existiert).
+
+### MeetupBadge (`models/badge.dart`)
+
+Siehe [Badge-System](#badge-system). Unterstützt Serialisierung zu/von JSON, Persistenz über SharedPreferences, und eine `withClaim()`-Methode zum Hinzufügen der Claim-Daten.
+
+### Meetup (`models/meetup.dart`)
+
+Meetup-Daten mit Geo-Koordinaten, Social-Media-Links und Cover-Bild. Wird über die API von portal.einundzwanzig.space geladen. Fallback-Meetups (München, Hamburg, Berlin) für Offline-Betrieb.
+
+### CalendarEvent (`models/calendar_event.dart`)
+
+Kalender-Events aus dem ICS-Feed. Robustes Datum-Parsing mit Fallback-Logik für verschiedene Datumsformate.
+
+---
+
+## Services im Detail
+
+### BadgeSecurity (`services/badge_security.dart`)
+
+Kernservice für alle kryptographischen Operationen:
+
+- `signCompact()` — Erstellt Schnorr-signiertes Kompakt-Payload für NFC-Tags
+- `verifyCompact()` — Verifiziert Kompakt-Payloads mit **Whitelist** (nur bekannte Content-Felder `v, t, m, b, x`)
+- `verify()` — Allgemeine Nostr-Event-Verifikation
+- `canonicalJsonEncode()` — JSON-Kanonisierung (alphabetisch sortierte Keys)
+- `signLegacy()` / `verifyLegacy()` — Legacy v1 HMAC (veraltet, nur Rückwärtskompatibilität)
+- Pubkey/Signatur-Formatvalidierung (64 bzw. 128 Hex-Zeichen)
+
+### RollingQRService (`services/rolling_qr_service.dart`)
+
+Session-Management und Rolling Nonce:
+
+- `getOrCreateSession()` — Startet oder lädt eine 6-Stunden-Session
+- `generateRollingPayload()` — Erzeugt QR-Payload mit aktueller HMAC-Nonce
+- `validateNonce()` — Prüft Nonce-Aktualität (±1 Intervall)
+- `getBasePayload()` — Gibt den statischen, signierten Base-Payload zurück (für NFC)
+- Session-Seed: 256 Bit CSPRNG (keine Ableitung vom Private Key)
+
+### TrustScoreService (`services/trust_score_service.dart`)
+
+Berechnet den Trust Score (siehe [Trust Score](#trust-score)):
+
+- Bootstrap-Phasen-Erkennung (Keimphase / Wachstum / Stabil)
+- Badge-Wert-Berechnung mit Co-Attestor-Bonus, Signer-Bonus, Time Decay
+- Frequency Cap (max 2 Badges/Woche)
+- Auto-Promotion-Check mit phasenabhängigen Schwellenwerten
+- Bridge Score (Verbindung verschiedener Meetup-Cluster)
+- Sybil-Erkennungsmuster
+
+### AdminRegistry (`services/admin_registry.dart`)
+
+Web of Trust für die Organisatoren-Verwaltung:
+
+- `checkAdmin()` — Prüft ob ein npub ein bekannter Admin ist (Cache → Relay → Super-Admin)
+- `checkAdminByPubkey()` — Prüfung per Hex-Pubkey
+- `fetchFromRelays()` — Lädt Admin-Listen von Nostr-Relays (Phase-abhängig: Bootstrap nur Super-Admin, Sunset alle bekannten Admins)
+- `isSunsetActive()` — Prüft und setzt den irreversiblen Sunset-Status
+- `addAdmin()` / `removeAdmin()` / `getAdminList()` — Lokale Registry-Verwaltung
+- `publishAdminList()` — Publiziert die eigene Admin-Liste als Nostr-Event
+
+### BadgeClaimService (`services/badge_claim_service.dart`)
+
+Identitätsbindung für Badges:
+
+- `createClaim()` — Erstellt Schnorr-signierte Claim-Signatur (Kind 21002)
+- `verifyClaim()` — Prüft Claim-Gültigkeit (Signatur + Referenz-Match)
+- `claimUnboundBadges()` — Retroaktives Claiming aller ungebundenen Badges
+- `ensureBadgesClaimed()` — Wird beim App-Start aufgerufen
+
+### NostrService (`services/nostr_service.dart`)
+
+Schlüssel-Management:
+
+- `generateKeyPair()` — Neues secp256k1-Keypair erzeugen
+- `importNsec()` — Bestehenden nsec importieren
+- `loadKeys()` / `hasKey()` / `getNpub()` — Schlüssel abrufen
+- `sign()` — Schnorr-Signatur über beliebige Daten
+- `verify()` — Signatur-Verifikation
+- `shortenNpub()` / `npubToHex()` — Hilfsfunktionen
+
+### SecureKeyStore (`services/secure_key_store.dart`)
+
+Hardware-verschlüsselte Schlüsselverwaltung:
+
+- `ensureMigrated()` — Einmalige Migration von SharedPreferences zu SecureStorage
+- `saveKeys()` / `getNsec()` / `getNpub()` / `getPrivHex()` / `loadKeys()` / `hasKey()` / `deleteKeys()`
+- Android: EncryptedSharedPreferences
+- iOS: Keychain
+
+### ReputationPublisher (`services/reputation_publisher.dart`)
+
+Automatisches Relay-Publishing:
+
+- `publish()` — Erstellt und sendet Reputation-Event (Kind 30078) an alle aktiven Relays
+- `publishInBackground()` — Non-blocking Hintergrund-Publishing
+- `fetchByNpub()` — Lädt Reputation-Event eines anderen Nutzers von Relays
+- Change-Detection und Spam-Schutz (min. 5 Minuten zwischen Publishes)
+
+### PromotionClaimService (`services/promotion_claim_service.dart`)
+
+Dezentrale Organisator-Beförderung:
+
+- `publishAdminClaim()` — Publiziert Badge-Beweise als Admin-Claim (Kind 21004)
+- `syncOrganicAdmins()` — Lädt und verifiziert Claims von Relays
+- Mathematische Verifikation: Prüft Badge-Signaturen gegen bekannte Admin-Pubkeys, Schwellenwert-Check
+
+### BackupService (`services/backup_service.dart`)
+
+Verschlüsselter Export/Import:
+
+- `exportBackup()` — AES-256-GCM verschlüsselter JSON-Export (.21bkp)
+- `importBackup()` — Entschlüsselung und Wiederherstellung aller Daten
+- PBKDF2-SHA256 Key-Derivation mit 100.000 Iterationen
+
+### HumanityProofService (`services/humanity_proof_service.dart`)
+
+Lightning Anti-Bot-Mechanismus:
+
+- `checkForZaps()` — Sucht auf Relays nach Kind 9735 (Zap Receipts) und Kind 9734 (Zap Requests)
+- `getStatus()` — Lokaler Cache-Status
+- `verifyReceiptExists()` — Remote-Verifikation eines spezifischen Receipts
+
+### PlatformProofService (`services/platform_proof_service.dart`)
+
+Plattform-Account-Verknüpfung:
+
+- `createProof()` — Erzeugt signierten Verify-String (Kind 21003)
+- `verifyProofString()` — Parst und verifiziert einen Verify-String (Signatur + Username-Match + Relay-Check)
+- Unterstützte Plattformen: Satoshi-Kleinanzeigen, Telegram, RoboSats, Nostr, Custom
+
+### Nip05Service (`services/nip05_service.dart`)
+
+NIP-05 Identifier-Verifikation:
+
+- `verify()` — Prüft NIP-05 gegen die `.well-known/nostr.json` der Domain
+- `fetchNip05FromProfile()` — Lädt NIP-05 aus dem Nostr-Profil (Kind 0)
+- Domain-Typ-Erkennung (Community / Custom / Public Provider)
+
+### SocialGraphService (`services/social_graph_service.dart`)
+
+Nostr Social-Graph-Analyse:
+
+- Lädt Follow-Listen (Kind 3) und prüft Überschneidungen mit bekannten Community-Mitgliedern
+
+### ZapVerificationService (`services/zap_verification_service.dart`)
+
+Verifiziert Nostr-Zaps für erweiterte Reputation-Daten.
+
+### MeetupService (`services/meetup_service.dart`)
+
+API-Anbindung an portal.einundzwanzig.space:
+
+- `fetchMeetups()` — Lädt die aktuelle Meetup-Liste als JSON
+- Fallback auf lokale Daten bei Netzwerkfehlern
+
+### MeetupCalendarService (`services/meetup_calendar_service.dart`)
+
+ICS-Kalender-Integration:
+
+- `fetchMeetups()` — Lädt und parst den ICS-Feed von portal.einundzwanzig.space/stream-calendar
+
+### MempoolService (`services/mempool.dart`)
+
+Bitcoin Block-Height als Zeitbeweis:
+
+- `getBlockHeight()` — Aktuelle Block-Height von mempool.space API
+
+### RelayConfig (`services/relay_config.dart`)
+
+Zentrale Relay-Verwaltung:
+
+- `getActiveRelays()` — Gibt alle aktiven Relays zurück (Defaults + Custom)
+- Custom-Relays hinzufügen/entfernen
+- Default-Relays aktivieren/deaktivieren
+
+---
+
+## Externe APIs und Abhängigkeiten
+
+### APIs
+
+| API | Endpunkt | Zweck |
+|-----|----------|-------|
+| portal.einundzwanzig.space | `/api/meetups` | Meetup-Liste mit Geo-Daten |
+| portal.einundzwanzig.space | `/stream-calendar` | ICS-Kalender-Feed |
+| mempool.space | `/api/blocks/tip/height` | Aktuelle Bitcoin Block-Height |
+| Nostr Relays | WebSocket (wss://) | Admin-Registry, Reputation, Zap-Verifikation |
+
+### Nostr Event Kinds
+
+| Kind | Zweck | d-Tag |
+|------|-------|-------|
+| 0 | Profil-Metadaten (NIP-05) | — |
+| 3 | Follow-Liste (Social Graph) | — |
+| 9734 | Zap Request (Humanity Proof) | — |
+| 9735 | Zap Receipt (Humanity Proof) | — |
+| 21000 | Badge-Signatur (Organisator) | — |
+| 21001 | QR-Code-Signatur | — |
+| 21002 | Badge-Claim (Sammler) | — |
+| 21003 | Platform Proof | — |
+| 21004 | Admin Promotion Claim | `einundzwanzig-admin-claim` |
+| 30078 | Admin-Registry | `einundzwanzig-admins` |
+| 30078 | Reputation-Event | `einundzwanzig-reputation` |
+
+### Flutter-Pakete (Auswahl)
+
+| Paket | Zweck |
+|-------|-------|
+| `nostr` | Schnorr-Signaturen, Keypair, Nip19, Event-Erstellung |
+| `nfc_manager` / `nfc_manager_ndef` | NFC-Lesen und -Schreiben |
+| `mobile_scanner` | QR-Code-Scanning |
+| `qr_flutter` | QR-Code-Generierung |
+| `flutter_secure_storage` | Hardware-verschlüsselte Schlüsselspeicherung |
+| `crypto` | SHA-256, HMAC-SHA256 |
+| `shared_preferences` | Lokale Datenpersistenz |
+| `http` | API-Aufrufe |
+| `share_plus` | System-Teilen-Dialog |
+| `path_provider` | Dateisystem-Zugriff (Backup-Export) |
+| `icalendar_parser` | ICS-Kalender-Parsing |
+
+---
+
+## Installation und Build
+
+### Voraussetzungen
+
+- Flutter SDK ≥ 3.38
+- Dart ≥ 3.7
+- Android SDK (für Android-Build)
+- Xcode (für iOS, nur auf macOS)
+- Java JDK 17
+
+### Setup
+
+```bash
+# Repository klonen
+git clone https://github.com/louisthecat86/Einundzwanzig-Meetup-App.git
 cd Einundzwanzig-Meetup-App
-git checkout main
 
+# Dependencies installieren
 flutter pub get
-flutter run            # Am verbundenen Gerät
-flutter run -d chrome  # Im Browser (NFC simuliert)
 
-Build
-Bash
-
-# Android APK
+# Android APK bauen
 flutter build apk --release
 
-# iOS
-flutter build ios --release  # Erfordert Xcode + Apple Dev Account
+# APK liegt unter: build/app/outputs/flutter-apk/app-release.apk
+```
 
-Die fertige APK liegt unter build/app/outputs/flutter-apk/app-release.apk.
-Abhängigkeiten
-Package	Zweck
-nostr	Nostr-Events, Schnorr-Signaturen (BIP-340)
-nfc_manager + nfc_manager_ndef	NFC lesen/schreiben (NDEF)
-mobile_scanner	QR-Code Scanner (Kamera)
-qr_flutter	QR-Code Generator
-crypto	SHA-256, HMAC für Hashes und Nonces
-encrypt	AES-GCM Verschlüsselung für Backups
-flutter_secure_storage	Sichere Key-Verwahrung (Android Keystore / iOS Keychain)
-shared_preferences	Lokale Datenspeicherung
-http	API-Calls (Meetups, Block Height)
-Benutzung
-Als Teilnehmer
+### GitHub Actions
 
-    App öffnen → Nickname eingeben → Nostr-Key wird automatisch im Hintergrund generiert.
+Das Repository enthält einen CI-Workflow (`.github/workflows/build_apk.yml`), der bei jedem Push auf `main` automatisch eine Release-APK baut und als Artifact bereitstellt.
 
-    Home-Meetup wählen (z.B. "Aschaffenburg, DE").
+---
 
-    Zum Meetup gehen → Dashboard → "BADGE SCANNEN".
+## Kryptographie-Referenz
 
-    NFC-Tag scannen oder QR-Code scannen → Badge wird kryptografisch verifiziert und gespeichert.
+| Komponente | Algorithmus | Zweck |
+|-----------|-------------|-------|
+| Badge-Signatur | Schnorr / BIP-340 | Beweis der Organisator-Identität |
+| Claim-Signatur | Schnorr / BIP-340 | Bindung des Badges an den Sammler |
+| Event-ID | SHA-256 | Eindeutige Nostr-Event-Identifikation |
+| Rolling Nonce | HMAC-SHA256 | Anti-Screenshot (Freshness-Check) |
+| Backups | AES-256-GCM + PBKDF2-SHA256 | Sichere Verwahrung von nsec und Profildaten |
+| Trust Score Hash | SHA-256 | Checksumme für Reputation-Export |
+| Badge Proof Hash | SHA-256 | Datenschutzkonformer Nachweis über Badge-Set |
+| Admin Registry | Schnorr / BIP-340 | Signierte Nostr-Events für Organisator-Verwaltung |
+| Platform Proofs | Schnorr / BIP-340 | Plattform-Account-Verknüpfung |
+| Key Storage | Android Keystore / iOS Keychain | Hardware-geschützte Schlüsselverwaltung |
+| JSON Kanonisierung | Alphabetische Key-Sortierung | Deterministisches Hashing |
+| Session Seed | CSPRNG (256 Bit) | Sichere Zufallserzeugung für Rolling QR |
+| Legacy (v1) | HMAC-SHA256 (Shared Secret) | Veraltet, unsicher, nur Rückwärtskompatibilität |
 
-    Reputation teilen → Badge Wallet → Share → QR-Code / Text / JSON.
+---
 
-Als etablierter Organisator (Web of Trust)
+## Badge Verifier (Externes Tool)
 
-    Nostr-Key einrichten (Profil → "Nostr Key generieren/importieren").
+Die Datei `badge-verifier.html` ist ein eigenständiges HTML-Tool, das ohne die App funktioniert. Ein Verifizierer kann den JSON-Export einer Reputation einfügen und jedes einzelne Badge kryptographisch prüfen — direkt im Browser, ohne Server, mit der `@noble/curves` JavaScript-Library für Schnorr-Verifikation.
 
-    Admin werden — Ein bereits etablierter Admin muss sich für dich verbürgen (Ritterschlag).
+---
 
-    Co-Admins rittern — Admin-Panel → "Mein Web of Trust" → npub des neuen Organisators scannen und Delegation signiert an Nostr senden.
+## Lizenz
 
-    NFC-Tag beschreiben — Admin-Panel → "NFC Tag beschreiben" → NTAG215 an Handy halten.
-
-    Oder Rolling QR starten — Admin-Panel → "QR-Code" → Session starten (6h gültig).
-
-NFC-Tag Spezifikationen
-Empfohlener Tag: NTAG215
-Eigenschaft	Wert
-Speicher	504 Bytes total, 492 Bytes nutzbar
-Schreibzyklen	Unbegrenzt
-NFC Forum	Type 2 Tag
-Kompatibilität	Android + iOS
-Kosten	~0,30–0,80€ pro Tag
-Wiederverwendbar	Ja, bei jedem Meetup überschreibbar
-Payload-Format (v2 Compact)
-JSON
-
-{
-  "v": 2,
-  "t": "B",
-  "m": "aschaffenburg-de",
-  "b": 879432,
-  "x": 1739927280,
-  "c": 1739905680,
-  "p": "a1b2c3...64_hex_zeichen...d4e5f6",
-  "s": "f6e5d4...128_hex_zeichen...c3b2a1"
-}
-
-(Gesamtgröße: ~285 Bytes → passt auf NTAG215 mit 207 Bytes Reserve)
-Trust Score
-Berechnung
-
-Der Trust Score wird rein lokal berechnet. Es gibt keinen zentralen Server der Scores vergibt.
-Plaintext
-
-Trust Score = Σ (Badge Value × Gewichtung)
-
-Badge Value = BaseValue (1.0)
-            × Diversity Bonus (verschiedene Meetups)
-            × Quality Bonus (verschiedene Organisatoren)
-            × Time Decay (Halbwertszeit 26 Wochen)
-
-Der Trust Score ist bewusst konfigurierbar. Andere Communities können die TrustConfig-Klasse forken und anpassen.
-Sicherheitsmodell
-Was diese App garantiert
-
-    Fälschungssicherheit — Badges können nicht ohne den privaten Schlüssel des Organisators erstellt werden (Schnorr/BIP-340).
-
-    Kein Single Point of Failure — Kein Server, keine Datenbank. Fällt der Super-Admin aus, übernimmt das Web of Trust (Sunset-Logik).
-
-    Physische Anwesenheit — NFC-Tags erfordern physische Nähe (~4cm), Rolling QR ändert sich alle 10s.
-
-    Transparenz — Jede Signatur und jede Vouching-Kette kann unabhängig verifiziert werden.
-
-Bedrohungsmodelle
-Angriff	Schutzmechanismus
-Badge fälschen	Schnorr-Signatur → erfordert Organisator-Privkey (nsec).
-QR-Screenshot weiterleiten	Rolling Nonce → nach 10s mathematisch ungültig.
-Zentraler Admin kompromittiert	Bootstrap Sunset deaktiviert den Super-Admin ab 20 organischen Admins permanent.
-Backup-Diebstahl	AES-GCM Verschlüsselung macht das .21bkp Backup ohne das User-Passwort unlesbar.
-Admin impersonieren	Admin-Liste / Vouchings sind signierte Nostr-Events.
-Badge-Daten manipulieren	SHA-256 Event-ID → jede Änderung (z.B. Blockheight) bricht die Signatur.
-Aktueller Entwicklungsstand (Changelog)
-
-✅ Nostr-Keypair-Generierung und -Import (nsec/npub)
-
-✅ Schnorr-Signaturen für Badges (BIP-340 via Nostr Kind 21000)
-
-✅ NFC-Tag lesen und beschreiben (NTAG215)
-
-✅ Rolling QR mit HMAC-Nonce (10s Intervall)
-
-✅ Admin-System über signierte Nostr-Events (Web of Trust)
-
-✅ Bootstrap-Sunset & P2P-Vouching (Vollständige Dezentralisierung) ✅ Trust Score mit Diversity, Decay, Quality
-
-✅ Badge Wallet mit Crypto-Details
-
-✅ Reputation teilen (QR, Text, JSON)
-
-✅ Meetup-Radar mit Live-API
-
-✅ AES-GCM 256-bit verschlüsseltes Backup & Restore ✅ Kompaktes NFC-Format (285 Bytes, passt auf NTAG215)
-
-✅ 6-Stunden-Ablauf für Badges inkl. Session-Persistenz
-
-✅ Echte Schnorr-Verifikation im QR-Scanner
-Contributing
-
-Contributions sind willkommen. Besonders gesucht:
-
-    iOS-Tester — NFC-Verhalten auf iPhone testen
-
-    Security Review — Kryptographische Kette prüfen
-
-Workflow
-
-    Fork → Feature-Branch → Pull Request
-
-    Beschreibe was du geändert hast und warum
-
-    Tests sollten durchlaufen
-
-FAQ
-
-Brauche ich einen Nostr-Account? Nein. Die App generiert automatisch ein Keypair lokal. Du kannst aber einen bestehenden nsec importieren.
-
-Was passiert, wenn ich mein Handy verliere? Deine Badges sind weg, es sei denn, du hast ein verschlüsseltes Backup gemacht (.21bkp Datei). WICHTIG: Wenn du das Passwort für das Backup vergisst, sind deine Daten für immer verloren!
-
-Wie werden neue Meetup-Admins ernannt? Durch ein "Web of Trust". Ein etablierter Admin scannt den QR-Code deines Profils ("Ritterschlag") und publiziert diese Bürgschaft im Netzwerk.
-
-Kann der Organisator sehen, wer Badges gesammelt hat? Nein. Der NFC-Tag/QR-Code sendet Daten nur an den Scanner. Es gibt keinen Rückkanal zum Organisator. Die App ist tracking-frei.
-
-Funktioniert das auch ohne Internet? NFC-Tags können offline gescannt werden. Der Rolling QR braucht einmalig Internet für die Block-Height. Das Web of Trust wird lokal gecacht.
-Lizenz
-
-MIT — siehe LICENSE
-Credits
-
-    Einundzwanzig — Die deutschsprachige Bitcoin-Community
-
-    portal.einundzwanzig.space — Meetup-Daten-API
-
-    mempool.space — Bitcoin Block Explorer API
-
-    Nostr Protocol — Dezentrales Messaging
-
-    Flutter — Cross-Platform Framework
-
-Made with 🧡 for the Bitcoin Community
+MIT License — siehe [LICENSE](LICENSE).
