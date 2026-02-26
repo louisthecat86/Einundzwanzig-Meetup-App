@@ -21,7 +21,7 @@ import 'profile_edit.dart';
 import 'intro.dart'; 
 import 'admin_panel.dart'; 
 import 'rolling_qr_screen.dart';                            // NEU: Aktives Meetup
-
+import 'community_portal_screen.dart';                      // NEU: Community Portal
 import 'meetup_details.dart'; 
 import 'reputation_qr.dart'; 
 import 'relay_settings_screen.dart';
@@ -692,6 +692,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   ),
+                // =============================================
+                // NEU: Community Portal Kachel
+                // =============================================
+                _buildTile(
+                  icon: Icons.hub,
+                  color: Colors.teal,
+                  title: "COMMUNITY",
+                  subtitle: "Portal & mehr",
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const CommunityPortalScreen()),
+                    );
+                  },
+                ),
                 // ORGANISATOR-TILE: Erscheint automatisch via Trust Score!
                 if (_user.isAdmin) 
                   _buildTile(
