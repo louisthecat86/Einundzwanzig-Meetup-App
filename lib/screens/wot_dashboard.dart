@@ -17,7 +17,7 @@ import '../theme.dart';
 import '../services/vouching_service.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
-
+import 'dart:math' as math;
 class WotDashboardScreen extends StatefulWidget {
   const WotDashboardScreen({super.key});
 
