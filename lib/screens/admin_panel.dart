@@ -7,6 +7,7 @@ import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
 import '../services/rolling_qr_service.dart'; // Import für den zentralen Session-Manager
 import 'admin_management.dart';
+import 'wot_dashboard.dart';
 import 'meetup_session_wizard.dart'; // Der Wizard für den Ablauf
 import 'rolling_qr_screen.dart'; // NEU: Import für den direkten Sprung zum QR Code
 
@@ -315,7 +316,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             ],
             
-            // Admin-Verwaltung (nur Super-Admin)
+            // Web of Trust Dashboard (für ALLE Admins)
+            const SizedBox(height: 32),
+            const Divider(color: Colors.white10),
+            const SizedBox(height: 24),
+
+            Text(
+              "NETZWERK",
+              style: TextStyle(color: cOrange, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 12),
+
+            _buildAdminTile(
+              context: context,
+              icon: Icons.hub,
+              color: cPurple,
+              title: "WEB OF TRUST",
+              subtitle: "Bürgschaften verwalten, Netzwerk-Status, Meldungen",
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const WotDashboardScreen()),
+                );
+              },
+            ),
+
+            // Admin-Verwaltung (nur Super-Admin — Legacy)
             if (_isSuperAdmin) ...[
               const SizedBox(height: 32),
               const Divider(color: Colors.white10),
