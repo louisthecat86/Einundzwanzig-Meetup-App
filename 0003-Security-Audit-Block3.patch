@@ -1,0 +1,237 @@
+From bb509b6511638cdf5f025253c4f91dac55c14b41 Mon Sep 17 00:00:00 2001
+From: SecurityAudit <audit@einundzwanzig.space>
+Date: Thu, 26 Feb 2026 13:12:41 +0000
+Subject: [PATCH] Security Audit Block 3: Final Hardening
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- M4: ALLE Subscription-IDs auf Random.secure() migriert (9 Services):
+  admin_registry, promotion_claim_service, reputation_publisher,
+  nip05_service, zap_verification_service, social_graph_service,
+  humanity_proof_service (je 16 Hex-Zeichen statt Timestamp)
+- M3: CI/CD Obfuscation aktiviert (--obfuscate --split-debug-info)
+  + Debug-Symbole als separates Artifact für Crash-Analyse
+---
+ .github/workflows/build_apk.yml            | 11 +++++++++--
+ lib/services/admin_registry.dart           |  6 +++++-
+ lib/services/humanity_proof_service.dart   | 14 +++++++++++---
+ lib/services/nip05_service.dart            |  6 +++++-
+ lib/services/promotion_claim_service.dart  |  6 +++++-
+ lib/services/reputation_publisher.dart     |  6 +++++-
+ lib/services/social_graph_service.dart     |  6 +++++-
+ lib/services/zap_verification_service.dart |  6 +++++-
+ 8 files changed, 50 insertions(+), 11 deletions(-)
+
+diff --git a/.github/workflows/build_apk.yml b/.github/workflows/build_apk.yml
+index 8ffb4b7..d35ea04 100644
+--- a/.github/workflows/build_apk.yml
++++ b/.github/workflows/build_apk.yml
+@@ -42,9 +42,9 @@ jobs:
+         flutter clean
+         flutter pub get
+ 
+-    # 6. Bauen
++    # 6. Bauen (Security Audit M3: Obfuscation aktiviert)
+     - name: Build APK
+-      run: flutter build apk --release
++      run: flutter build apk --release --obfuscate --split-debug-info=build/debug-info
+ 
+     # 7. Hochladen
+     - name: Upload APK
+@@ -52,3 +52,10 @@ jobs:
+       with:
+         name: einundzwanzig-app-release
+         path: build/app/outputs/flutter-apk/app-release.apk
++
++    # 8. Debug-Symbole sichern (für Crash-Analyse)
++    - name: Upload Debug Symbols
++      uses: actions/upload-artifact@v4
++      with:
++        name: debug-symbols
++        path: build/debug-info/
+diff --git a/lib/services/admin_registry.dart b/lib/services/admin_registry.dart
+index 220f80b..90919e0 100644
+--- a/lib/services/admin_registry.dart
++++ b/lib/services/admin_registry.dart
+@@ -27,6 +27,7 @@ import 'package:nostr/nostr.dart';
+ import 'nostr_service.dart';
+ import 'secure_key_store.dart';
+ import 'app_logger.dart';
++import 'dart:math';
+ 
+ class AdminEntry {
+   final String npub;
+@@ -305,7 +306,10 @@ class AdminRegistry {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(_relayTimeout);
+       final completer = Completer<List<AdminEntry>?>();
+-      final subscriptionId = 'admin-list-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subscriptionId = 'admin-list-\$subIdHex';
+ 
+       ws.listen(
+         (data) {
+diff --git a/lib/services/humanity_proof_service.dart b/lib/services/humanity_proof_service.dart
+index 60b0dbb..ffc97a7 100644
+--- a/lib/services/humanity_proof_service.dart
++++ b/lib/services/humanity_proof_service.dart
+@@ -45,6 +45,7 @@ import 'package:shared_preferences/shared_preferences.dart';
+ import 'package:nostr/nostr.dart';
+ import 'relay_config.dart';
+ import 'secure_key_store.dart';
++import 'dart:math';
+ 
+ class HumanityProofService {
+   // Cache-Keys
+@@ -183,8 +184,12 @@ class HumanityProofService {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
+       final completer = Completer<_ZapSearchResult?>();
+-      final subId1 = 'zap-recv-${DateTime.now().millisecondsSinceEpoch}';
+-      final subId2 = 'zap-sent-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-IDs
++      final random = Random.secure();
++      final hex1 = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final hex2 = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subId1 = 'zap-recv-\$hex1';
++      final subId2 = 'zap-sent-\$hex2';
+       _ZapSearchResult? found;
+       int eoseCount = 0;
+ 
+@@ -345,7 +350,10 @@ class HumanityProofService {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
+       final completer = Completer<bool>();
+-      final subId = 'verify-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subId = 'verify-\$subIdHex';
+ 
+       ws.listen(
+         (data) {
+diff --git a/lib/services/nip05_service.dart b/lib/services/nip05_service.dart
+index 7d8bd4c..438c954 100644
+--- a/lib/services/nip05_service.dart
++++ b/lib/services/nip05_service.dart
+@@ -22,6 +22,7 @@ import 'dart:convert';
+ import 'dart:io';
+ import 'package:nostr/nostr.dart';
+ import 'secure_key_store.dart';
++import 'dart:math';
+ 
+ class Nip05Service {
+   static const Duration _timeout = Duration(seconds: 5);
+@@ -137,7 +138,10 @@ class Nip05Service {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(_timeout);
+       final completer = Completer<String?>();
+-      final subId = 'nip05-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subId = 'nip05-\$subIdHex';
+ 
+       ws.listen(
+         (data) {
+diff --git a/lib/services/promotion_claim_service.dart b/lib/services/promotion_claim_service.dart
+index 85df963..7faf052 100644
+--- a/lib/services/promotion_claim_service.dart
++++ b/lib/services/promotion_claim_service.dart
+@@ -41,6 +41,7 @@ import 'badge_security.dart';
+ import 'admin_registry.dart';
+ import 'trust_score_service.dart';
+ import 'app_logger.dart';
++import 'dart:math';
+ 
+ class PromotionClaimService {
+   // Nostr Event Kind für Admin Claims
+@@ -333,7 +334,10 @@ class PromotionClaimService {
+ 
+       final completer = Completer<List<_RawClaim>>();
+       final claims = <_RawClaim>[];
+-      final subscriptionId = 'organic-claims-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subscriptionId = 'organic-claims-\$subIdHex';
+ 
+       ws.listen(
+         (data) {
+diff --git a/lib/services/reputation_publisher.dart b/lib/services/reputation_publisher.dart
+index 65663af..c95fab1 100644
+--- a/lib/services/reputation_publisher.dart
++++ b/lib/services/reputation_publisher.dart
+@@ -37,6 +37,7 @@ import 'social_graph_service.dart';
+ import 'zap_verification_service.dart';
+ import 'humanity_proof_service.dart';
+ import 'app_logger.dart';
++import 'dart:math';
+ 
+ class ReputationPublisher {
+   // Nostr Event Konfiguration
+@@ -395,7 +396,10 @@ class ReputationPublisher {
+       ws = await WebSocket.connect(relayUrl)
+           .timeout(RelayConfig.relayTimeout);
+       final completer = Completer<ReputationEvent?>();
+-      final subscriptionId = 'rep-fetch-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subscriptionId = 'rep-fetch-\$subIdHex';
+ 
+       ws.listen(
+         (data) {
+diff --git a/lib/services/social_graph_service.dart b/lib/services/social_graph_service.dart
+index ee7c0ab..f41421e 100644
+--- a/lib/services/social_graph_service.dart
++++ b/lib/services/social_graph_service.dart
+@@ -25,6 +25,7 @@ import 'package:nostr/nostr.dart';
+ import 'relay_config.dart';
+ import 'secure_key_store.dart';
+ import 'admin_registry.dart';
++import 'dart:math';
+ 
+ class SocialGraphService {
+   // Cache-Keys
+@@ -87,7 +88,10 @@ class SocialGraphService {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
+       final completer = Completer<Set<String>>();
+-      final subId = 'contacts-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subId = 'contacts-\$subIdHex';
+       Set<String> follows = {};
+ 
+       ws.listen(
+diff --git a/lib/services/zap_verification_service.dart b/lib/services/zap_verification_service.dart
+index 644bf83..10a5cad 100644
+--- a/lib/services/zap_verification_service.dart
++++ b/lib/services/zap_verification_service.dart
+@@ -34,6 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
+ import 'package:nostr/nostr.dart';
+ import 'relay_config.dart';
+ import 'secure_key_store.dart';
++import 'dart:math';
+ 
+ class ZapVerificationService {
+   // Cache
+@@ -118,7 +119,10 @@ class ZapVerificationService {
+     try {
+       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
+       final completer = Completer<List<ZapReceipt>>();
+-      final subId = 'zaps-${DateTime.now().millisecondsSinceEpoch}';
++      // Security Audit M4: Kryptographisch sichere Subscription-ID
++      final random = Random.secure();
++      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
++      final subId = 'zaps-\$subIdHex';
+       List<ZapReceipt> receipts = [];
+ 
+       ws.listen(
+-- 
+2.43.0
