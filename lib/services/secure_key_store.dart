@@ -17,6 +17,7 @@
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_logger.dart';
 
 class SecureKeyStore {
   // Singleton
@@ -84,7 +85,8 @@ class SecureKeyStore {
       await prefs.setBool(_migrationDoneKey, true);
 
       if (nsec != null) {
-        print('[SecureKeyStore] Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
+        AppLogger.debug('SecureKeyStore', 'Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
+
       }
     }
 

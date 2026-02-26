@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/meetup.dart';
+import 'app_logger.dart';
 
 class MeetupService {
   static const String _url = "https://portal.einundzwanzig.space/api/meetups";
@@ -42,7 +43,7 @@ class MeetupService {
         return [];
       }
     } catch (e) {
-      print("Fehler beim Laden der Meetups: $e");
+      AppLogger.debug('App', "Fehler beim Laden der Meetups: $e");
       return [];
     }
   }

@@ -46,6 +46,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'nostr_service.dart';
 import 'badge_security.dart';
 import 'secure_key_store.dart';
@@ -61,8 +62,22 @@ class RollingQRService {
   // Session-Gültigkeit
   static const int sessionValidityHours = 6;
 
-  // SharedPreferences Keys
-  static const String _keySessionSeed = 'rqr_session_seed';
+  // =============================================
+  // SECURITY AUDIT C3: Session Seed in SecureStorage
+  // =============================================
+  // Der Session Seed ist das HMAC-Geheimnis für Rolling Nonces.
+  // Muss in hardware-geschütztem Storage liegen.
+  // =============================================
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
+  static const String _secureKeySessionSeed = 'rqr_session_seed_secure';
+
+  // SharedPreferences Keys (nicht-sensible Session-Metadaten)
+  static const String _keySessionSeed = 'rqr_session_seed'; // LEGACY → wird migriert
   static const String _keySessionStart = 'rqr_session_start';
   static const String _keySessionExpires = 'rqr_session_expires';
   static const String _keySessionMeetupId = 'rqr_session_meetup_id';
@@ -73,6 +88,32 @@ class RollingQRService {
   
   // Hier speichern wir den EINMALIG signierten Base-Payload
   static const String _keySessionBasePayload = 'rqr_session_base_payload';
+
+  // =============================================
+  // SEED MIGRATION: SharedPreferences → SecureStorage
+  // =============================================
+  static Future<void> _migrateSeedIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final legacySeed = prefs.getString(_keySessionSeed);
+    if (legacySeed != null && legacySeed.isNotEmpty) {
+      // Migrate to secure storage
+      await _secureStorage.write(key: _secureKeySessionSeed, value: legacySeed);
+      await prefs.remove(_keySessionSeed);
+    }
+  }
+
+  static Future<void> _saveSeedSecure(String seed) async {
+    await _secureStorage.write(key: _secureKeySessionSeed, value: seed);
+  }
+
+  static Future<String?> _loadSeedSecure() async {
+    await _migrateSeedIfNeeded();
+    return await _secureStorage.read(key: _secureKeySessionSeed);
+  }
+
+  static Future<void> _deleteSeedSecure() async {
+    await _secureStorage.delete(key: _secureKeySessionSeed);
+  }
 
   // =============================================
   // KRYPTOGRAPHISCH SICHERER SEED-GENERATOR
@@ -126,10 +167,10 @@ class RollingQRService {
     );
   }
 
-  /// Lädt bestehende Session aus SharedPreferences
+  /// Lädt bestehende Session (Seed aus SecureStorage, Rest aus SharedPreferences)
   static Future<MeetupSession?> loadSession() async {
     final prefs = await SharedPreferences.getInstance();
-    final seed = prefs.getString(_keySessionSeed);
+    final seed = await _loadSeedSecure(); // Security Audit C3: Aus SecureStorage
     final start = prefs.getInt(_keySessionStart);
     final expires = prefs.getInt(_keySessionExpires);
     final meetupId = prefs.getString(_keySessionMeetupId);
@@ -193,10 +234,16 @@ class RollingQRService {
           validityHours: sessionValidityHours,
         );
       } catch (e) {
-        basePayload = _legacyPayload(meetupId, blockHeight);
+        // Signierung fehlgeschlagen — Session kann nicht erstellt werden
+        // Legacy-Fallback wurde entfernt (Security Audit C1)
+        throw StateError('Badge-Signierung fehlgeschlagen: $e. '
+            'Bitte stelle sicher, dass ein Nostr-Key vorhanden ist.');
       }
     } else {
-      basePayload = _legacyPayload(meetupId, blockHeight);
+      // Kein Nostr-Key → Session kann nicht erstellt werden
+      // Legacy-Fallback wurde entfernt (Security Audit C1)
+      throw StateError('Kein Nostr-Key vorhanden. '
+          'Bitte zuerst einen Key erstellen oder importieren.');
     }
 
     final session = MeetupSession(
@@ -210,8 +257,10 @@ class RollingQRService {
       pubkey: pubkey,
     );
 
-    // 5. Alles in SharedPreferences speichern
-    await prefs.setString(_keySessionSeed, seed);
+    // 5. Session Seed in SecureStorage (Security Audit C3)
+    await _saveSeedSecure(seed);
+    
+    // 6. Nicht-sensible Metadaten in SharedPreferences
     await prefs.setInt(_keySessionStart, now);
     await prefs.setInt(_keySessionExpires, expiresAt);
     await prefs.setString(_keySessionMeetupId, meetupId);
@@ -229,7 +278,8 @@ class RollingQRService {
   /// Session beenden (manuell oder bei Ablauf)
   static Future<void> endSession() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keySessionSeed);
+    await _deleteSeedSecure(); // Security Audit C3: Seed aus SecureStorage löschen
+    await prefs.remove(_keySessionSeed); // Legacy-Seed entfernen falls noch vorhanden
     await prefs.remove(_keySessionStart);
     await prefs.remove(_keySessionExpires);
     await prefs.remove(_keySessionMeetupId);
@@ -286,8 +336,10 @@ class RollingQRService {
     if (basePayloadStr != null) {
       payload = jsonDecode(basePayloadStr);
     } else {
-      // Fallback, sollte nie passieren
-      payload = _legacyPayload(session.meetupId, session.blockHeight);
+      // Kein Base-Payload vorhanden — Session ist ungültig
+      // Legacy-Fallback wurde entfernt (Security Audit C1)
+      throw StateError('Kein signierter Base-Payload vorhanden. '
+          'Bitte neue Session starten.');
     }
 
     // 2. Rolling Nonce berechnen
@@ -305,14 +357,17 @@ class RollingQRService {
     return jsonEncode(payload);
   }
 
+  /// @deprecated Legacy payload ist deaktiviert (Security Audit C1).
+  /// Wird nicht mehr aufgerufen — alle Aufrufer wurden entfernt.
+  /// Behält die Methode für Code-Kompatibilität, gibt aber
+  /// ein unsigniertes Payload zurück das von verify() abgelehnt wird.
   static Map<String, dynamic> _legacyPayload(String meetupId, int blockHeight) {
-    final sig = BadgeSecurity.signLegacy(meetupId, DateTime.now().toIso8601String(), blockHeight);
     return {
       'v': 1,
       't': 'B',
       'm': meetupId,
       'b': blockHeight,
-      'sig': sig,
+      'sig': '', // Leer — wird von verify() abgelehnt
     };
   }
 

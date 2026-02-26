@@ -66,38 +66,33 @@ class BadgeSecurity {
   }
 
   // =============================================
-  // LEGACY v1 — VERALTET / UNSICHER
+  // LEGACY v1 — DEAKTIVIERT (Security Audit 2026-02)
   // =============================================
   //
-  // WARNUNG: Legacy v1 nutzt ein Shared Secret das im
-  // Source Code steht. Sobald der Code öffentlich ist,
-  // kann JEDER gültige v1-Signaturen erstellen.
-  // Legacy-Badges werden in der UI als "⚠️ Legacy —
-  // nicht vertrauenswürdig" angezeigt.
+  // v1 nutzte ein Shared Secret im Source Code.
+  // Da der Code öffentlich ist, konnte JEDER gültige
+  // v1-Signaturen erstellen → komplettes Trust-System
+  // kompromittierbar.
   //
-  // Nur noch für Rückwärtskompatibilität vorhanden.
-  // NICHT für neue Badges verwenden!
+  // MASSNAHME: v1 ist VOLLSTÄNDIG DEAKTIVIERT.
+  // - signLegacy() gibt immer leeren String zurück
+  // - verifyLegacy() gibt immer false zurück
+  // - verify() lehnt v1 mit Hinweis auf v2-Upgrade ab
   //
-  // HINWEIS: Der Alias `sign()` wurde in v3.1 ENTFERNT
-  // um versehentliche Nutzung zu verhindern.
+  // Betroffene User müssen beim nächsten Meetup einen
+  // neuen v2-Tag (Schnorr-signiert) erhalten.
   // =============================================
-  static const String _appSecret = "einundzwanzig_community_secret_21_btc_rocks";
 
+  /// @deprecated v1 Legacy signing ist deaktiviert. Gibt immer '' zurück.
   static String signLegacy(String meetupId, String timestamp, int blockHeight) {
-    final data = "$meetupId|$timestamp|$blockHeight|$_appSecret";
-    return sha256.convert(utf8.encode(data)).toString();
+    // DEAKTIVIERT — Secret wurde entfernt (Security Audit C1)
+    return '';
   }
 
+  /// @deprecated v1 Legacy verification ist deaktiviert. Gibt immer false zurück.
   static bool verifyLegacy(Map<String, dynamic> data) {
-    try {
-      final String id = data['meetup_id'] ?? data['m'] ?? 'global';
-      final String ts = data['timestamp'] ?? data['c']?.toString() ?? '';
-      final int bh = data['block_height'] ?? data['b'] ?? 0;
-      final String signature = data['sig'] ?? data['s'] ?? '';
-      return signature == signLegacy(id, ts, bh);
-    } catch (e) {
-      return false;
-    }
+    // DEAKTIVIERT — v1 Badges werden nicht mehr akzeptiert (Security Audit C1)
+    return false;
   }
 
   // =============================================
@@ -369,12 +364,11 @@ class BadgeSecurity {
         message: isValid ? 'Schnorr-Signatur gültig (Legacy-Format)' : 'Signatur ungültig!');
     }
 
-    // ⚠️ Legacy v1 — Shared Secret, nicht vertrauenswürdig
-    final isValid = verifyLegacy(data);
-    return VerifyResult(isValid: isValid, version: 1, adminNpub: '', adminPubkey: '',
-      message: isValid
-        ? '⚠️ Legacy-Signatur (v1) — nicht vertrauenswürdig'
-        : 'Legacy-Signatur ungültig!');
+    // v1 Legacy: IMMER ablehnen (Security Audit C1)
+    // Secret war öffentlich → v1 Badges sind nicht vertrauenswürdig
+    return VerifyResult(isValid: false, version: 1, adminNpub: '', adminPubkey: '',
+      message: 'Legacy-Badges (v1) werden nicht mehr akzeptiert. '
+               'Bitte Organisator um neuen v2-Tag (Schnorr-signiert).');
   }
 
   // =============================================
@@ -479,8 +473,9 @@ class BadgeSecurity {
   static Future<QRSignResult> signQRv3(String jsonData) async {
     final privHex = await SecureKeyStore.getPrivHex();
     if (privHex == null) {
-      final legacySig = signLegacy(jsonData, "QR", 0);
-      return QRSignResult(signature: legacySig, eventId: '', createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000, pubkeyHex: '', isNostr: false);
+      // Kein Private Key → QR-Signierung nicht möglich (Security Audit C1)
+      // Legacy-Fallback wurde entfernt da v1 Secret kompromittiert
+      return QRSignResult(signature: '', eventId: '', createdAt: 0, pubkeyHex: '', isNostr: false);
     }
     final event = Event.from(kind: 21001, tags: [], content: jsonData, privkey: privHex);
     return QRSignResult(signature: event.sig, eventId: event.id, createdAt: event.createdAt, pubkeyHex: event.pubkey, isNostr: true);
@@ -517,13 +512,12 @@ class BadgeSecurity {
     }
   }
 
+  /// @deprecated v1 QR Legacy verification ist deaktiviert (Security Audit C1).
   static QRVerifyResult verifyQRLegacy({required String jsonData, required String signature, String? pubkeyHex}) {
-    final legacySig = signLegacy(jsonData, "QR", 0);
-    if (signature == legacySig) {
-      return QRVerifyResult(isValid: true, version: 1, signerNpub: '',
-        message: '⚠️ Legacy-Signatur (v1) — nicht vertrauenswürdig');
-    }
-    return QRVerifyResult(isValid: false, version: 0, signerNpub: '', message: 'Signatur ungültig');
+    // DEAKTIVIERT — v1 Badges werden nicht mehr akzeptiert
+    return QRVerifyResult(isValid: false, version: 1, signerNpub: '',
+      message: 'Legacy-QR (v1) wird nicht mehr akzeptiert. '
+               'Bitte Organisator um neuen v2-Tag.');
   }
 
   // =============================================

@@ -29,6 +29,7 @@ import '../services/badge_security.dart';
 import '../services/rolling_qr_service.dart';
 // NEU: Import für den QR-Screen, um nach Erfolg dorthin zu springen
 import 'rolling_qr_screen.dart';
+import '../services/app_logger.dart';
 
 class NFCWriterScreen extends StatefulWidget {
   const NFCWriterScreen({super.key});
@@ -257,7 +258,7 @@ class _NFCWriterScreenState extends State<NFCWriterScreen> with SingleTickerProv
             _handleSuccessInUI(jsonData.length);
 
           } catch (e) {
-            print("[ERROR] Write Error: $e");
+            AppLogger.debug('App', "[ERROR] Write Error: $e");
             await NfcManager.instance.stopSession();
             final errorMsg = e.toString();
             if (errorMsg.contains('IOException')) {

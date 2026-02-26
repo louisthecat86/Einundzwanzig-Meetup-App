@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'app_logger.dart';
 
 class MempoolService {
   static const String _baseUrl = 'https://mempool.space/api';
@@ -16,7 +17,7 @@ class MempoolService {
         return 0; // Fehler
       }
     } catch (e) {
-      print("Mempool Fehler: $e");
+      AppLogger.debug('App', "Mempool Fehler: $e");
       return 0; // Offline oder Fehler
     }
   }

@@ -28,9 +28,11 @@ import 'relay_settings_screen.dart';
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
+import '../services/admin_status_verifier.dart';  // Security Audit C2
 import '../services/platform_proof_service.dart';
 import '../services/humanity_proof_service.dart';
 import '../services/nip05_service.dart';
+import '../services/app_logger.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -85,6 +87,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await _loadBadges();
     await _calculateTrustScore();
+    
+    // Security Audit C2: Admin-Status kryptographisch re-verifizieren
+    // Muss NACH _loadBadges() laufen da Badges für Trust Score nötig
+    await _reVerifyAdminStatus();
+    
     _loadIdentityData();
     _checkActiveSession();
     // Organic Admins von Nostr laden und verifizieren
@@ -159,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final verified = await PromotionClaimService.syncOrganicAdmins();
       if (verified.isNotEmpty) {
-        print('[Dashboard] ${verified.length} organische Admins verifiziert');
+        AppLogger.debug('Dashboard', '${verified.length} organische Admins verifiziert');
       }
     } catch (e) {
       // Stilles Scheitern — kein Netzwerk ist OK
@@ -177,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // =============================================
     final claimedCount = await BadgeClaimService.ensureBadgesClaimed(badges);
     if (claimedCount > 0) {
-      print('[Dashboard] $claimedCount Badges retroaktiv gebunden');
+      AppLogger.debug('Dashboard', '$claimedCount Badges retroaktiv gebunden');
     }
 
     setState(() {
@@ -202,22 +209,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       homeMeetup = meetups.where((m) => m.city == u.homeMeetupId).firstOrNull;
     }
     
-    // --- SEED ADMIN CHECK (nur beim ersten Laden) ---
-    // Prüfe ob User ein Seed-Admin ist (z.B. der Gründer)
-    if (!u.isAdmin && u.hasNostrKey && u.nostrNpub.isNotEmpty) {
-      try {
-        final result = await AdminRegistry.checkAdmin(u.nostrNpub);
-        if (result.isAdmin) {
-          u.isAdmin = true;
-          u.isAdminVerified = true;
-          u.promotionSource = 'seed_admin';
-          await u.save();
-          print('[Dashboard] Seed-Admin erkannt: ${result.source}');
-        }
-      } catch (e) {
-        print('[Dashboard] Admin-Check fehlgeschlagen: $e');
-      }
-    }
+    // --- SEED ADMIN CHECK ENTFERNT (Security Audit C2) ---
+    // Admin-Status wird jetzt kryptographisch nach dem Laden
+    // der Badges über _reVerifyAdminStatus() verifiziert.
+    // Der alte Ansatz (SharedPrefs is_admin direkt setzen)
+    // war auf gerooteten Geräten manipulierbar.
     
     if (mounted) {
       setState(() {
@@ -257,45 +253,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _trustScore = score);
 
     // =============================================
-    // AUTO-PROMOTION: Trust Score → Organisator
+    // AUTO-PROMOTION ENTFERNT (Security Audit C2)
     // =============================================
-    if (score.meetsPromotionThreshold && !_user.isAdmin) {
-      _user.isAdmin = true;
-      _user.isAdminVerified = true;
-      _user.promotionSource = 'trust_score';
-      await _user.save();
+    // Admin-Status wird jetzt zentral über
+    // _reVerifyAdminStatus() → UserProfile.reVerifyAdmin()
+    // kryptographisch verifiziert.
+    // Siehe _reVerifyAdminStatus() weiter unten.
+    // =============================================
+  }
 
-      // "Proof of Reputation" auf Nostr publizieren
-      // → Andere Apps können diesen Claim verifizieren
-      // → Kein Super-Admin nötig für organisches Wachstum
-      try {
-        final meetupName = _user.homeMeetupId.isNotEmpty
-            ? _user.homeMeetupId
-            : 'Unbekannt';
-        await PromotionClaimService.publishAdminClaim(
-          badges: myBadges,
-          meetupName: meetupName,
-        );
-        print('[Dashboard] Admin Claim auf Nostr publiziert ✓');
-      } catch (e) {
-        print('[Dashboard] Admin Claim konnte nicht publiziert werden: $e');
-        // Kein Problem — wird beim nächsten App-Start erneut versucht
-      }
+  // =============================================
+  // SECURITY AUDIT C2: Kryptographische Admin-Re-Verifikation
+  // =============================================
+  // Wird nach _loadBadges() + _calculateTrustScore() aufgerufen.
+  // Ersetzt den alten Seed-Admin-Check und die Auto-Promotion.
+  // =============================================
+  Future<void> _reVerifyAdminStatus() async {
+    try {
+      final verification = await _user.reVerifyAdmin(myBadges);
       
       if (mounted) {
+        setState(() {});  // UI aktualisieren mit neuem Admin-Status
+      }
+
+      // Promotion-Event publizieren wenn neu zum Admin geworden
+      if (verification.isAdmin && verification.source == 'trust_score') {
+        try {
+          final meetupName = _user.homeMeetupId.isNotEmpty
+              ? _user.homeMeetupId
+              : 'Unbekannt';
+          await PromotionClaimService.publishAdminClaim(
+            badges: myBadges,
+            meetupName: meetupName,
+          );
+        } catch (_) {
+          // Kein Problem — wird beim nächsten App-Start erneut versucht
+        }
+
+        if (mounted) {
+          setState(() {
+            _justPromoted = true;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text("Du bist jetzt ORGANISATOR! Du kannst Meetup-Tags erstellen."),
+              backgroundColor: Colors.green.shade700,
+              duration: const Duration(seconds: 5),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // Re-Verifikation fehlgeschlagen — sicherheitshalber Admin entziehen
+      if (mounted) {
         setState(() {
-          _justPromoted = true;
+          _user.isAdmin = false;
+          _user.isAdminVerified = false;
+          _user.promotionSource = '';
         });
-        
-        // Celebration!
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("Du bist jetzt ORGANISATOR! Du kannst Meetup-Tags erstellen."),
-            backgroundColor: Colors.green.shade700,
-            duration: const Duration(seconds: 5),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       }
     }
   }

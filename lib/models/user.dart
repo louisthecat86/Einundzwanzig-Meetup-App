@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/secure_key_store.dart';
+import '../services/admin_status_verifier.dart';
+import 'badge.dart';
 
 class UserProfile {
   String nickname;
@@ -13,6 +15,12 @@ class UserProfile {
   String homeMeetupId;
   bool hasNostrKey;       // Hat der User ein Keypair in der App?
   String promotionSource; // Wie wurde Admin? 'trust_score', 'seed_admin', ''
+  
+  // Security Audit C2: Wird true erst NACH kryptographischer Prüfung
+  // Der SharedPreferences-Cache wird für Offline-UI genutzt,
+  // aber sicherheitskritische Ops prüfen _adminCryptoVerified.
+  bool _adminCryptoVerified = false;
+  bool get isAdminCryptoVerified => _adminCryptoVerified;
 
   UserProfile({
     this.nickname = "Anon",
@@ -51,11 +59,37 @@ class UserProfile {
       twitterHandle: prefs.getString('twitter') ?? "",
       isNostrVerified: hasKey || (prefs.getBool('nostr_verified') ?? false),
       isAdminVerified: prefs.getBool('admin_verified') ?? false,
+      // Cache-Wert laden — wird durch reVerifyAdmin() überschrieben
       isAdmin: prefs.getBool('is_admin') ?? false,
       homeMeetupId: prefs.getString('home_meetup') ?? "",
       hasNostrKey: hasKey,
       promotionSource: prefs.getString('promotion_source') ?? "",
     );
+    // HINWEIS: _adminCryptoVerified bleibt false bis reVerifyAdmin() läuft
+  }
+
+  // =============================================
+  // SECURITY AUDIT C2: Kryptographische Admin-Re-Verifikation
+  // =============================================
+  // Muss nach dem Laden der Badges aufgerufen werden.
+  // Überschreibt den SharedPreferences-Cache mit dem
+  // kryptographisch verifizierten Ergebnis.
+  // =============================================
+  Future<AdminVerification> reVerifyAdmin(List<MeetupBadge> badges) async {
+    final verification = await AdminStatusVerifier.verifyAdminStatus(
+      badges: badges,
+    );
+
+    // Admin-Status basierend auf kryptographischer Prüfung setzen
+    isAdmin = verification.isAdmin;
+    isAdminVerified = verification.isAdmin;
+    promotionSource = verification.source;
+    _adminCryptoVerified = true;
+
+    // Cache aktualisieren
+    await save();
+
+    return verification;
   }
 
   Future<void> save() async {

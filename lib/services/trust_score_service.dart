@@ -277,17 +277,30 @@ class TrustScoreService {
     required DateTime? firstBadgeDate,
     Map<String, CoAttestorData>? coAttestorMap,
   }) {
-    // --- PHASE BESTIMMEN ---
-    final phase = _determinePhase(badges);
+    // --- PHASE BESTIMMEN (nur anhand vertrauenswürdiger Badges) ---
+    // v1 Legacy Badges dürfen auch die Phase nicht beeinflussen
+    final trustedForPhase = badges.where((b) => b.isNostrSigned).toList();
+    final phase = _determinePhase(trustedForPhase);
     final thresholds = TrustConfig.phases[phase]!;
 
     if (badges.isEmpty) {
       return _emptyScore(phase, thresholds);
     }
 
-    // --- GRUNDDATEN ---
-    final uniqueMeetups = badges.map((b) => b.meetupName).toSet();
-    final uniqueSigners = badges.map((b) => b.signerNpub).where((s) => s.isNotEmpty).toSet();
+    // --- SECURITY: Nur Nostr-signierte Badges (v2+) zählen ---
+    // v1 Legacy Badges (Shared Secret) sind nicht vertrauenswürdig
+    // und dürfen NICHT zum Trust Score beitragen (Security Audit C1).
+    // sigVersion == 2 → Schnorr-signiert (BIP-340)
+    // sigVersion == 0 oder 1 → Legacy oder unsigniert → ignorieren
+    final trustedBadges = badges.where((b) => b.isNostrSigned).toList();
+    
+    if (trustedBadges.isEmpty) {
+      return _emptyScore(phase, thresholds);
+    }
+
+    // --- GRUNDDATEN (nur aus vertrauenswürdigen Badges) ---
+    final uniqueMeetups = trustedBadges.map((b) => b.meetupName).toSet();
+    final uniqueSigners = trustedBadges.map((b) => b.signerNpub).where((s) => s.isNotEmpty).toSet();
     final uniqueCities = uniqueMeetups;
 
     final accountAge = firstBadgeDate != null
@@ -299,7 +312,7 @@ class TrustScoreService {
     
     // Frequency Cap
     final Map<int, int> weeklyCount = {};
-    final sortedBadges = List<MeetupBadge>.from(badges)
+    final sortedBadges = List<MeetupBadge>.from(trustedBadges)
       ..sort((a, b) => b.date.compareTo(a.date));
 
     for (final badge in sortedBadges) {
@@ -372,10 +385,11 @@ class TrustScoreService {
     final totalScore = activityScore * (1 + maturityScore) * (1 + diversityScore * 0.1);
 
     // --- PROMOTION CHECK (mit Phase-Schwellenwerten!) ---
+    // Nur vertrauenswürdige (Nostr-signierte) Badges zählen
     final progress = <String, PromotionProgress>{
       'badges': PromotionProgress(
-        label: 'Badges',
-        current: badges.length,
+        label: 'Badges (Nostr-verifiziert)',
+        current: trustedBadges.length,
         required: thresholds.minBadges,
       ),
       'meetups': PromotionProgress(
@@ -422,7 +436,7 @@ class TrustScoreService {
       diversityScore: diversityScore,
       qualityScore: qualityScore,
       activityScore: activityScore,
-      totalBadges: badges.length,
+      totalBadges: trustedBadges.length,
       uniqueMeetups: uniqueMeetups.length,
       uniqueSigners: uniqueSigners.length,
       uniqueCities: uniqueCities.length,

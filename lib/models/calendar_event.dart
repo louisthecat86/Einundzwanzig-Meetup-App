@@ -1,4 +1,5 @@
 import 'package:icalendar_parser/icalendar_parser.dart';
+import '../services/app_logger.dart';
 
 class CalendarEvent {
   final String title;
@@ -53,7 +54,7 @@ class CalendarEvent {
         }
       }
     } catch (e) {
-      print("PARSE ERROR: $e");
+      AppLogger.debug('App', "PARSE ERROR: $e");
     }
 
     // Beschreibung säubern (Zeilenumbrüche fixen)

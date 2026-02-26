@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_util'; // Das Werkzeug für sicheren JS-Zugriff
 import 'package:js/js.dart';
+import 'app_logger.dart';
 
 @JS('window')
 external dynamic get window; // Wir holen uns das globale Fenster-Objekt
@@ -11,7 +12,7 @@ class NostrService {
       // 1. SICHERHEITS-CHECK: Gibt es 'nostr' im Window?
       // Alby injiziert das Objekt 'nostr'. Wenn es fehlt, ist die Extension nicht da.
       if (!hasProperty(window, 'nostr')) {
-        print("❌ FEHLER: window.nostr nicht gefunden. Ist Alby installiert?");
+        AppLogger.debug('App', "❌ FEHLER: window.nostr nicht gefunden. Ist Alby installiert?");
         return null;
       }
 
@@ -28,7 +29,7 @@ class NostrService {
       return result.toString();
     } catch (e) {
       // Hier landen wir, wenn der User das Popup schließt oder ablehnt
-      print("⚠️ Nostr Fehler: $e");
+      AppLogger.debug('App', "⚠️ Nostr Fehler: $e");
       return null;
     }
   }

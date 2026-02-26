@@ -5,6 +5,7 @@ import 'profile_edit.dart';
 import 'dashboard.dart'; 
 import '../services/nostr_service.dart';
 import '../services/backup_service.dart';
+import '../services/app_logger.dart';
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -89,10 +90,12 @@ class _IntroScreenState extends State<IntroScreen> {
           user.hasNostrKey = true;
           user.isNostrVerified = true;
           await user.save();
-          print('[Intro] Nostr-Key automatisch erstellt: ${NostrService.shortenNpub(keys['npub']!)}');
+          AppLogger.debug('Intro', 'Nostr-Key automatisch erstellt: ${NostrService.shortenNpub(keys['npub']!)}');
+
         }
       } catch (e) {
-        print('[Intro] Nostr-Key-Erstellung fehlgeschlagen: $e');
+        AppLogger.debug('Intro', 'Nostr-Key-Erstellung fehlgeschlagen: $e');
+
         // Kein Problem — App funktioniert auch ohne
       }
     }

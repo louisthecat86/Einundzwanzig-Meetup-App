@@ -1,0 +1,466 @@
+From eb097c7edad57a943d33d1af0c00b98b74f21d91 Mon Sep 17 00:00:00 2001
+From: SecurityAudit <audit@einundzwanzig.space>
+Date: Thu, 26 Feb 2026 08:42:02 +0000
+Subject: [PATCH] Security Audit Block 2: Medium Fixes (M5 + M7)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- M5: Device Integrity Service (Root/Jailbreak-Erkennung + Dashboard-Warnung)
+- M7: Badge-Daten mit AES-256-GCM verschlüsselt in SharedPreferences
+      Schlüssel in flutter_secure_storage (Android Keystore / iOS Keychain)
+      Transparente Migration von Klartext zu verschlüsselt beim ersten Laden
+---
+ lib/models/badge.dart                      | 109 +++++++++--
+ lib/screens/dashboard.dart                 |  47 +++++
+ lib/services/device_integrity_service.dart | 215 +++++++++++++++++++++
+ 3 files changed, 360 insertions(+), 11 deletions(-)
+ create mode 100644 lib/services/device_integrity_service.dart
+
+diff --git a/lib/models/badge.dart b/lib/models/badge.dart
+index b4faa30..01ffaaa 100644
+--- a/lib/models/badge.dart
++++ b/lib/models/badge.dart
+@@ -17,8 +17,12 @@
+ // ============================================
+ 
+ import 'dart:convert';
++import 'dart:typed_data';
+ import 'package:shared_preferences/shared_preferences.dart';
++import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+ import 'package:crypto/crypto.dart';
++import 'package:encrypt/encrypt.dart' as enc;
++import '../services/app_logger.dart';
+ 
+ class MeetupBadge {
+   final String id;
+@@ -188,26 +192,109 @@ class MeetupBadge {
+   }
+ 
+   // =============================================
+-  // PERSISTENZ
++  // PERSISTENZ — Verschlüsselt (Security Audit M7)
+   // =============================================
++  // Badge-Daten werden mit AES-256-GCM verschlüsselt,
++  // bevor sie in SharedPreferences geschrieben werden.
++  // Der Schlüssel liegt in flutter_secure_storage
++  // (Android Keystore / iOS Keychain geschützt).
++  //
++  // Migration: Beim ersten Laden werden unverschlüsselte
++  // Legacy-Badges automatisch verschlüsselt gespeichert.
++  // =============================================
++
++  static const _secureStorage = FlutterSecureStorage(
++    aOptions: AndroidOptions(encryptedSharedPreferences: true),
++    iOptions: IOSOptions(
++      accessibility: KeychainAccessibility.first_unlock_this_device,
++    ),
++  );
++  static const String _badgeKeyAlias = 'badge_encryption_key';
++  static const String _prefsBadgeEncrypted = 'badges_encrypted';
++  static const String _prefsLegacyBadges = 'badges'; // Altes Klartext-Feld
++
++  /// AES-256-Schlüssel aus SecureStorage laden oder erzeugen
++  static Future<enc.Key> _getBadgeKey() async {
++    final existing = await _secureStorage.read(key: _badgeKeyAlias);
++    if (existing != null && existing.length == 64) {
++      // Hex-encoded 32-byte key
++      return enc.Key(Uint8List.fromList(
++        List.generate(32, (i) => int.parse(existing.substring(i * 2, i * 2 + 2), radix: 16)),
++      ));
++    }
++    // Neuen Schlüssel generieren (256 Bit)
++    final key = enc.Key.fromSecureRandom(32);
++    final keyHex = key.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
++    await _secureStorage.write(key: _badgeKeyAlias, value: keyHex);
++    AppLogger.debug('Badge', 'Neuer Badge-Encryption-Key generiert');
++    return key;
++  }
+ 
+   static Future<void> saveBadges(List<MeetupBadge> badges) async {
+     final prefs = await SharedPreferences.getInstance();
+-    final List<String> badgesJson = badges.map((b) => jsonEncode(b.toJson())).toList();
+-    await prefs.setStringList('badges', badgesJson);
++    final jsonStr = jsonEncode(badges.map((b) => b.toJson()).toList());
++
++    try {
++      final key = await _getBadgeKey();
++      final iv = enc.IV.fromSecureRandom(12); // 96 Bit (NIST-empfohlen)
++      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
++      final encrypted = encrypter.encrypt(jsonStr, iv: iv);
++
++      // Format: base64(IV):base64(ciphertext)
++      final stored = '${iv.base64}:${encrypted.base64}';
++      await prefs.setString(_prefsBadgeEncrypted, stored);
++
++      // Legacy-Klartext entfernen falls vorhanden
++      if (prefs.containsKey(_prefsLegacyBadges)) {
++        await prefs.remove(_prefsLegacyBadges);
++        AppLogger.debug('Badge', 'Legacy-Klartextbadges aus SharedPrefs entfernt');
++      }
++    } catch (e) {
++      // Fallback: Klartext (sollte nicht passieren, aber App darf nicht crashen)
++      AppLogger.error('Badge', 'Verschlüsselung fehlgeschlagen, Klartext-Fallback: $e');
++      final List<String> badgesJson = badges.map((b) => jsonEncode(b.toJson())).toList();
++      await prefs.setStringList(_prefsLegacyBadges, badgesJson);
++    }
+   }
+ 
+   static Future<List<MeetupBadge>> loadBadges() async {
+     final prefs = await SharedPreferences.getInstance();
+-    final List<String>? badgesJson = prefs.getStringList('badges');
+-    
+-    if (badgesJson == null || badgesJson.isEmpty) {
+-      return [];
++
++    // 1. Verschlüsselte Badges versuchen
++    final encryptedData = prefs.getString(_prefsBadgeEncrypted);
++    if (encryptedData != null && encryptedData.contains(':')) {
++      try {
++        final parts = encryptedData.split(':');
++        if (parts.length == 2) {
++          final iv = enc.IV.fromBase64(parts[0]);
++          final key = await _getBadgeKey();
++          final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
++          final decrypted = encrypter.decrypt64(parts[1], iv: iv);
++          final List<dynamic> decoded = jsonDecode(decrypted) as List<dynamic>;
++          return decoded.map((json) =>
++            MeetupBadge.fromJson(json as Map<String, dynamic>)
++          ).toList();
++        }
++      } catch (e) {
++        AppLogger.error('Badge', 'Entschlüsselung fehlgeschlagen: $e');
++        // Weiter mit Legacy-Versuch
++      }
+     }
+-    
+-    return badgesJson.map((String json) {
+-      return MeetupBadge.fromJson(jsonDecode(json) as Map<String, dynamic>);
+-    }).toList();
++
++    // 2. Legacy-Klartext migrieren
++    final List<String>? legacyJson = prefs.getStringList(_prefsLegacyBadges);
++    if (legacyJson != null && legacyJson.isNotEmpty) {
++      AppLogger.debug('Badge', 'Migriere ${legacyJson.length} Badges von Klartext zu verschlüsselt');
++      final badges = legacyJson.map((String json) =>
++        MeetupBadge.fromJson(jsonDecode(json) as Map<String, dynamic>)
++      ).toList();
++
++      // Sofort verschlüsselt speichern (Migration)
++      await saveBadges(badges);
++      return badges;
++    }
++
++    return [];
+   }
+ 
+   // =============================================
+diff --git a/lib/screens/dashboard.dart b/lib/screens/dashboard.dart
+index 3892312..759e0f7 100644
+--- a/lib/screens/dashboard.dart
++++ b/lib/screens/dashboard.dart
+@@ -33,6 +33,7 @@ import '../services/platform_proof_service.dart';
+ import '../services/humanity_proof_service.dart';
+ import '../services/nip05_service.dart';
+ import '../services/app_logger.dart';
++import '../services/device_integrity_service.dart';  // Security Audit M5
+ 
+ class DashboardScreen extends StatefulWidget {
+   const DashboardScreen({super.key});
+@@ -57,6 +58,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
+   MeetupSession? _activeSession;
+   Timer? _sessionTimer;
+   String _sessionTimeLeft = '';
++
++  // Security Audit M5: Device Integrity
++  bool _deviceCompromised = false;
+   
+   @override
+   void initState() {
+@@ -96,6 +100,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
+     _checkActiveSession();
+     // Organic Admins von Nostr laden und verifizieren
+     _syncOrganicAdminsInBackground();
++    // Security Audit M5: Root/Jailbreak-Prüfung
++    _checkDeviceIntegrity();
+   }
+ 
+   void _loadIdentityData() async {
+@@ -173,6 +179,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
+     }
+   }
+ 
++  // Security Audit M5: Root/Jailbreak-Warnung
++  void _checkDeviceIntegrity() async {
++    try {
++      final report = await DeviceIntegrityService.check();
++      if (report.isCompromised && mounted) {
++        setState(() => _deviceCompromised = true);
++        AppLogger.security('Dashboard',
++            'Gerät möglicherweise kompromittiert: ${report.findings.length} Befunde');
++      }
++    } catch (_) {
++      // Integritätsprüfung darf App nicht crashen
++    }
++  }
++
+   Future<void> _loadBadges() async {
+     final badges = await MeetupBadge.loadBadges();
+ 
+@@ -631,6 +651,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
+             ),
+             const SizedBox(height: 32),
+ 
++            // Security Audit M5: Root/Jailbreak-Warnung
++            if (_deviceCompromised) ...[
++              Container(
++                padding: const EdgeInsets.all(12),
++                decoration: BoxDecoration(
++                  color: Colors.orange.withValues(alpha: 0.15),
++                  borderRadius: BorderRadius.circular(12),
++                  border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
++                ),
++                child: Row(
++                  children: [
++                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
++                    const SizedBox(width: 12),
++                    Expanded(
++                      child: Text(
++                        DeviceIntegrityService.warningMessage,
++                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
++                          color: Colors.orange.shade200,
++                        ),
++                      ),
++                    ),
++                  ],
++                ),
++              ),
++              const SizedBox(height: 16),
++            ],
++
+             // ===== HOME MEETUP =====
+             _buildHomeMeetupCard(),
+             const SizedBox(height: 20),
+diff --git a/lib/services/device_integrity_service.dart b/lib/services/device_integrity_service.dart
+new file mode 100644
+index 0000000..12d8805
+--- /dev/null
++++ b/lib/services/device_integrity_service.dart
+@@ -0,0 +1,215 @@
++// ============================================
++// DEVICE INTEGRITY SERVICE (Security Audit M5)
++// ============================================
++// Erkennt gerootete Android-Geräte und jailbroken iOS-Geräte.
++//
++// WICHTIG: Keine 100%-Erkennung möglich – Magisk/KernelSU
++// können Root vor vielen Checks verstecken. Deshalb:
++//   - Warnung anzeigen, NICHT blockieren
++//   - Kryptographische Sicherheit (SecureStorage, Nostr-Signaturen)
++//     bleibt die primäre Verteidigungslinie
++// ============================================
++
++import 'dart:io';
++import 'package:flutter/foundation.dart';
++import 'app_logger.dart';
++
++enum DeviceIntegrityStatus {
++  secure,       // Keine Auffälligkeiten
++  warning,      // Root/Jailbreak-Indikatoren gefunden
++  unknown,      // Prüfung nicht möglich (z.B. Web)
++}
++
++class IntegrityReport {
++  final DeviceIntegrityStatus status;
++  final List<String> findings;
++  final DateTime checkedAt;
++
++  IntegrityReport({
++    required this.status,
++    required this.findings,
++    DateTime? checkedAt,
++  }) : checkedAt = checkedAt ?? DateTime.now();
++
++  bool get isCompromised => status == DeviceIntegrityStatus.warning;
++}
++
++class DeviceIntegrityService {
++  static IntegrityReport? _cachedReport;
++
++  /// Prüft die Geräte-Integrität.
++  /// Ergebnis wird für die App-Session gecached.
++  static Future<IntegrityReport> check({bool forceRefresh = false}) async {
++    if (_cachedReport != null && !forceRefresh) {
++      return _cachedReport!;
++    }
++
++    final findings = <String>[];
++
++    try {
++      if (Platform.isAndroid) {
++        findings.addAll(await _checkAndroid());
++      } else if (Platform.isIOS) {
++        findings.addAll(await _checkIOS());
++      } else {
++        _cachedReport = IntegrityReport(
++          status: DeviceIntegrityStatus.unknown,
++          findings: ['Plattform nicht unterstützt: ${Platform.operatingSystem}'],
++        );
++        return _cachedReport!;
++      }
++    } catch (e) {
++      AppLogger.warn('DeviceIntegrity', 'Integritätsprüfung fehlgeschlagen: $e');
++      _cachedReport = IntegrityReport(
++        status: DeviceIntegrityStatus.unknown,
++        findings: ['Prüfung fehlgeschlagen'],
++      );
++      return _cachedReport!;
++    }
++
++    final status = findings.isEmpty
++        ? DeviceIntegrityStatus.secure
++        : DeviceIntegrityStatus.warning;
++
++    if (findings.isNotEmpty) {
++      AppLogger.security('DeviceIntegrity',
++          '${findings.length} Auffälligkeit(en) gefunden');
++    }
++
++    _cachedReport = IntegrityReport(status: status, findings: findings);
++    return _cachedReport!;
++  }
++
++  // =============================================
++  // ANDROID ROOT DETECTION
++  // =============================================
++  static Future<List<String>> _checkAndroid() async {
++    final findings = <String>[];
++
++    // 1. Bekannte Root-Management-Binaries
++    final rootBinaries = [
++      '/system/bin/su',
++      '/system/xbin/su',
++      '/sbin/su',
++      '/system/app/Superuser.apk',
++      '/system/app/SuperSU.apk',
++      '/data/local/bin/su',
++      '/data/local/xbin/su',
++    ];
++
++    for (final path in rootBinaries) {
++      if (await _fileExists(path)) {
++        findings.add('Root-Binary gefunden: $path');
++      }
++    }
++
++    // 2. Magisk-Indikatoren
++    final magiskPaths = [
++      '/sbin/.magisk',
++      '/data/adb/magisk',
++      '/data/adb/modules',
++    ];
++
++    for (final path in magiskPaths) {
++      if (await _fileExists(path)) {
++        findings.add('Magisk-Indikator: $path');
++      }
++    }
++
++    // 3. Build-Tags prüfen (test-keys = nicht offiziell signiert)
++    try {
++      final result = await Process.run('getprop', ['ro.build.tags']);
++      final tags = result.stdout.toString().trim();
++      if (tags.contains('test-keys')) {
++        findings.add('Build mit test-keys signiert');
++      }
++    } catch (_) {
++      // getprop nicht verfügbar → ignorieren
++    }
++
++    // 4. Schreibzugriff auf /system prüfen
++    try {
++      final systemStat = await FileStat.stat('/system');
++      // Auf normalen Geräten ist /system read-only
++      if (systemStat.mode & 0x80 != 0) { // Owner write bit
++        findings.add('/system ist beschreibbar');
++      }
++    } catch (_) {}
++
++    // 5. BusyBox (häufig mit Root installiert)
++    final busyboxPaths = ['/system/xbin/busybox', '/system/bin/busybox'];
++    for (final path in busyboxPaths) {
++      if (await _fileExists(path)) {
++        findings.add('BusyBox installiert: $path');
++      }
++    }
++
++    return findings;
++  }
++
++  // =============================================
++  // iOS JAILBREAK DETECTION
++  // =============================================
++  static Future<List<String>> _checkIOS() async {
++    final findings = <String>[];
++
++    // 1. Bekannte Jailbreak-Pfade
++    final jailbreakPaths = [
++      '/Applications/Cydia.app',
++      '/Applications/Sileo.app',
++      '/Applications/Zebra.app',
++      '/Library/MobileSubstrate/MobileSubstrate.dylib',
++      '/usr/sbin/sshd',
++      '/usr/bin/ssh',
++      '/etc/apt',
++      '/private/var/lib/apt/',
++      '/var/lib/cydia',
++      '/private/var/stash',
++      '/usr/libexec/sftp-server',
++    ];
++
++    for (final path in jailbreakPaths) {
++      if (await _fileExists(path)) {
++        findings.add('Jailbreak-Pfad gefunden: $path');
++      }
++    }
++
++    // 2. Schreibtest außerhalb der Sandbox
++    try {
++      final testFile = File('/private/jailbreak_check_${DateTime.now().millisecondsSinceEpoch}');
++      await testFile.writeAsString('test');
++      await testFile.delete();
++      findings.add('Schreibzugriff außerhalb der Sandbox möglich');
++    } catch (_) {
++      // Erwartet: Kein Zugriff = gut
++    }
++
++    // 3. Fork-Check (Jailbroken devices erlauben fork())
++    // Nicht direkt in Dart möglich, aber symbolic links prüfen
++    try {
++      final result = await FileStat.stat('/bin/bash');
++      if (result.type != FileSystemEntityType.notFound) {
++        findings.add('/bin/bash existiert');
++      }
++    } catch (_) {}
++
++    return findings;
++  }
++
++  // =============================================
++  // HELPER
++  // =============================================
++  static Future<bool> _fileExists(String path) async {
++    try {
++      return await File(path).exists() || await Directory(path).exists();
++    } catch (_) {
++      return false;
++    }
++  }
++
++  /// Menschenlesbare Warnung für die UI
++  static String get warningMessage =>
++      'Dieses Gerät zeigt Anzeichen von Root/Jailbreak. '
++      'Kryptographische Schlüssel könnten weniger geschützt sein. '
++      'Für maximale Sicherheit ein nicht modifiziertes Gerät verwenden.';
++}
+-- 
+2.43.0

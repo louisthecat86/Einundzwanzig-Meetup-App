@@ -40,6 +40,7 @@ import 'nostr_service.dart';
 import 'badge_security.dart';
 import 'admin_registry.dart';
 import 'trust_score_service.dart';
+import 'app_logger.dart';
 
 class PromotionClaimService {
   // Nostr Event Kind für Admin Claims
@@ -145,13 +146,15 @@ class PromotionClaimService {
         await Future.delayed(const Duration(seconds: 2));
         ws.close();
         successCount++;
-        print('[PromotionClaim] Claim an $relayUrl gesendet ✓');
+        AppLogger.debug('PromotionClaim', 'Claim an $relayUrl gesendet ✓');
+
       } catch (e) {
-        print('[PromotionClaim] $relayUrl fehlgeschlagen: $e');
+        AppLogger.debug('PromotionClaim', '$relayUrl fehlgeschlagen: $e');
       }
     }
 
-    print('[PromotionClaim] Claim publiziert an $successCount Relays');
+    AppLogger.debug('PromotionClaim', 'Claim publiziert an $successCount Relays');
+
     return successCount > 0;
   }
 
@@ -202,17 +205,20 @@ class PromotionClaimService {
                 name: 'Organic (${result.verifiedBadgeCount} Badges)',
                 addedAt: claim.createdAt,
               ));
-              print('[PromotionClaim] Organic Admin akzeptiert: ${NostrService.shortenNpub(claimerNpub)}');
+              AppLogger.debug('PromotionClaim', 'Organic Admin akzeptiert: ${NostrService.shortenNpub(claimerNpub)}');
+
             } catch (e) {
               // Duplikat — bereits in der Liste
             }
           }
         } catch (e) {
-          print('[PromotionClaim] Claim-Verifikation fehlgeschlagen: $e');
+          AppLogger.debug('PromotionClaim', 'Claim-Verifikation fehlgeschlagen: $e');
+
         }
       }
     } catch (e) {
-      print('[PromotionClaim] Sync fehlgeschlagen: $e');
+      AppLogger.debug('PromotionClaim', 'Sync fehlgeschlagen: $e');
+
     }
 
     return verifiedClaims;
@@ -308,11 +314,11 @@ class PromotionClaimService {
       try {
         final result = await _fetchFromSingleRelay(relayUrl);
         if (result != null && result.isNotEmpty) {
-          print('[PromotionClaim] ${result.length} Claims von $relayUrl geladen');
+          AppLogger.debug('PromotionClaim', '${result.length} Claims von $relayUrl geladen');
           return result;
         }
       } catch (e) {
-        print('[PromotionClaim] $relayUrl fehlgeschlagen: $e');
+        AppLogger.debug('PromotionClaim', '$relayUrl fehlgeschlagen: $e');
         continue;
       }
     }

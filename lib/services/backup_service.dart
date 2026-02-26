@@ -16,6 +16,7 @@ import 'secure_key_store.dart';
 import 'platform_proof_service.dart'; // NEU
 import 'humanity_proof_service.dart'; // NEU
 import 'dart:typed_data';
+import 'app_logger.dart';
 
 class BackupService {
   // =============================================
@@ -313,7 +314,7 @@ class BackupService {
         text: 'Dein verschlüsseltes Backup. Halte dein Passwort bereit, um es wiederherzustellen.',
       );
     } catch (e) {
-      print("Backup Fehler: $e");
+      AppLogger.debug('App', "Backup Fehler: $e");
       if (context.mounted) {
         Navigator.pop(context); // Ladeindikator weg
         ScaffoldMessenger.of(context).showSnackBar(
@@ -575,7 +576,7 @@ class BackupService {
         return false;
       }
     } catch (e) {
-      print("Import Fehler: $e");
+      AppLogger.debug('App', "Import Fehler: $e");
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Import fehlgeschlagen: $e"), backgroundColor: Colors.red),

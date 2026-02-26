@@ -26,6 +26,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'nostr_service.dart';
 import 'secure_key_store.dart';
+import 'app_logger.dart';
 
 class AdminEntry {
   final String npub;
@@ -118,7 +119,8 @@ class AdminRegistry {
     // Wenn Schwellenwert erreicht, aktiviere Sunset permanent
     if (currentAdminCount >= sunsetThreshold) {
       await prefs.setBool(_sunsetFlagKey, true);
-      print('[AdminRegistry] 🌅 BOOTSTRAP SUNSET AKTIVIERT! Web of Trust ist nun völlig dezentral.');
+      AppLogger.debug('AdminRegistry', '🌅 BOOTSTRAP SUNSET AKTIVIERT! Web of Trust ist nun völlig dezentral.');
+
       return true;
     }
 
@@ -180,7 +182,8 @@ class AdminRegistry {
         }
       }
     } catch (e) {
-      print('[AdminRegistry] Relay-Fetch Fehler: $e');
+      AppLogger.debug('AdminRegistry', 'Relay-Fetch Fehler: $e');
+
     }
 
     return AdminCheckResult(isAdmin: false, source: 'not_found');
@@ -217,9 +220,11 @@ class AdminRegistry {
       try {
         final superAdminHex = Nip19.decodePubkey(superAdminNpub);
         authorsToQuery.add(superAdminHex);
-        print('[AdminRegistry] Bootstrap Phase: Frage Relays nach Super-Admin ($superAdminHex)');
+        AppLogger.debug('AdminRegistry', 'Bootstrap Phase: Frage Relays nach Super-Admin ($superAdminHex)');
+
       } catch (e) {
-        print('[AdminRegistry] Ungültiger Super-Admin npub: $e');
+        AppLogger.debug('AdminRegistry', 'Ungültiger Super-Admin npub: $e');
+
         return null;
       }
     } else {
@@ -240,7 +245,8 @@ class AdminRegistry {
           authorsToQuery.add(Nip19.decodePubkey(superAdminNpub));
         } catch (_) {}
       }
-      print('[AdminRegistry] Sunset Phase: Frage Relays nach Updates von ${authorsToQuery.length} bekannten Admins.');
+      AppLogger.debug('AdminRegistry', 'Sunset Phase: Frage Relays nach Updates von ${authorsToQuery.length} bekannten Admins.');
+
     }
 
     // Aus Nostr-Protokoll-Gründen (Limits bei Filtern) teilen wir große Listen auf
@@ -263,12 +269,13 @@ class AdminRegistry {
           }
         }
       } catch (e) {
-        print('[AdminRegistry] $relayUrl fehlgeschlagen: $e');
+        AppLogger.debug('AdminRegistry', '$relayUrl fehlgeschlagen: $e');
         continue; // Nächsten Relay versuchen
       }
     }
 
-    print('[AdminRegistry] Kein Relay erreichbar');
+    AppLogger.debug('AdminRegistry', 'Kein Relay erreichbar');
+
     return null;
   }
 
@@ -334,14 +341,16 @@ class AdminRegistry {
                 // Sammeln aller Admins aus allen Events
                 collectedAdmins.addAll(adminsInEvent);
               } catch (e) {
-                print('[AdminRegistry] Content-Parse Fehler: $e');
+                AppLogger.debug('AdminRegistry', 'Content-Parse Fehler: $e');
+
               }
             } 
             else if (type == 'EOSE') {
               if (!completer.isCompleted) completer.complete(collectedAdmins);
             }
           } catch (e) {
-            print('[AdminRegistry] Message-Parse Fehler: $e');
+            AppLogger.debug('AdminRegistry', 'Message-Parse Fehler: $e');
+
           }
         },
         onError: (e) {
@@ -399,7 +408,8 @@ class AdminRegistry {
       if (relayList != null) {
         await _saveToCache(relayList);
         await isSunsetActive(); // Sunset-Status nach Update prüfen
-        print('[AdminRegistry] Cache im Hintergrund aktualisiert. Total Admins: ${relayList.length}');
+        AppLogger.debug('AdminRegistry', 'Cache im Hintergrund aktualisiert. Total Admins: ${relayList.length}');
+
       }
     } catch (e) {
       // Stilles Scheitern im Hintergrund
@@ -517,10 +527,11 @@ class AdminRegistry {
         await Future.delayed(const Duration(seconds: 2));
         ws.close();
         successCount++;
-        print('[AdminRegistry] Event an $relayUrl gesendet ✓');
+        AppLogger.debug('AdminRegistry', 'Event an $relayUrl gesendet ✓');
+
       } catch (e) {
         errors.add('$relayUrl: $e');
-        print('[AdminRegistry] $relayUrl fehlgeschlagen: $e');
+        AppLogger.debug('AdminRegistry', '$relayUrl fehlgeschlagen: $e');
       }
     }
 

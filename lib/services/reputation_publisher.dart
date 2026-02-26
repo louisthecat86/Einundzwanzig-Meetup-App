@@ -36,6 +36,7 @@ import 'secure_key_store.dart';
 import 'social_graph_service.dart';
 import 'zap_verification_service.dart';
 import 'humanity_proof_service.dart';
+import 'app_logger.dart';
 
 class ReputationPublisher {
   // Nostr Event Konfiguration
@@ -336,9 +337,10 @@ class ReputationPublisher {
         await Future.delayed(const Duration(seconds: 2));
         ws.close();
         successCount++;
-        print('[ReputationPublisher] Event an $relayUrl gesendet ✓');
+        AppLogger.debug('ReputationPublisher', 'Event an $relayUrl gesendet ✓');
+
       } catch (e) {
-        print('[ReputationPublisher] $relayUrl fehlgeschlagen: $e');
+        AppLogger.debug('ReputationPublisher', '$relayUrl fehlgeschlagen: $e');
       }
     }
 
@@ -375,7 +377,7 @@ class ReputationPublisher {
         final result = await _fetchFromSingleRelay(relayUrl, pubkeyHex);
         if (result != null) return result;
       } catch (e) {
-        print('[ReputationPublisher] $relayUrl Fetch fehlgeschlagen: $e');
+        AppLogger.debug('ReputationPublisher', '$relayUrl Fetch fehlgeschlagen: $e');
         continue;
       }
     }
@@ -418,7 +420,8 @@ class ReputationPublisher {
 
               // Signatur prüfen
               if (!event.isValid()) {
-                print('[ReputationPublisher] Ungültige Signatur von $relayUrl');
+                AppLogger.debug('ReputationPublisher', 'Ungültige Signatur von $relayUrl');
+
                 return;
               }
 
@@ -433,13 +436,15 @@ class ReputationPublisher {
                 );
                 if (!completer.isCompleted) completer.complete(repEvent);
               } catch (e) {
-                print('[ReputationPublisher] Content-Parse Fehler: $e');
+                AppLogger.debug('ReputationPublisher', 'Content-Parse Fehler: $e');
+
               }
             } else if (type == 'EOSE') {
               if (!completer.isCompleted) completer.complete(null);
             }
           } catch (e) {
-            print('[ReputationPublisher] Message-Parse Fehler: $e');
+            AppLogger.debug('ReputationPublisher', 'Message-Parse Fehler: $e');
+
           }
         },
         onError: (e) {
@@ -525,10 +530,12 @@ class ReputationPublisher {
   static void publishInBackground(List<MeetupBadge> badges) {
     publish(badges: badges).then((result) {
       if (result.success && result.relayCount > 0) {
-        print('[ReputationPublisher] Hintergrund-Publish: ${result.message}');
+        AppLogger.debug('ReputationPublisher', 'Hintergrund-Publish: ${result.message}');
+
       }
     }).catchError((e) {
-      print('[ReputationPublisher] Hintergrund-Publish fehlgeschlagen: $e');
+      AppLogger.debug('ReputationPublisher', 'Hintergrund-Publish fehlgeschlagen: $e');
+
     });
   }
 }

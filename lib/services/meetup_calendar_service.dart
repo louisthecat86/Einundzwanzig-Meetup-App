@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:icalendar_parser/icalendar_parser.dart';
 import '../models/calendar_event.dart'; // Importiere das neue Modell
+import 'app_logger.dart';
 
 class MeetupCalendarService {
   static const String calendarUrl = 'https://portal.einundzwanzig.space/stream-calendar';
@@ -36,7 +37,7 @@ class MeetupCalendarService {
         throw Exception('Server Fehler: ${response.statusCode}');
       }
     } catch (e) {
-      print("Fehler im CalendarService: $e");
+      AppLogger.debug('App', "Fehler im CalendarService: $e");
       return [];
     }
   }

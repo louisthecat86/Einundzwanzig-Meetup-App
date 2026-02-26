@@ -22,6 +22,7 @@ import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/rolling_qr_service.dart';
 import '../services/nostr_service.dart';
+import '../services/app_logger.dart';
 
 class RollingQRScreen extends StatefulWidget {
   const RollingQRScreen({super.key});
@@ -162,7 +163,8 @@ class _RollingQRScreenState extends State<RollingQRScreen> with WidgetsBindingOb
         });
       }
     } catch (e) {
-      print('[RollingQR] Fehler: $e');
+      AppLogger.debug('RollingQR', 'Fehler: $e');
+
     }
   }
 

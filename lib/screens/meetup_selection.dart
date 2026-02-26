@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../services/meetup_service.dart'; // <--- Service nutzen
 import '../theme.dart';
 import 'radar.dart'; 
+import '../services/app_logger.dart';
 
 class MeetupSelectionScreen extends StatefulWidget {
   const MeetupSelectionScreen({super.key});
@@ -112,7 +113,7 @@ class _MeetupSelectionScreenState extends State<MeetupSelectionScreen> {
                             user.homeMeetupId = meetup.city; // Speichere Stadt-Namen
                             await user.save();
                             
-                            print("[DEBUG] Home-Meetup gespeichert: Name=${meetup.city}");
+                            AppLogger.debug('App', "[DEBUG] Home-Meetup gespeichert: Name=${meetup.city}");
 
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
