@@ -1,31 +1,30 @@
 // ============================================
 // UNIT TESTS: MeetupBadge Model
 // ============================================
-// Testet das Badge-Datenmodell:
-//   - Serialisierung (toJson / fromJson Roundtrip)
-//   - Kryptographische Eigenschaften (hasCryptoProof, isNostrSigned)
-//   - Claim-Binding (isClaimed, isFullyBound)
-//   - Badge-Proof-Hash (deterministisch, datenschutzkonform)
-//   - Reputations-Statistiken
-//   - withClaim() Builder
-// ============================================
 
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto/crypto.dart';
 import 'package:einundzwanzig_meetup_app/models/badge.dart';
 
-void main() {
-  // =============================================
-  // TEST FIXTURES
-  // =============================================
+// Dart erlaubt 'a' * 128 nicht in const/default-Kontexten.
+// Daher vorgefertigte Test-Konstanten:
+const _sig128 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const _pub64 = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const _sigId64 = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+const _claimSig128 = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+const _claimPub64 = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+const _xSig128 = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+const _yId64 = 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy';
+const _zPub64 = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
 
+void main() {
   MeetupBadge _fullBadge({
     String id = 'badge-001',
     String meetupName = 'Aschaffenburg',
     int sigVersion = 2,
-    String sig = '',
-    String adminPubkey = '',
+    String sig = _sig128,
+    String adminPubkey = _pub64,
     String claimSig = '',
     String claimPubkey = '',
     int claimTimestamp = 0,
@@ -40,9 +39,9 @@ void main() {
       signerNpub: 'npub1testadmin',
       meetupEventId: 'aschaffenburg-2025-03-15',
       delivery: 'nfc',
-      sig: sig.isNotEmpty ? sig : 'a' * 128,
-      sigId: 'c' * 64,
-      adminPubkey: adminPubkey.isNotEmpty ? adminPubkey : 'b' * 64,
+      sig: sig,
+      sigId: _sigId64,
+      adminPubkey: adminPubkey,
       sigVersion: sigVersion,
       sigContent: '{"v":2,"t":"B","m":"aschaffenburg-de"}',
       claimSig: claimSig,
@@ -59,18 +58,14 @@ void main() {
     return _fullBadge(
       id: id,
       meetupName: meetupName,
-      claimSig: 'd' * 128,
-      claimPubkey: 'e' * 64,
+      claimSig: _claimSig128,
+      claimPubkey: _claimPub64,
       claimTimestamp: 1700000000,
     );
   }
 
-  // =============================================
-  // SERIALISIERUNG
-  // =============================================
-
   group('toJson / fromJson Roundtrip', () {
-    test('vollständiges Badge überlebt Roundtrip', () {
+    test('vollstaendiges Badge ueberlebt Roundtrip', () {
       final original = _claimedBadge();
       final json = original.toJson();
       final restored = MeetupBadge.fromJson(json);
@@ -95,18 +90,16 @@ void main() {
         'meetupName': 'Test',
         'date': '2025-01-01T00:00:00.000Z',
         'iconPath': '',
-        // Keine sig, claim, etc. → Defaults
       };
       final badge = MeetupBadge.fromJson(json);
-      
       expect(badge.id, 'old-badge');
       expect(badge.sig, isEmpty);
       expect(badge.sigVersion, 0);
       expect(badge.claimSig, isEmpty);
-      expect(badge.delivery, 'nfc'); // Default
+      expect(badge.delivery, 'nfc');
     });
 
-    test('JSON-Encode produziert gültiges JSON', () {
+    test('JSON-Encode produziert gueltiges JSON', () {
       final badge = _fullBadge();
       final jsonStr = jsonEncode(badge.toJson());
       final decoded = jsonDecode(jsonStr) as Map<String, dynamic>;
@@ -114,85 +107,62 @@ void main() {
     });
   });
 
-  // =============================================
-  // KRYPTOGRAPHISCHE EIGENSCHAFTEN
-  // =============================================
-
   group('Kryptographische Properties', () {
-    test('hasCryptoProof: v2 mit Signatur → true', () {
-      final badge = _fullBadge(sigVersion: 2);
-      expect(badge.hasCryptoProof, isTrue);
+    test('hasCryptoProof: v2 mit Signatur true', () {
+      expect(_fullBadge(sigVersion: 2).hasCryptoProof, isTrue);
     });
 
-    test('hasCryptoProof: v0 ohne Signatur → false', () {
-      final badge = _fullBadge(sigVersion: 0, sig: '');
-      expect(badge.hasCryptoProof, isFalse);
+    test('hasCryptoProof: v0 ohne Signatur false', () {
+      expect(_fullBadge(sigVersion: 0, sig: '').hasCryptoProof, isFalse);
     });
 
-    test('hasCryptoProof: v1 Legacy → true (hat sig)', () {
-      final badge = _fullBadge(sigVersion: 1);
-      expect(badge.hasCryptoProof, isTrue);
+    test('hasCryptoProof: v1 Legacy true (hat sig)', () {
+      expect(_fullBadge(sigVersion: 1).hasCryptoProof, isTrue);
     });
 
-    test('isNostrSigned: v2 + 128-Char-Sig + Pubkey → true', () {
-      final badge = _fullBadge(sigVersion: 2);
-      expect(badge.isNostrSigned, isTrue);
+    test('isNostrSigned: v2 + 128-Char-Sig + Pubkey true', () {
+      expect(_fullBadge(sigVersion: 2).isNostrSigned, isTrue);
     });
 
-    test('isNostrSigned: v1 → false', () {
-      final badge = _fullBadge(sigVersion: 1);
-      expect(badge.isNostrSigned, isFalse);
+    test('isNostrSigned: v1 false', () {
+      expect(_fullBadge(sigVersion: 1).isNostrSigned, isFalse);
     });
 
-    test('isNostrSigned: v2 aber leere Signatur → false', () {
-      final badge = _fullBadge(sigVersion: 2, sig: '');
-      expect(badge.isNostrSigned, isFalse);
+    test('isNostrSigned: v2 aber leere Signatur false', () {
+      expect(_fullBadge(sigVersion: 2, sig: '').isNostrSigned, isFalse);
     });
 
-    test('isNostrSigned: v2 mit zu kurzer Signatur → false', () {
-      final badge = _fullBadge(sigVersion: 2, sig: 'a' * 64);
-      expect(badge.isNostrSigned, isFalse);
+    test('isNostrSigned: v2 mit zu kurzer Signatur false', () {
+      expect(_fullBadge(sigVersion: 2, sig: _pub64).isNostrSigned, isFalse);
     });
   });
 
-  // =============================================
-  // CLAIM-BINDING
-  // =============================================
-
   group('Claim-Binding', () {
-    test('isClaimed: mit claimSig + claimPubkey → true', () {
-      final badge = _claimedBadge();
-      expect(badge.isClaimed, isTrue);
+    test('isClaimed: mit claimSig + claimPubkey true', () {
+      expect(_claimedBadge().isClaimed, isTrue);
     });
 
-    test('isClaimed: ohne Claim → false', () {
-      final badge = _fullBadge();
-      expect(badge.isClaimed, isFalse);
+    test('isClaimed: ohne Claim false', () {
+      expect(_fullBadge().isClaimed, isFalse);
     });
 
-    test('isFullyBound: Signatur + Claim → true', () {
-      final badge = _claimedBadge();
-      expect(badge.isFullyBound, isTrue);
+    test('isFullyBound: Signatur + Claim true', () {
+      expect(_claimedBadge().isFullyBound, isTrue);
     });
 
-    test('isFullyBound: Signatur ohne Claim → false', () {
-      final badge = _fullBadge();
-      expect(badge.isFullyBound, isFalse);
+    test('isFullyBound: Signatur ohne Claim false', () {
+      expect(_fullBadge().isFullyBound, isFalse);
     });
 
-    test('isFullyBound: Claim ohne Signatur → false', () {
+    test('isFullyBound: Claim ohne Signatur false', () {
       final badge = MeetupBadge(
         id: 'test', meetupName: 'Test', date: DateTime.now(), iconPath: '',
         sigVersion: 0, sig: '', adminPubkey: '',
-        claimSig: 'd' * 128, claimPubkey: 'e' * 64,
+        claimSig: _claimSig128, claimPubkey: _claimPub64,
       );
       expect(badge.isFullyBound, isFalse);
     });
   });
-
-  // =============================================
-  // withClaim() BUILDER
-  // =============================================
 
   group('withClaim', () {
     test('erzeugt neues Badge mit Claim-Daten', () {
@@ -200,26 +170,24 @@ void main() {
       expect(original.isClaimed, isFalse);
 
       final claimed = original.withClaim(
-        claimSig: 'x' * 128,
-        claimEventId: 'y' * 64,
-        claimPubkey: 'z' * 64,
+        claimSig: _xSig128,
+        claimEventId: _yId64,
+        claimPubkey: _zPub64,
         claimTimestamp: 1700000000,
       );
 
       expect(claimed.isClaimed, isTrue);
-      expect(claimed.claimSig, 'x' * 128);
-      expect(claimed.claimPubkey, 'z' * 64);
-      // Original bleibt unverändert
+      expect(claimed.claimSig, _xSig128);
+      expect(claimed.claimPubkey, _zPub64);
       expect(original.isClaimed, isFalse);
     });
 
-    test('behält Original-Daten bei', () {
+    test('behaelt Original-Daten bei', () {
       final original = _fullBadge();
       final claimed = original.withClaim(
-        claimSig: 'x' * 128, claimEventId: 'y' * 64,
-        claimPubkey: 'z' * 64, claimTimestamp: 1700000000,
+        claimSig: _xSig128, claimEventId: _yId64,
+        claimPubkey: _zPub64, claimTimestamp: 1700000000,
       );
-
       expect(claimed.id, original.id);
       expect(claimed.meetupName, original.meetupName);
       expect(claimed.sig, original.sig);
@@ -227,32 +195,26 @@ void main() {
     });
 
     test('retroactive Flag wird gesetzt', () {
-      final original = _fullBadge();
-      final claimed = original.withClaim(
-        claimSig: 'x' * 128, claimEventId: 'y' * 64,
-        claimPubkey: 'z' * 64, claimTimestamp: 1700000000,
+      final claimed = _fullBadge().withClaim(
+        claimSig: _xSig128, claimEventId: _yId64,
+        claimPubkey: _zPub64, claimTimestamp: 1700000000,
         isRetroactive: true,
       );
       expect(claimed.isRetroactive, isTrue);
     });
   });
 
-  // =============================================
-  // PROOF-IDs
-  // =============================================
-
   group('proofId', () {
     test('nutzt sigId wenn vorhanden', () {
-      final badge = _fullBadge();
-      expect(badge.proofId, 'c' * 64); // sigId
+      expect(_fullBadge().proofId, _sigId64);
     });
 
     test('nutzt sig-Prefix als Fallback', () {
       final badge = MeetupBadge(
         id: 'test', meetupName: 'Test', date: DateTime.now(), iconPath: '',
-        sig: 'abcd' * 32, sigId: '', sigVersion: 2, adminPubkey: 'b' * 64,
+        sig: _sig128, sigId: '', sigVersion: 2, adminPubkey: _pub64,
       );
-      expect(badge.proofId, ('abcd' * 32).substring(0, 64));
+      expect(badge.proofId, _sig128.substring(0, 64));
     });
 
     test('generiert SHA-256 Hash als letzten Fallback', () {
@@ -260,7 +222,6 @@ void main() {
         id: 'test', meetupName: 'Test', date: DateTime.utc(2025), iconPath: '',
         sig: '', sigId: '', sigVersion: 0,
       );
-      // Sollte ein deterministischer 64-Zeichen-Hash sein
       expect(badge.proofId.length, 64);
       expect(RegExp(r'^[0-9a-f]+$').hasMatch(badge.proofId), isTrue);
     });
@@ -274,118 +235,94 @@ void main() {
     });
 
     test('ungeclaimtes Badge hat leere claimProofId', () {
-      final badge = _fullBadge();
-      expect(badge.claimProofId, isEmpty);
+      expect(_fullBadge().claimProofId, isEmpty);
     });
 
     test('claimProofId ist deterministisch', () {
-      final a = _claimedBadge();
-      final b = _claimedBadge();
-      expect(a.claimProofId, b.claimProofId);
+      expect(_claimedBadge().claimProofId, _claimedBadge().claimProofId);
     });
   });
 
-  // =============================================
-  // BADGE-PROOF HASH
-  // =============================================
-
   group('Badge-Proof Hashes', () {
     test('generateBadgeProof: deterministisch', () {
-      final badges = [
-        _fullBadge(id: '1'),
-        _fullBadge(id: '2'),
-      ];
+      final badges = [_fullBadge(id: '1'), _fullBadge(id: '2')];
       final a = MeetupBadge.generateBadgeProof(badges);
       final b = MeetupBadge.generateBadgeProof(badges);
       expect(a, b);
-      expect(a.length, 64); // SHA-256
+      expect(a.length, 64);
     });
 
-    test('generateBadgeProof: leere Liste → leerer String', () {
+    test('generateBadgeProof: leere Liste leer', () {
       expect(MeetupBadge.generateBadgeProof([]), isEmpty);
     });
 
-    test('generateBadgeProof: Reihenfolge wird sortiert (deterministisch)', () {
+    test('generateBadgeProof: Reihenfolge wird sortiert', () {
       final b1 = _fullBadge(id: '1');
       final b2 = _fullBadge(id: '2');
-      final a = MeetupBadge.generateBadgeProof([b1, b2]);
-      final b = MeetupBadge.generateBadgeProof([b2, b1]);
-      expect(a, b); // Sortiert nach Datum
+      expect(
+        MeetupBadge.generateBadgeProof([b1, b2]),
+        MeetupBadge.generateBadgeProof([b2, b1]),
+      );
     });
 
-    test('verifyBadgeProof: korrekt → true', () {
+    test('verifyBadgeProof: korrekt true', () {
       final badges = [_fullBadge(id: '1'), _fullBadge(id: '2')];
       final proof = MeetupBadge.generateBadgeProof(badges);
       expect(MeetupBadge.verifyBadgeProof(badges, proof), isTrue);
     });
 
-    test('verifyBadgeProof: manipuliert → false', () {
-      final badges = [_fullBadge(id: '1')];
-      expect(MeetupBadge.verifyBadgeProof(badges, 'fake_proof'), isFalse);
+    test('verifyBadgeProof: manipuliert false', () {
+      expect(MeetupBadge.verifyBadgeProof([_fullBadge(id: '1')], 'fake'), isFalse);
     });
 
     test('generateBadgeProofV2: nur gebundene Badges', () {
       final badges = [
-        _claimedBadge(id: '1'),     // Gebunden
-        _fullBadge(id: '2'),         // NICHT gebunden
-        _claimedBadge(id: '3'),     // Gebunden
+        _claimedBadge(id: '1'),
+        _fullBadge(id: '2'),
+        _claimedBadge(id: '3'),
       ];
       final proof = MeetupBadge.generateBadgeProofV2(badges);
       expect(proof, isNotEmpty);
       expect(proof.length, 64);
     });
 
-    test('generateBadgeProofV2: keine gebundenen Badges → leer', () {
-      final badges = [_fullBadge(id: '1'), _fullBadge(id: '2')];
-      expect(MeetupBadge.generateBadgeProofV2(badges), isEmpty);
+    test('generateBadgeProofV2: keine gebundenen leer', () {
+      expect(MeetupBadge.generateBadgeProofV2([_fullBadge(id: '1')]), isEmpty);
     });
   });
 
-  // =============================================
-  // REPUTATIONS-STATISTIKEN
-  // =============================================
-
   group('Reputations-Statistiken', () {
-    test('getReputationStats: korrekte Zählung', () {
+    test('getReputationStats: korrekte Zaehlung', () {
       final badges = [
-        _claimedBadge(id: '1'),                    // fully bound
-        _fullBadge(id: '2'),                        // crypto proof, not claimed
-        _claimedBadge(id: '3'),                    // fully bound
-        MeetupBadge(
-          id: '4', meetupName: 'X', date: DateTime.now(),
-          iconPath: '', sigVersion: 0,              // no proof
-        ),
+        _claimedBadge(id: '1'),
+        _fullBadge(id: '2'),
+        _claimedBadge(id: '3'),
+        MeetupBadge(id: '4', meetupName: 'X', date: DateTime.now(), iconPath: '', sigVersion: 0),
       ];
-
       final stats = MeetupBadge.getReputationStats(badges);
       expect(stats['total'], 4);
-      expect(stats['crypto_proof'], 3); // Badge 1, 2, 3
-      expect(stats['claimed'], 2);      // Badge 1, 3
+      expect(stats['crypto_proof'], 3);
+      expect(stats['claimed'], 2);
       expect(stats['fully_trusted'], 2);
       expect(stats['retroactive'], 0);
     });
 
     test('countVerifiedBadges', () {
       final badges = [
-        _fullBadge(id: '1', sigVersion: 2),    // verified
-        _fullBadge(id: '2', sigVersion: 0, sig: ''), // not verified
-        _fullBadge(id: '3', sigVersion: 1),    // verified (has sig)
+        _fullBadge(id: '1', sigVersion: 2),
+        _fullBadge(id: '2', sigVersion: 0, sig: ''),
+        _fullBadge(id: '3', sigVersion: 1),
       ];
       expect(MeetupBadge.countVerifiedBadges(badges), 2);
     });
 
-    test('retroactive Badges werden separat gezählt', () {
+    test('retroactive Badges werden separat gezaehlt', () {
       final badges = [
-        _fullBadge(
-          id: '1',
-          claimSig: 'd' * 128,
-          claimPubkey: 'e' * 64,
-          claimTimestamp: 1700000000,
-        ),
+        _fullBadge(id: '1', claimSig: _claimSig128, claimPubkey: _claimPub64, claimTimestamp: 1700000000),
         MeetupBadge(
           id: '2', meetupName: 'Test', date: DateTime.now(), iconPath: '',
-          sig: 'a' * 128, sigId: 'c' * 64, adminPubkey: 'b' * 64, sigVersion: 2,
-          claimSig: 'd' * 128, claimPubkey: 'e' * 64, claimTimestamp: 1700000000,
+          sig: _sig128, sigId: _sigId64, adminPubkey: _pub64, sigVersion: 2,
+          claimSig: _claimSig128, claimPubkey: _claimPub64, claimTimestamp: 1700000000,
           isRetroactive: true,
         ),
       ];

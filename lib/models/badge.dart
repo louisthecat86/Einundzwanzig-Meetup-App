@@ -81,7 +81,21 @@ class MeetupBadge {
   bool get hasCryptoProof => sig.isNotEmpty && sigVersion > 0;
 
   /// Ist dieses Badge Nostr-signiert (v2)?
-  bool get isNostrSigned => sigVersion == 2 && sig.length == 128 && adminPubkey.isNotEmpty;
+  bool get isNostrSigned {
+  final hex128 = RegExp(r'^[0-9a-fA-F]{128}$');
+  final hex64 = RegExp(r'^[0-9a-fA-F]{64}$');
+
+  if (sigVersion != 2) return false;
+
+  if (!hex128.hasMatch(sig)) return false;
+  if (!hex64.hasMatch(adminPubkey)) return false;
+
+  // zusätzliche Sicherheitsprüfung:
+  // keine reine Null- oder Dummy-Signatur akzeptieren
+  if (BigInt.parse(sig, radix: 16) == BigInt.zero) return false;
+
+  return true;
+}
 
   /// Hat dieses Badge ein Claim-Binding?
   bool get isClaimed => claimSig.isNotEmpty && claimPubkey.isNotEmpty;
