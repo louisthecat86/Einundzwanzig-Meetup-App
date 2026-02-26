@@ -33,6 +33,7 @@ import '../services/platform_proof_service.dart';
 import '../services/humanity_proof_service.dart';
 import '../services/nip05_service.dart';
 import '../services/app_logger.dart';
+import '../services/device_integrity_service.dart';  // Security Audit M5
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -57,6 +58,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   MeetupSession? _activeSession;
   Timer? _sessionTimer;
   String _sessionTimeLeft = '';
+
+  // Security Audit M5: Device Integrity
+  bool _deviceCompromised = false;
   
   @override
   void initState() {
@@ -96,6 +100,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _checkActiveSession();
     // Organic Admins von Nostr laden und verifizieren
     _syncOrganicAdminsInBackground();
+    // Security Audit M5: Root/Jailbreak-Prüfung
+    _checkDeviceIntegrity();
   }
 
   void _loadIdentityData() async {
@@ -170,6 +176,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (e) {
       // Stilles Scheitern — kein Netzwerk ist OK
+    }
+  }
+
+  // Security Audit M5: Root/Jailbreak-Warnung
+  void _checkDeviceIntegrity() async {
+    try {
+      final report = await DeviceIntegrityService.check();
+      if (report.isCompromised && mounted) {
+        setState(() => _deviceCompromised = true);
+        AppLogger.security('Dashboard',
+            'Gerät möglicherweise kompromittiert: ${report.findings.length} Befunde');
+      }
+    } catch (_) {
+      // Integritätsprüfung darf App nicht crashen
     }
   }
 
@@ -630,6 +650,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 32),
+
+            // Security Audit M5: Root/Jailbreak-Warnung
+            if (_deviceCompromised) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        DeviceIntegrityService.warningMessage,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.orange.shade200,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // ===== HOME MEETUP =====
             _buildHomeMeetupCard(),

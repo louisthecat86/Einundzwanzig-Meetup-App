@@ -17,8 +17,12 @@
 // ============================================
 
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:crypto/crypto.dart';
+import 'package:encrypt/encrypt.dart' as enc;
+import '../services/app_logger.dart';
 
 class MeetupBadge {
   final String id;
@@ -188,26 +192,109 @@ class MeetupBadge {
   }
 
   // =============================================
-  // PERSISTENZ
+  // PERSISTENZ — Verschlüsselt (Security Audit M7)
   // =============================================
+  // Badge-Daten werden mit AES-256-GCM verschlüsselt,
+  // bevor sie in SharedPreferences geschrieben werden.
+  // Der Schlüssel liegt in flutter_secure_storage
+  // (Android Keystore / iOS Keychain geschützt).
+  //
+  // Migration: Beim ersten Laden werden unverschlüsselte
+  // Legacy-Badges automatisch verschlüsselt gespeichert.
+  // =============================================
+
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
+  static const String _badgeKeyAlias = 'badge_encryption_key';
+  static const String _prefsBadgeEncrypted = 'badges_encrypted';
+  static const String _prefsLegacyBadges = 'badges'; // Altes Klartext-Feld
+
+  /// AES-256-Schlüssel aus SecureStorage laden oder erzeugen
+  static Future<enc.Key> _getBadgeKey() async {
+    final existing = await _secureStorage.read(key: _badgeKeyAlias);
+    if (existing != null && existing.length == 64) {
+      // Hex-encoded 32-byte key
+      return enc.Key(Uint8List.fromList(
+        List.generate(32, (i) => int.parse(existing.substring(i * 2, i * 2 + 2), radix: 16)),
+      ));
+    }
+    // Neuen Schlüssel generieren (256 Bit)
+    final key = enc.Key.fromSecureRandom(32);
+    final keyHex = key.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    await _secureStorage.write(key: _badgeKeyAlias, value: keyHex);
+    AppLogger.debug('Badge', 'Neuer Badge-Encryption-Key generiert');
+    return key;
+  }
 
   static Future<void> saveBadges(List<MeetupBadge> badges) async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String> badgesJson = badges.map((b) => jsonEncode(b.toJson())).toList();
-    await prefs.setStringList('badges', badgesJson);
+    final jsonStr = jsonEncode(badges.map((b) => b.toJson()).toList());
+
+    try {
+      final key = await _getBadgeKey();
+      final iv = enc.IV.fromSecureRandom(12); // 96 Bit (NIST-empfohlen)
+      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+      final encrypted = encrypter.encrypt(jsonStr, iv: iv);
+
+      // Format: base64(IV):base64(ciphertext)
+      final stored = '${iv.base64}:${encrypted.base64}';
+      await prefs.setString(_prefsBadgeEncrypted, stored);
+
+      // Legacy-Klartext entfernen falls vorhanden
+      if (prefs.containsKey(_prefsLegacyBadges)) {
+        await prefs.remove(_prefsLegacyBadges);
+        AppLogger.debug('Badge', 'Legacy-Klartextbadges aus SharedPrefs entfernt');
+      }
+    } catch (e) {
+      // Fallback: Klartext (sollte nicht passieren, aber App darf nicht crashen)
+      AppLogger.error('Badge', 'Verschlüsselung fehlgeschlagen, Klartext-Fallback: $e');
+      final List<String> badgesJson = badges.map((b) => jsonEncode(b.toJson())).toList();
+      await prefs.setStringList(_prefsLegacyBadges, badgesJson);
+    }
   }
 
   static Future<List<MeetupBadge>> loadBadges() async {
     final prefs = await SharedPreferences.getInstance();
-    final List<String>? badgesJson = prefs.getStringList('badges');
-    
-    if (badgesJson == null || badgesJson.isEmpty) {
-      return [];
+
+    // 1. Verschlüsselte Badges versuchen
+    final encryptedData = prefs.getString(_prefsBadgeEncrypted);
+    if (encryptedData != null && encryptedData.contains(':')) {
+      try {
+        final parts = encryptedData.split(':');
+        if (parts.length == 2) {
+          final iv = enc.IV.fromBase64(parts[0]);
+          final key = await _getBadgeKey();
+          final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.gcm));
+          final decrypted = encrypter.decrypt64(parts[1], iv: iv);
+          final List<dynamic> decoded = jsonDecode(decrypted) as List<dynamic>;
+          return decoded.map((json) =>
+            MeetupBadge.fromJson(json as Map<String, dynamic>)
+          ).toList();
+        }
+      } catch (e) {
+        AppLogger.error('Badge', 'Entschlüsselung fehlgeschlagen: $e');
+        // Weiter mit Legacy-Versuch
+      }
     }
-    
-    return badgesJson.map((String json) {
-      return MeetupBadge.fromJson(jsonDecode(json) as Map<String, dynamic>);
-    }).toList();
+
+    // 2. Legacy-Klartext migrieren
+    final List<String>? legacyJson = prefs.getStringList(_prefsLegacyBadges);
+    if (legacyJson != null && legacyJson.isNotEmpty) {
+      AppLogger.debug('Badge', 'Migriere ${legacyJson.length} Badges von Klartext zu verschlüsselt');
+      final badges = legacyJson.map((String json) =>
+        MeetupBadge.fromJson(jsonDecode(json) as Map<String, dynamic>)
+      ).toList();
+
+      // Sofort verschlüsselt speichern (Migration)
+      await saveBadges(badges);
+      return badges;
+    }
+
+    return [];
   }
 
   // =============================================
