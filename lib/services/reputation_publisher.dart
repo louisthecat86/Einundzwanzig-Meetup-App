@@ -25,6 +25,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
@@ -395,7 +396,10 @@ class ReputationPublisher {
       ws = await WebSocket.connect(relayUrl)
           .timeout(RelayConfig.relayTimeout);
       final completer = Completer<ReputationEvent?>();
-      final subscriptionId = 'rep-fetch-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subscriptionId = 'rep-fetch-$subIdHex';
 
       ws.listen(
         (data) {

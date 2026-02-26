@@ -33,6 +33,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:nostr/nostr.dart';
 import '../models/badge.dart';
 import 'secure_key_store.dart';
@@ -333,7 +334,10 @@ class PromotionClaimService {
 
       final completer = Completer<List<_RawClaim>>();
       final claims = <_RawClaim>[];
-      final subscriptionId = 'organic-claims-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subscriptionId = 'organic-claims-$subIdHex';
 
       ws.listen(
         (data) {

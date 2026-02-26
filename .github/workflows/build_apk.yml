@@ -42,9 +42,9 @@ jobs:
         flutter clean
         flutter pub get
 
-    # 6. Bauen
+    # 6. Bauen (Security Audit M3: Obfuscation aktiviert)
     - name: Build APK
-      run: flutter build apk --release
+      run: flutter build apk --release --obfuscate --split-debug-info=build/debug-info
 
     # 7. Hochladen
     - name: Upload APK
@@ -52,3 +52,10 @@ jobs:
       with:
         name: einundzwanzig-app-release
         path: build/app/outputs/flutter-apk/app-release.apk
+
+    # 8. Debug-Symbole sichern (für Crash-Analyse)
+    - name: Upload Debug Symbols
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-symbols
+        path: build/debug-info/

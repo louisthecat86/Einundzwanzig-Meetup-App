@@ -25,6 +25,7 @@ import 'package:nostr/nostr.dart';
 import 'relay_config.dart';
 import 'secure_key_store.dart';
 import 'admin_registry.dart';
+import 'dart:math';
 
 class SocialGraphService {
   // Cache-Keys
@@ -87,7 +88,10 @@ class SocialGraphService {
     try {
       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
       final completer = Completer<Set<String>>();
-      final subId = 'contacts-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subId = 'contacts-$subIdHex';
       Set<String> follows = {};
 
       ws.listen(

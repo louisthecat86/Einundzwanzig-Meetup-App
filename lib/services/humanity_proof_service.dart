@@ -45,6 +45,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'relay_config.dart';
 import 'secure_key_store.dart';
+import 'dart:math';
 
 class HumanityProofService {
   // Cache-Keys
@@ -183,8 +184,12 @@ class HumanityProofService {
     try {
       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
       final completer = Completer<_ZapSearchResult?>();
-      final subId1 = 'zap-recv-${DateTime.now().millisecondsSinceEpoch}';
-      final subId2 = 'zap-sent-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-IDs
+      final random = Random.secure();
+      final hex1 = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final hex2 = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subId1 = 'zap-recv-$hex1';
+      final subId2 = 'zap-sent-$hex2';
       _ZapSearchResult? found;
       int eoseCount = 0;
 
@@ -345,7 +350,10 @@ class HumanityProofService {
     try {
       ws = await WebSocket.connect(relayUrl).timeout(RelayConfig.relayTimeout);
       final completer = Completer<bool>();
-      final subId = 'verify-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subId = 'verify-$subIdHex';
 
       ws.listen(
         (data) {

@@ -22,6 +22,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'nostr_service.dart';
@@ -305,7 +306,10 @@ class AdminRegistry {
     try {
       ws = await WebSocket.connect(relayUrl).timeout(_relayTimeout);
       final completer = Completer<List<AdminEntry>?>();
-      final subscriptionId = 'admin-list-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subscriptionId = 'admin-list-$subIdHex';
 
       ws.listen(
         (data) {

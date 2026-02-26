@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:nostr/nostr.dart';
 import 'secure_key_store.dart';
+import 'dart:math';
 
 class Nip05Service {
   static const Duration _timeout = Duration(seconds: 5);
@@ -137,7 +138,10 @@ class Nip05Service {
     try {
       ws = await WebSocket.connect(relayUrl).timeout(_timeout);
       final completer = Completer<String?>();
-      final subId = 'nip05-${DateTime.now().millisecondsSinceEpoch}';
+      // Security Audit M4: Kryptographisch sichere Subscription-ID
+      final random = Random.secure();
+      final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final subId = 'nip05-$subIdHex';
 
       ws.listen(
         (data) {
