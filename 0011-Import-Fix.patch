@@ -1,0 +1,42 @@
+From 04d554a06a92661b6a4d1c5d33e9178b7e8cb624 Mon Sep 17 00:00:00 2001
+From: SecurityAudit <audit@einundzwanzig.space>
+Date: Fri, 27 Feb 2026 08:49:21 +0000
+Subject: [PATCH] Fix: Fehlende Imports (NostrService, AppLogger)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Build-Fehler aus 0010-Security-Audit-2.patch:
+- backup_service.dart: NostrService.isValidNpub() benötigt import nostr_service.dart
+- humanity_proof_service.dart: AppLogger benötigt import app_logger.dart
+---
+ lib/services/backup_service.dart         | 1 +
+ lib/services/humanity_proof_service.dart | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/lib/services/backup_service.dart b/lib/services/backup_service.dart
+index 2a1c4de..87099f4 100644
+--- a/lib/services/backup_service.dart
++++ b/lib/services/backup_service.dart
+@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // NEU: Für Humani
+ import '../models/user.dart';
+ import '../models/badge.dart';
+ import 'admin_registry.dart';
++import 'nostr_service.dart';
+ import 'secure_key_store.dart';
+ import 'platform_proof_service.dart'; // NEU
+ import 'humanity_proof_service.dart'; // NEU
+diff --git a/lib/services/humanity_proof_service.dart b/lib/services/humanity_proof_service.dart
+index 230173e..8321f69 100644
+--- a/lib/services/humanity_proof_service.dart
++++ b/lib/services/humanity_proof_service.dart
+@@ -45,6 +45,7 @@ import 'package:shared_preferences/shared_preferences.dart';
+ import 'package:nostr/nostr.dart';
+ import 'relay_config.dart';
+ import 'secure_key_store.dart';
++import 'app_logger.dart';
+ import 'dart:math';
+ 
+ class HumanityProofService {
+-- 
+2.43.0
