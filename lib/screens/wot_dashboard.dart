@@ -17,7 +17,6 @@ import '../theme.dart';
 import '../services/vouching_service.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
-import 'dart:math';
 
 class WotDashboardScreen extends StatefulWidget {
   const WotDashboardScreen({super.key});
@@ -60,7 +59,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
 
     try {
       _myNpub = await NostrService.getNpub();
-      _myVouches = await AdminRegistry.getAdminList();
+      _myVouches = await AdminRegistry.getMyVouches();
 
       // Konsens parallel laden
       try {
@@ -80,7 +79,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
     setState(() => _isRefreshing = true);
     try {
       _consensus = await VouchingService.calculateConsensus(forceRefresh: true);
-      _myVouches = await AdminRegistry.getAdminList();
+      _myVouches = await AdminRegistry.getMyVouches();
       _statusMessage = '';
     } catch (e) {
       _statusMessage = 'Sync fehlgeschlagen: $e';
@@ -598,6 +597,25 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
   // =============================================
 
   Widget _buildVouchingTab() {
+    // Wer bürgt für MICH? (aus Konsens-Daten)
+    final myStatus = _consensus?.allAdmins
+        .where((a) => a.npub == _myNpub)
+        .firstOrNull;
+    final myVouchers = myStatus?.vouchers ?? [];
+
+    // Liability: Bürge ich für problematische npubs?
+    final suspendedNpubs = _myVouches.where((v) {
+      final status = _consensus?.allAdmins
+          .where((a) => a.npub == v.npub).firstOrNull;
+      return status?.isSuspended ?? false;
+    }).toList();
+
+    final warnedNpubs = _myVouches.where((v) {
+      final status = _consensus?.allAdmins
+          .where((a) => a.npub == v.npub).firstOrNull;
+      return (status?.distrustCount ?? 0) > 0 && !(status?.isSuspended ?? false);
+    }).toList();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -606,18 +624,40 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
           icon: Icons.shield,
           color: cPurple,
           title: 'DEINE BÜRGSCHAFTEN',
-          body: 'Du bürgst für ${_myVouches.length} Organisator${_myVouches.length != 1 ? "en" : ""}. '
+          body: 'Hier siehst du, für wen DU bürgst. '
               'Jede Bürgschaft ist dein persönliches Vertrauens-Votum — '
               'nach dem Publishen sieht das gesamte Netzwerk, für wen du stehst.',
         ),
         const SizedBox(height: 16),
 
+        // Liability-Warnung
+        if (suspendedNpubs.isNotEmpty)
+          _buildLiabilityWarning(
+            icon: Icons.error,
+            color: cRed,
+            title: 'HAFTUNG: ${suspendedNpubs.length} suspendiert',
+            body: 'Du bürgst für ${suspendedNpubs.map((v) =>
+                v.name.isNotEmpty ? v.name : NostrService.shortenNpub(v.npub, chars: 6)
+            ).join(", ")} — ${suspendedNpubs.length == 1 ? "dieser npub ist" : "diese npubs sind"} '
+                'durch das Netzwerk suspendiert. Überprüfe deine Bürgschaften.',
+          ),
+        if (warnedNpubs.isNotEmpty)
+          _buildLiabilityWarning(
+            icon: Icons.warning_amber,
+            color: Colors.orange,
+            title: 'WARNUNG: ${warnedNpubs.length} gemeldet',
+            body: 'Für ${warnedNpubs.map((v) =>
+                v.name.isNotEmpty ? v.name : NostrService.shortenNpub(v.npub, chars: 6)
+            ).join(", ")} gibt es Meldungen. '
+                'Noch nicht suspendiert, aber du solltest aufpassen.',
+          ),
+
         // Publish-Button
         _buildPublishButton(),
         const SizedBox(height: 24),
 
-        // Vouching-Liste
-        _buildSectionHeader('FÜR WEN DU BÜRGST', Icons.people),
+        // FÜR WEN DU BÜRGST
+        _buildSectionHeader('FÜR WEN DU BÜRGST', Icons.how_to_vote),
         const SizedBox(height: 12),
 
         if (_myVouches.isEmpty)
@@ -629,8 +669,107 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
         else
           ..._myVouches.map(_buildVouchEntry),
 
+        const SizedBox(height: 24),
+
+        // WER BÜRGT FÜR DICH
+        _buildSectionHeader('WER BÜRGT FÜR DICH', Icons.verified_user, color: cCyan),
+        const SizedBox(height: 12),
+
+        if (myVouchers.isEmpty)
+          _buildEmptyState(
+            icon: Icons.person_search,
+            title: 'Noch keine Bürgen',
+            subtitle: 'Bitte andere Organisatoren, für dich zu bürgen.\n'
+                'Dein npub: ${_myNpub != null ? NostrService.shortenNpub(_myNpub!, chars: 10) : "?"}',
+            color: cCyan,
+          )
+        else
+          ...myVouchers.map((voucher) => _buildVoucherEntry(voucher)),
+
         const SizedBox(height: 80),
       ],
+    );
+  }
+
+  Widget _buildLiabilityWarning({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String body,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: color, fontWeight: FontWeight.w700,
+                    fontSize: 11, letterSpacing: 0.3)),
+                const SizedBox(height: 4),
+                Text(body, style: TextStyle(color: cTextSecondary, fontSize: 11, height: 1.4)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoucherEntry(String voucherNpub) {
+    final isMe = voucherNpub == _myNpub;
+    // Finde Name/Meetup aus Konsens-Daten
+    final voucherStatus = _consensus?.allAdmins
+        .where((a) => a.npub == voucherNpub).firstOrNull;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: cCyan.withOpacity(0.15)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: cCyan.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(Icons.verified, color: cCyan, size: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  voucherStatus?.name.isNotEmpty == true
+                      ? voucherStatus!.name
+                      : NostrService.shortenNpub(voucherNpub, chars: 10),
+                  style: TextStyle(color: Colors.white, fontSize: 13,
+                      fontWeight: FontWeight.w500),
+                ),
+                if (voucherStatus?.meetup.isNotEmpty == true)
+                  Text(voucherStatus!.meetup, style: TextStyle(color: cOrange,
+                      fontSize: 10, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -662,26 +801,57 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
   }
 
   Widget _buildVouchEntry(AdminEntry admin) {
+    // Prüfe ob dieser npub Probleme hat
+    final status = _consensus?.allAdmins
+        .where((a) => a.npub == admin.npub).firstOrNull;
+    final isSuspended = status?.isSuspended ?? false;
+    final hasWarnings = (status?.distrustCount ?? 0) > 0;
+    final borderColor = isSuspended ? cRed : (hasWarnings ? Colors.orange : cBorder);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: cCard,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cBorder),
+        border: Border.all(color: borderColor.withOpacity(isSuspended || hasWarnings ? 0.5 : 1.0)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: cPurple.withOpacity(0.12),
+            color: (isSuspended ? cRed : cPurple).withOpacity(0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.verified_user, color: cPurple, size: 22),
+          child: Icon(
+            isSuspended ? Icons.block : (hasWarnings ? Icons.warning_amber : Icons.verified_user),
+            color: isSuspended ? cRed : (hasWarnings ? Colors.orange : cPurple),
+            size: 22,
+          ),
         ),
-        title: Text(
-          admin.name.isNotEmpty ? admin.name : NostrService.shortenNpub(admin.npub),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                admin.name.isNotEmpty ? admin.name : NostrService.shortenNpub(admin.npub),
+                style: TextStyle(
+                  color: isSuspended ? cRed : Colors.white,
+                  fontWeight: FontWeight.w600, fontSize: 14,
+                  decoration: isSuspended ? TextDecoration.lineThrough : null,
+                ),
+              ),
+            ),
+            if (isSuspended)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cRed.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('SUSPENDIERT', style: TextStyle(color: cRed,
+                    fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+              ),
+          ],
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1030,10 +1200,10 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: cRed),
             onPressed: () async {
-              await AdminRegistry.removeAdmin(admin.npub);
+              await AdminRegistry.removeVouch(admin.npub);
               if (mounted) {
                 Navigator.pop(context);
-                _myVouches = await AdminRegistry.getAdminList();
+                _myVouches = await AdminRegistry.getMyVouches();
                 setState(() {});
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1145,14 +1315,14 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
                 foregroundColor: Colors.white),
             onPressed: () async {
               try {
-                await AdminRegistry.addAdmin(AdminEntry(
+                await AdminRegistry.addVouch(AdminEntry(
                   npub: npubController.text.trim(),
                   meetup: meetupController.text.trim(),
                   name: nameController.text.trim(),
                 ));
                 if (mounted) {
                   Navigator.pop(context);
-                  _myVouches = await AdminRegistry.getAdminList();
+                  _myVouches = await AdminRegistry.getMyVouches();
                   setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

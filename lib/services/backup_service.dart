@@ -205,6 +205,7 @@ class BackupService {
       final npub = await SecureKeyStore.getNpub();
       final privHex = await SecureKeyStore.getPrivHex();
       final adminList = await AdminRegistry.getAdminList();
+      final myVouches = await AdminRegistry.getMyVouches();
 
       // =============================================
       // NEU: Platform Proofs & Humanity Proof laden
@@ -249,6 +250,7 @@ class BackupService {
           'has_key': nsec != null,
         },
         'admin_registry': adminList.map((a) => a.toJson()).toList(),
+        'my_vouches': myVouches.map((a) => a.toJson()).toList(),
 
         // =============================================
         // NEU: Platform Proofs sichern
@@ -489,6 +491,20 @@ class BackupService {
               );
             } catch (e) {
               // Duplikat-Fehler ignorieren
+            }
+          }
+        }
+
+        // --- PERSÖNLICHE BÜRGSCHAFTEN WIEDERHERSTELLEN ---
+        if (data['my_vouches'] != null) {
+          final vouchesList = data['my_vouches'] as List<dynamic>;
+          for (var vouchJson in vouchesList) {
+            try {
+              await AdminRegistry.addVouch(
+                AdminEntry.fromJson(vouchJson as Map<String, dynamic>),
+              );
+            } catch (e) {
+              // Duplikat oder Self-Vouch ignorieren
             }
           }
         }

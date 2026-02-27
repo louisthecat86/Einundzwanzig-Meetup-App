@@ -6,7 +6,6 @@ import '../models/user.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
 import '../services/rolling_qr_service.dart'; // Import für den zentralen Session-Manager
-import 'admin_management.dart';
 import 'wot_dashboard.dart';
 import 'meetup_session_wizard.dart'; // Der Wizard für den Ablauf
 import 'rolling_qr_screen.dart'; // NEU: Import für den direkten Sprung zum QR Code
@@ -343,40 +342,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
             // Admin-Verwaltung (nur Super-Admin — Legacy)
             if (_isSuperAdmin) ...[
-              const SizedBox(height: 32),
-              const Divider(color: Colors.white10),
-              const SizedBox(height: 24),
-              
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: cPurple.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.bolt, color: cPurple, size: 16),
-                    SizedBox(width: 6),
-                    Text("SEED ADMIN", style: TextStyle(color: cPurple, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
-                  ],
-                ),
-              ),
               const SizedBox(height: 16),
-              
-              _buildAdminTile(
-                context: context,
-                icon: Icons.group_add,
-                color: cPurple,
-                title: "ORGANISATOREN DELEGIEREN",
-                subtitle: "Neue Organisatoren in anderen Städten per Nostr-Event ernennen",
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const AdminManagementScreen()),
-                  );
-                },
-              ),
+              // Legacy-Button entfernt: "Organisatoren delegieren" ist jetzt
+              // im WoT Dashboard unter "BÜRGEN" integriert. Das WoT Dashboard
+              // steht ALLEN Admins zur Verfügung (nicht nur dem Super-Admin).
             ],
             const SizedBox(height: 32),
             

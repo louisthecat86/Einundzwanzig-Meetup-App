@@ -112,6 +112,29 @@ class VouchingStatus {
   }
 }
 
+/// Haftung für Bürgschaften: Wie viele deiner Schützlinge sind problematisch?
+class VouchLiability {
+  final int totalVouches;       // Gesamt-Bürgschaften die du vergeben hast
+  final int suspendedVouches;   // Davon: suspendiert
+  final int warnedVouches;      // Davon: gewarnt (aber nicht suspendiert)
+
+  VouchLiability({
+    required this.totalVouches,
+    required this.suspendedVouches,
+    required this.warnedVouches,
+  });
+
+  /// Haftungs-Score: 0.0 = sauber, 1.0 = alle Bürgschaften problematisch
+  double get score {
+    if (totalVouches == 0) return 0.0;
+    return ((suspendedVouches * 2 + warnedVouches) / (totalVouches * 2))
+        .clamp(0.0, 1.0);
+  }
+
+  /// Hat Haftung (mindestens eine problematische Bürgschaft)
+  bool get hasLiability => suspendedVouches > 0 || warnedVouches > 0;
+}
+
 /// Gesamtbild des Netzwerks
 class NetworkConsensus {
   final List<VouchingStatus> allAdmins;
@@ -638,5 +661,54 @@ class VouchingService {
   static Future<VouchingStatus?> getStatus(String npub) async {
     final consensus = await calculateConsensus();
     return consensus.allAdmins.where((a) => a.npub == npub).firstOrNull;
+  }
+
+  // =============================================
+  // BÜRGSCHAFTS-HAFTUNG (Vouch Liability)
+  // =============================================
+  //
+  // PRINZIP:
+  //   Wer für einen bösen Akteur bürgt, trägt Konsequenzen.
+  //   Das verhindert, dass jemand leichtfertig 15 Fake-Admins ernennt.
+  //
+  //   Konsequenz 1: Warnhinweis im Dashboard ("Du bürgst für suspendierte npubs")
+  //   Konsequenz 2: Bürgschaften eines Admins mit hohem Liability-Score
+  //                 werden in der Konsens-Berechnung niedriger gewichtet
+  //   Konsequenz 3: Andere Admins sehen die Liability und können
+  //                 ihrerseits das Vertrauen entziehen
+  //
+  // =============================================
+
+  /// Berechnet die Haftung eines npub: Wie viele seiner Bürgschaften
+  /// gehen an suspendierte oder gewarnte Admins?
+  static Future<VouchLiability> calculateLiability(String npub) async {
+    final consensus = await calculateConsensus();
+
+    // Finde alle npubs für die dieser Admin bürgt
+    final myStatus = consensus.allAdmins
+        .where((a) => a.npub == npub).firstOrNull;
+
+    if (myStatus == null) {
+      return VouchLiability(totalVouches: 0, suspendedVouches: 0, warnedVouches: 0);
+    }
+
+    // Finde alle npubs die von diesem Admin eine Bürgschaft haben
+    int suspendedCount = 0;
+    int warnedCount = 0;
+    int totalCount = 0;
+
+    for (final admin in consensus.allAdmins) {
+      if (admin.vouchers.contains(npub)) {
+        totalCount++;
+        if (admin.isSuspended) suspendedCount++;
+        else if (admin.distrustCount > 0) warnedCount++;
+      }
+    }
+
+    return VouchLiability(
+      totalVouches: totalCount,
+      suspendedVouches: suspendedCount,
+      warnedVouches: warnedCount,
+    );
   }
 }

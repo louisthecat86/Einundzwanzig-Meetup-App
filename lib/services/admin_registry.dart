@@ -96,6 +96,13 @@ class AdminRegistry {
   static const String _cacheKey = 'admin_registry_cache';
   static const String _cacheTimestampKey = 'admin_registry_timestamp';
   static const String _sunsetFlagKey = 'bootstrap_permanently_sunset';
+  // NEU: Separate Speicherung für MEINE persönlichen Bürgschaften
+  // (getrennt vom Netzwerk-Cache, der ALLE Admins enthält)
+  static const String _myVouchesKey = 'my_personal_vouches';
+  // NEU: Zählt einzigartige Autoren die Admin-Listen publiziert haben
+  // Sunset wird NUR durch verschiedene Autoren ausgelöst, nicht durch
+  // einen einzelnen Admin der 20 npubs auf seine Liste setzt.
+  static const String _uniqueAuthorsKey = 'admin_unique_authors_count';
 
   // Timeout für Relay-Verbindung
   static const Duration _relayTimeout = Duration(seconds: 8);
@@ -105,6 +112,12 @@ class AdminRegistry {
   // =============================================
 
   /// Prüft und setzt den Sunset-Status. Wird nie wieder 'false', wenn einmal 'true'.
+  ///
+  /// SUNSET wird ausgelöst wenn genug VERSCHIEDENE Autoren eigene
+  /// Admin-Listen auf den Relays publiziert haben.
+  ///
+  /// VORHER (Bug): Zählte Cache-Einträge → Super-Admin fügt 20 npubs hinzu → sofort Sunset
+  /// JETZT:  Zählt einzigartige Autoren → 20 verschiedene Admins müssen publizieren
   static Future<bool> isSunsetActive() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -113,19 +126,25 @@ class AdminRegistry {
       return true;
     }
 
-    // Zählen, wie viele Admins wir lokal im Cache haben
-    final cachedList = await _loadFromCache();
-    final int currentAdminCount = cachedList?.length ?? 0;
+    // Zähle einzigartige Autoren die Admin-Listen publiziert haben
+    final int uniqueAuthors = prefs.getInt(_uniqueAuthorsKey) ?? 0;
 
     // Wenn Schwellenwert erreicht, aktiviere Sunset permanent
-    if (currentAdminCount >= sunsetThreshold) {
+    if (uniqueAuthors >= sunsetThreshold) {
       await prefs.setBool(_sunsetFlagKey, true);
-      AppLogger.debug('AdminRegistry', '🌅 BOOTSTRAP SUNSET AKTIVIERT! Web of Trust ist nun völlig dezentral.');
-
+      AppLogger.debug('AdminRegistry',
+          'BOOTSTRAP SUNSET AKTIVIERT! $uniqueAuthors verschiedene Admins publizieren. '
+          'Web of Trust ist nun dezentral.');
       return true;
     }
 
     return false;
+  }
+
+  /// Aktualisiert die Anzahl einzigartiger Autoren (wird nach Relay-Fetch aufgerufen)
+  static Future<void> _updateUniqueAuthorsCount(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_uniqueAuthorsKey, count);
   }
 
   // =============================================
@@ -261,12 +280,15 @@ class AdminRegistry {
       try {
         final result = await _fetchFromSingleRelay(relayUrl, queryChunk);
         if (result != null) {
+          // Einzigartige Autoren für Sunset-Berechnung aktualisieren
+          await _updateUniqueAuthorsCount(result.uniqueAuthors);
+          
           // Wenn Sunset aktiv ist, mergen wir die Ergebnisse mit dem Cache
           if (isSunset) {
-            return await _mergeWithCache(result);
+            return await _mergeWithCache(result.admins);
           } else {
             // In der Bootstrap-Phase überschreibt das Super-Admin-Event alles
-            return result;
+            return result.admins;
           }
         }
       } catch (e) {
@@ -281,27 +303,58 @@ class AdminRegistry {
   }
 
   // Hilfsfunktion: Fügt neu gefundene Admins aus dem Web of Trust dem Cache hinzu
-  static Future<List<AdminEntry>> _mergeWithCache(List<AdminEntry> newEntries) async {
+  // =============================================
+  // Security Audit M1: Merge mit Revocation-Support
+  // =============================================
+  // VORHER: Nur additiv (einmal Admin → immer Admin)
+  // JETZT:  Relay-Daten haben Vorrang über Cache.
+  //         Wenn ein Admin aus dem neuesten Relay-Fetch
+  //         fehlt, wird er auch aus dem Cache entfernt.
+  //
+  //   - Relay-Daten = Wahrheit (signierte Events)
+  //   - Cache = nur Offline-Fallback
+  //   - Neue Admins werden hinzugefügt
+  //   - Fehlende Admins werden entfernt (= Revocation)
+  // =============================================
+  static Future<List<AdminEntry>> _mergeWithCache(List<AdminEntry> relayEntries) async {
     final cachedList = await _loadFromCache() ?? [];
     
-    // Einfacher Merge: Alles, was wir noch nicht kannten, kommt dazu
-    for (var newEntry in newEntries) {
-      if (!cachedList.any((e) => e.npub == newEntry.npub)) {
-        cachedList.add(newEntry);
-      }
+    if (relayEntries.isEmpty) {
+      // Relay hatte keine Daten → Cache behalten (Offline-Fallback)
+      return cachedList;
     }
-    return cachedList;
+    
+    // Relay-Daten ersetzen den Cache für bekannte Autoren
+    // Neue Einträge aus Relay kommen dazu, fehlende werden entfernt
+    final relayNpubs = relayEntries.map((e) => e.npub).toSet();
+    
+    // Behalte nur Cache-Einträge die AUCH im Relay-Fetch vorhanden sind
+    // (oder die ein neueres addedAt haben als der Relay-Fetch)
+    final merged = <String, AdminEntry>{};
+    
+    // Relay-Daten haben Vorrang
+    for (final entry in relayEntries) {
+      merged[entry.npub] = entry;
+    }
+    
+    // Cache-Einträge die im Relay-Fetch NICHT vorkamen → revoked
+    // (werden nicht in die merged Map aufgenommen)
+    
+    return merged.values.toList();
   }
 
   // =============================================
   // EINZELNEN RELAY ABFRAGEN (MEHRERE AUTHORS)
   // =============================================
-  static Future<List<AdminEntry>?> _fetchFromSingleRelay(
+
+  /// Ergebnis eines Relay-Fetchs (Admin-Liste + Anzahl einzigartiger Autoren)
+  static Future<({List<AdminEntry> admins, int uniqueAuthors})?> _fetchFromSingleRelay(
     String relayUrl, 
     List<String> authorsHex,
   ) async {
     WebSocket? ws;
     List<AdminEntry> collectedAdmins = [];
+    final Set<String> seenAuthors = {}; // Einzigartige Autoren tracken
 
     try {
       ws = await WebSocket.connect(relayUrl).timeout(_relayTimeout);
@@ -309,7 +362,7 @@ class AdminRegistry {
       // Security Audit M4: Kryptographisch sichere Subscription-ID
       final random = Random.secure();
       final subIdHex = List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
-      final subscriptionId = 'admin-list-$subIdHex';
+      final subscriptionId = 'admin-$subIdHex';
 
       ws.listen(
         (data) {
@@ -335,6 +388,9 @@ class AdminRegistry {
               // Ist der Author überhaupt jemand, nach dem wir gefragt haben?
               if (!authorsHex.contains(event.pubkey)) return;
               if (!event.isValid()) return;
+
+              // Einzigartigen Autor tracken (für Sunset-Berechnung)
+              seenAuthors.add(event.pubkey);
 
               try {
                 final content = jsonDecode(event.content) as Map<String, dynamic>;
@@ -389,7 +445,7 @@ class AdminRegistry {
       // Duplikate aus der gesammelten Liste filtern
       if (result != null) {
         final uniqueMap = { for (var e in result) e.npub : e };
-        return uniqueMap.values.toList();
+        return (admins: uniqueMap.values.toList(), uniqueAuthors: seenAuthors.length);
       }
       return null;
 
@@ -449,18 +505,71 @@ class AdminRegistry {
   // ADMIN-LISTE VERWALTEN (lokal)
   // =============================================
 
+  /// Netzwerk-Cache: Alle bekannten Admins (von ALLEN Relay-Listen)
+  /// ACHTUNG: Nicht für Publish verwenden! Nur für Admin-Checks.
   static Future<List<AdminEntry>> getAdminList() async {
     final cached = await _loadFromCache();
     return cached ?? [];
   }
 
-  static Future<void> addAdmin(AdminEntry admin) async {
-    final list = await getAdminList();
+  // =============================================
+  // MEINE BÜRGSCHAFTEN (persönlich, getrennt vom Netzwerk-Cache)
+  // =============================================
+  //
+  // TRENNUNG:
+  //   _cacheKey       = Netzwerk-Cache (ALLE Admins von ALLEN Relay-Listen)
+  //   _myVouchesKey   = NUR meine persönlichen Bürgschaften
+  //
+  // WARUM?
+  //   Vorher: addAdmin() schrieb in den Netzwerk-Cache
+  //           → publish() schickte den gesamten Netzwerk-Cache als "meine" Liste
+  //           → Du bürgtest versehentlich für ALLER ANDERER Admins Bürgschaften
+  //
+  //   Jetzt:  addVouch() schreibt in _myVouchesKey
+  //           → publish() sendet NUR deine persönlichen Bürgschaften
+  //           → Jeder kontrolliert ausschließlich seine eigene Stimme
+  // =============================================
+
+  /// Lädt MEINE persönlichen Bürgschaften (nicht den Netzwerk-Cache!)
+  static Future<List<AdminEntry>> getMyVouches() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString(_myVouchesKey);
+      if (json == null) {
+        // Migration: Wenn _myVouchesKey leer ist aber _cacheKey Daten hat,
+        // könnte das ein Erststart nach dem Update sein.
+        // Wir starten mit leerer Liste — der Admin muss seine Bürgschaften
+        // bewusst neu vergeben. Das ist sicherer als die alte gemischte Liste
+        // zu übernehmen.
+        return [];
+      }
+      final List<dynamic> list = jsonDecode(json);
+      return list.map((e) => AdminEntry.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Speichert MEINE persönlichen Bürgschaften
+  static Future<void> _saveMyVouches(List<AdminEntry> vouches) async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = jsonEncode(vouches.map((e) => e.toJson()).toList());
+    await prefs.setString(_myVouchesKey, json);
+  }
+
+  /// Fügt eine Bürgschaft zu MEINER Liste hinzu
+  static Future<void> addVouch(AdminEntry admin) async {
+    final list = await getMyVouches();
     if (list.any((e) => e.npub == admin.npub)) {
-      throw Exception('Dieser npub ist bereits in der Admin-Liste.');
+      throw Exception('Du bürgst bereits für diesen npub.');
     }
     if (!NostrService.isValidNpub(admin.npub)) {
       throw Exception('Ungültiger npub.');
+    }
+    // Eigenen npub prüfen — man kann nicht für sich selbst bürgen
+    final myNpub = await NostrService.getNpub();
+    if (myNpub == admin.npub) {
+      throw Exception('Du kannst nicht für dich selbst bürgen.');
     }
     list.add(AdminEntry(
       npub: admin.npub,
@@ -468,12 +577,34 @@ class AdminRegistry {
       name: admin.name,
       addedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     ));
-    await _saveToCache(list);
-
-    // Nach Hinzufügen prüfen, ob Sunset erreicht ist
-    await isSunsetActive();
+    await _saveMyVouches(list);
   }
 
+  /// Entzieht eine Bürgschaft aus MEINER Liste
+  static Future<void> removeVouch(String npub) async {
+    final list = await getMyVouches();
+    list.removeWhere((e) => e.npub == npub);
+    await _saveMyVouches(list);
+  }
+
+  /// Legacy: addAdmin → Netzwerk-Cache (für promotion_claim_service, backup_service)
+  /// ACHTUNG: NICHT für persönliches Bürgen verwenden! Dafür → addVouch()
+  static Future<void> addAdmin(AdminEntry admin) async {
+    final list = await getAdminList();
+    if (list.any((e) => e.npub == admin.npub)) return; // Duplikat ignorieren
+    if (!NostrService.isValidNpub(admin.npub)) {
+      throw Exception('Ungültiger npub.');
+    }
+    list.add(AdminEntry(
+      npub: admin.npub,
+      meetup: admin.meetup,
+      name: admin.name,
+      addedAt: admin.addedAt > 0 ? admin.addedAt : DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    ));
+    await _saveToCache(list);
+  }
+
+  /// Legacy: removeAdmin → Netzwerk-Cache
   static Future<void> removeAdmin(String npub) async {
     final list = await getAdminList();
     list.removeWhere((e) => e.npub == npub);
@@ -483,6 +614,7 @@ class AdminRegistry {
   // =============================================
   // NOSTR EVENT ERSTELLEN + PUBLISHEN
   // =============================================
+  /// Publiziert MEINE persönlichen Bürgschaften (nicht den Netzwerk-Cache!)
   static Future<String> createAndPublishAdminListEvent() async {
     final privHex = await SecureKeyStore.getPrivHex();
 
@@ -490,7 +622,8 @@ class AdminRegistry {
       throw Exception('Kein Nostr-Key vorhanden.');
     }
 
-    final list = await getAdminList();
+    // KRITISCH: Nur MEINE Bürgschaften publishen, nicht den gesamten Netzwerk-Cache!
+    final list = await getMyVouches();
     final content = jsonEncode({
       'admins': list.map((e) => e.toJson()).toList(),
       'updated_at': DateTime.now().toIso8601String(),
@@ -528,10 +661,27 @@ class AdminRegistry {
         );
         ws.add(eventJson);
 
-        await Future.delayed(const Duration(seconds: 2));
+        // Security Audit M8: Auf OK-Response warten statt blind delay
+        bool confirmed = false;
+        try {
+          await for (final data in ws.timeout(const Duration(seconds: 5))) {
+            final msg = jsonDecode(data as String) as List<dynamic>;
+            if (msg[0] == 'OK' && msg.length >= 3) {
+              confirmed = msg[2] == true;
+              break;
+            }
+          }
+        } catch (_) {
+          // Timeout → nicht bestätigt
+        }
         ws.close();
-        successCount++;
-        AppLogger.debug('AdminRegistry', 'Event an $relayUrl gesendet ✓');
+        if (confirmed) {
+          successCount++;
+          AppLogger.debug('AdminRegistry', 'Event an $relayUrl bestätigt ✓');
+        } else {
+          errors.add('$relayUrl: Keine Bestätigung erhalten');
+          AppLogger.debug('AdminRegistry', '$relayUrl: Event gesendet aber nicht bestätigt');
+        }
 
       } catch (e) {
         errors.add('$relayUrl: $e');
@@ -563,7 +713,8 @@ class AdminRegistry {
       throw Exception('Kein Nostr-Key vorhanden.');
     }
 
-    final list = await getAdminList();
+    // MEINE Bürgschaften, nicht den Netzwerk-Cache
+    final list = await getMyVouches();
     final content = jsonEncode({
       'admins': list.map((e) => e.toJson()).toList(),
       'updated_at': DateTime.now().toIso8601String(),
