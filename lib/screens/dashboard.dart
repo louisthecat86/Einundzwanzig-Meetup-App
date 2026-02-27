@@ -761,7 +761,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // =============================================
                 _buildTile(
                   icon: Icons.hub,
-                  color: Colors.teal,
+                  color: cCyan,
                   title: "COMMUNITY",
                   subtitle: "Portal & mehr",
                   onTap: () {

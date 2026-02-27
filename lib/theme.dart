@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-// Einundzwanzig Farb-Palette (Angelehnt an einundzwanzig.space)
-const Color cDark = Color(0xFF0A0A0A); // Sehr dunkler Hintergrund
-const Color cCard = Color(0xFF1A1A1A); // Karten Hintergrund
-const Color cCardHover = Color(0xFF242424); // Hover State
-const Color cOrange = Color(0xFFF7931A); // Bitcoin Orange
+// Einundzwanzig Farb-Palette (Offiziell: einundzwanzig.space/media)
+//
+//   #F7931A  — Bitcoin Orange (Logo, Primary)
+//   #00B4CF  — Einundzwanzig Cyan (Akzente)
+//   #A915FF  — Einundzwanzig Lila (Web of Trust, Delegation)
+//   #151515  — Hintergrund (Dark)
+//
+//   Schriften: Logo = "The Bold Font", Copy = Inconsolata
+//
+const Color cDark = Color(0xFF151515); // Brand: #151515
+const Color cCard = Color(0xFF1E1E1E); // Karten Hintergrund (leicht heller als cDark)
+const Color cCardHover = Color(0xFF282828); // Hover State
+const Color cOrange = Color(0xFFF7931A); // Brand: Bitcoin Orange
 const Color cOrangeLight = Color(0xFFFFB347); // Helleres Orange für Akzente
-const Color cCyan = Color(0xFF00D4FF); // Aufgehelltes Cyan
-const Color cPurple = Color(0xFFBB6BD9); // Sanfteres Lila
+const Color cCyan = Color(0xFF00B4CF); // Brand: #00B4CF (war: #00D4FF)
+const Color cPurple = Color(0xFFA915FF); // Brand: #A915FF (war: #BB6BD9)
 const Color cText = Color(0xFFFFFFFF); // Reines Weiß
 const Color cTextSecondary = Color(0xFFB0B0B0); // Grauer Text
 const Color cTextTertiary = Color(0xFF808080); // Noch grauer
@@ -18,12 +27,13 @@ const Color cGreen = Color(0xFF00C853); // Erfolgs-Grün für Verifiziert
 const Color cRed = Color(0xFFCF6679);   // Rot für Warnungen/Logout
 
 // Das globale Design-Thema (Einundzwanzig Style)
+// Schrift: Inconsolata (Brand Guideline Copy Font)
 final ThemeData appTheme = ThemeData(
   brightness: Brightness.dark,
   scaffoldBackgroundColor: cDark,
   primaryColor: cOrange,
   useMaterial3: true,
-  fontFamily: 'Roboto', // Modern & Clean
+  fontFamily: GoogleFonts.inconsolata().fontFamily,
   
   // Color Scheme
   colorScheme: const ColorScheme.dark(
