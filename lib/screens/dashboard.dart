@@ -28,6 +28,7 @@ import 'relay_settings_screen.dart';
 import 'calendar_screen.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
+import '../services/secure_key_store.dart';
 import '../services/admin_status_verifier.dart';  // Security Audit C2
 import '../services/platform_proof_service.dart';
 import '../services/humanity_proof_service.dart';
@@ -61,6 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Security Audit M5: Device Integrity
   bool _deviceCompromised = false;
+  bool _dismissedIntegrityWarning = false;
   
   @override
   void initState() {
@@ -360,6 +362,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await prefs.clear(); 
     myBadges.clear();    
     await MeetupBadge.saveBadges([]); 
+
+    // KRITISCH: Auch den SecureKeyStore löschen!
+    // Ohne das überlebt der nsec den Reset weil flutter_secure_storage
+    // (Android Keystore / iOS Keychain) nicht in SharedPreferences liegt.
+    try {
+      await SecureKeyStore.deleteKeys();
+    } catch (e) {
+      // Darf den Reset nicht blockieren
+      AppLogger.debug('Dashboard', 'SecureKeyStore.deleteKeys fehlgeschlagen: $e');
+    }
     
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -651,8 +663,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Security Audit M5: Root/Jailbreak-Warnung
-            if (_deviceCompromised) ...[
+            // Security Audit M5: Root/Jailbreak-Warnung (dismissible)
+            if (_deviceCompromised && !_dismissedIntegrityWarning) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -662,14 +674,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-                    const SizedBox(width: 12),
+                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         DeviceIntegrityService.warningMessage,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Colors.orange.shade200,
                         ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => setState(() => _dismissedIntegrityWarning = true),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(Icons.close, color: Colors.orange.shade300, size: 16),
                       ),
                     ),
                   ],
@@ -1064,9 +1088,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Icon(Icons.arrow_forward_ios, color: cOrange.withOpacity(0.5), size: 10),
                         const SizedBox(width: 4),
-                        Text(
-                          "Verknüpfe Plattformen in deinem Profil um Trust aufzubauen",
-                          style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10),
+                        Flexible(
+                          child: Text(
+                            "Verknüpfe Plattformen im Profil um Trust aufzubauen",
+                            style: TextStyle(color: cOrange.withOpacity(0.6), fontSize: 10),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),

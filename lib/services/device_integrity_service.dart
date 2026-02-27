@@ -117,24 +117,25 @@ class DeviceIntegrityService {
     }
 
     // 3. Build-Tags prüfen (test-keys = nicht offiziell signiert)
+    // HINWEIS: Xiaomi/MIUI/HyperOS und andere OEM-ROMs verwenden
+    // häufig test-keys — das allein ist KEIN Root-Indikator.
     try {
       final result = await Process.run('getprop', ['ro.build.tags']);
       final tags = result.stdout.toString().trim();
       if (tags.contains('test-keys')) {
-        findings.add('Build mit test-keys signiert');
+        // Schwacher Indikator: Nur loggen, nicht als Finding zählen.
+        // Viele OEM-ROMs (Xiaomi, OnePlus, Realme) nutzen test-keys.
+        AppLogger.debug('DeviceIntegrity', 'Build verwendet test-keys (kann OEM-ROM sein)');
       }
     } catch (_) {
       // getprop nicht verfügbar → ignorieren
     }
 
     // 4. Schreibzugriff auf /system prüfen
-    try {
-      final systemStat = await FileStat.stat('/system');
-      // Auf normalen Geräten ist /system read-only
-      if (systemStat.mode & 0x80 != 0) { // Owner write bit
-        findings.add('/system ist beschreibbar');
-      }
-    } catch (_) {}
+    // ENTFERNT: FileStat.mode ist auf vielen OEM-Geräten
+    // (Xiaomi, Samsung, Huawei) unzuverlässig. Die gemounteten
+    // Filesystem-Permissions spiegeln nicht die echten Schreibrechte
+    // wider → massive False Positives auf Stock-ROMs.
 
     // 5. BusyBox (häufig mit Root installiert)
     final busyboxPaths = ['/system/xbin/busybox', '/system/bin/busybox'];

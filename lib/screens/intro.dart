@@ -62,7 +62,7 @@ class _IntroScreenState extends State<IntroScreen> {
     if (user.nickname == "Anon" && !user.isVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Bitte lege zuerst deine Identität fest. 🕵️"),
+          content: Text("Bitte lege zuerst deine Identität fest."),
           backgroundColor: cOrange,
           duration: Duration(seconds: 3),
         )
@@ -73,7 +73,16 @@ class _IntroScreenState extends State<IntroScreen> {
         MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
       );
 
+      // FIX: Nach Rückkehr prüfen ob tatsächlich gespeichert wurde.
+      // Wenn der User auf "Zurück" gedrückt hat statt "Speichern",
+      // ist der Nickname immer noch "Anon" → auf Intro bleiben.
       user = await UserProfile.load();
+      if (!mounted) return;
+
+      if (user.nickname == "Anon" || user.nickname.isEmpty) {
+        setState(() => _isLoading = false);
+        return;
+      }
     }
 
     if (!mounted) return;
