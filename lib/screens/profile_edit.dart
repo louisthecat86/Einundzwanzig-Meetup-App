@@ -83,6 +83,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     }
   }
 
+  /// Aktualisiert NUR den Identity-Status (Platform Proofs, Humanity)
+  /// OHNE die Formular-Felder (Nickname, Meetup) zu überschreiben.
+  /// Wird aufgerufen wenn man von PlatformProofScreen/HumanityProofScreen zurückkehrt.
+  Future<void> _refreshIdentityOnly() async {
+    try {
+      final proofs = await PlatformProofService.getSavedProofs();
+      final hStatus = await HumanityProofService.getStatus();
+      if (mounted) {
+        setState(() {
+          _platformProofCount = proofs.length;
+          _humanityVerified = hStatus.verified;
+        });
+      }
+    } catch (_) {}
+  }
+
   // --- NOSTR KEY GENERIEREN ---
   void _generateNostrKey() async {
     final confirm = await showDialog<bool>(
@@ -723,11 +739,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             color: Colors.green,
             done: _platformProofCount > 0,
             onTap: () async {
+              // Fix: Aktuelle Eingaben merken bevor wir navigieren
+              final savedNickname = _nicknameController.text;
+              final savedMeetup = _selectedHomeMeetup;
+
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const PlatformProofScreen()),
               );
-              _loadData(); // Refresh
+
+              // Nur Identity-Status neu laden, NICHT die Formular-Werte überschreiben
+              await _refreshIdentityOnly();
+
+              // Formular-Werte wiederherstellen
+              _nicknameController.text = savedNickname;
+              _selectedHomeMeetup = savedMeetup;
+              if (mounted) setState(() {});
             },
           ),
           const SizedBox(height: 10),
@@ -742,11 +769,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             color: Colors.amber,
             done: _humanityVerified,
             onTap: () async {
+              // Fix: Aktuelle Eingaben merken bevor wir navigieren
+              final savedNickname = _nicknameController.text;
+              final savedMeetup = _selectedHomeMeetup;
+
               await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HumanityProofScreen()),
               );
-              _loadData(); // Refresh
+
+              // Nur Identity-Status neu laden, NICHT die Formular-Werte überschreiben
+              await _refreshIdentityOnly();
+
+              // Formular-Werte wiederherstellen
+              _nicknameController.text = savedNickname;
+              _selectedHomeMeetup = savedMeetup;
+              if (mounted) setState(() {});
             },
           ),
 

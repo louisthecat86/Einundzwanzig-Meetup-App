@@ -5,6 +5,7 @@
 //     Plattform-Proofs, kein separater Verify-String nötig
 // ============================================
 
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:io';
 import 'dart:typed_data';
@@ -184,6 +185,14 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
   // =============================================
   Future<void> _shareQRImage() async {
     try {
+      // Fix: Beim ersten Aufruf kann der RenderRepaintBoundary noch nicht
+      // vollständig gerendert sein. Wir warten auf den nächsten Frame.
+      final completer = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!completer.isCompleted) completer.complete();
+      });
+      await completer.future;
+
       final boundary = _qrRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
 
