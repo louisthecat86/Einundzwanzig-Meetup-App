@@ -45,6 +45,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'relay_config.dart';
 import 'secure_key_store.dart';
+import 'app_logger.dart';
 import 'dart:math';
 
 class HumanityProofService {

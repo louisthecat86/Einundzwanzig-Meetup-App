@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // NEU: Für Humani
 import '../models/user.dart';
 import '../models/badge.dart';
 import 'admin_registry.dart';
+import 'nostr_service.dart';
 import 'secure_key_store.dart';
 import 'platform_proof_service.dart'; // NEU
 import 'humanity_proof_service.dart'; // NEU
