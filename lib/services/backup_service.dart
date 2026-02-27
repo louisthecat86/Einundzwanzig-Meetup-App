@@ -481,17 +481,42 @@ class BackupService {
           }
         }
 
-        // --- ADMIN REGISTRY WIEDERHERSTELLEN ---
+        // --- ADMIN REGISTRY WIEDERHERSTELLEN (MIT VALIDIERUNG) ---
+        // Security Audit 2, Fund #1: Backup könnte manipulierte npubs enthalten.
+        // Wir validieren das npub-Format und erzwingen danach eine Relay-Prüfung.
         if (version >= 2 && data['admin_registry'] != null) {
           final registryList = data['admin_registry'] as List<dynamic>;
+          int restoredAdmins = 0;
+          int rejectedAdmins = 0;
+
           for (var adminJson in registryList) {
             try {
-              await AdminRegistry.addAdmin(
-                AdminEntry.fromJson(adminJson as Map<String, dynamic>),
-              );
+              final entry = AdminEntry.fromJson(adminJson as Map<String, dynamic>);
+
+              // npub-Format validieren
+              if (!NostrService.isValidNpub(entry.npub)) {
+                rejectedAdmins++;
+                continue;
+              }
+
+              await AdminRegistry.addAdmin(entry);
+              restoredAdmins++;
             } catch (e) {
-              // Duplikat-Fehler ignorieren
+              rejectedAdmins++;
             }
+          }
+
+          // Nach Restore sofort Relay-Validierung erzwingen.
+          // Einträge die NICHT von signierten Events auf Relays bestätigt werden,
+          // werden beim nächsten Merge verworfen.
+          try {
+            await AdminRegistry.forceRefresh();
+            AppLogger.debug('Backup',
+              'Admin-Registry revalidiert. Restored: $restoredAdmins, Rejected: $rejectedAdmins');
+          } catch (e) {
+            AppLogger.warn('Backup',
+              'Admin-Registry Revalidierung fehlgeschlagen (offline?). '
+              'Einträge werden beim nächsten Online-Start geprüft.');
           }
         }
 
@@ -510,54 +535,74 @@ class BackupService {
         }
 
         // =============================================
-        // NEU: PLATFORM PROOFS WIEDERHERSTELLEN (v5+)
+        // PLATFORM PROOFS WIEDERHERSTELLEN (MIT VALIDIERUNG)
         // =============================================
-        // Stellt alle verknüpften Plattform-Accounts wieder
-        // her, damit der User nicht alle Verknüpfungen
-        // (Telegram, RoboSats, Satoshi-Kleinanzeigen etc.)
-        // nach einem Restore neu anlegen muss.
-        //
-        // Die Proof-Signaturen sind an den privaten Schlüssel
-        // gebunden — da dieser ebenfalls restored wird,
-        // bleiben die Signaturen gültig.
-        // =============================================
+        // Security Audit 2, Fund #4: Nur Proofs mit gültiger Signatur
+        // akzeptieren. Leere oder ungültige Signaturen werden verworfen.
         if (data['platform_proofs'] != null) {
           final proofList = data['platform_proofs'] as List<dynamic>;
           if (proofList.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            // Direkt als JSON speichern (gleiches Format wie PlatformProofService._saveAllProofs)
-            await prefs.setString('platform_proofs', jsonEncode(proofList));
+            final validatedProofs = <dynamic>[];
+
+            for (final proof in proofList) {
+              try {
+                final proofMap = proof as Map<String, dynamic>;
+                final proofSig = proofMap['proof_sig'] as String? ?? '';
+
+                // Leere Signaturen ablehnen
+                if (proofSig.isEmpty) continue;
+
+                // Signatur-Format prüfen (128 hex chars = 64 bytes Schnorr)
+                if (proofSig.length == 128 &&
+                    RegExp(r'^[0-9a-fA-F]+$').hasMatch(proofSig)) {
+                  validatedProofs.add(proof);
+                }
+              } catch (_) {
+                // Ungültiges Format → überspringen
+              }
+            }
+
+            if (validatedProofs.isNotEmpty) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setString('platform_proofs', jsonEncode(validatedProofs));
+            }
           }
         }
 
         // =============================================
-        // NEU: HUMANITY PROOF WIEDERHERSTELLEN (v5+)
+        // HUMANITY PROOF: Als "needs_reverification" markieren
         // =============================================
-        // Stellt den Lightning-Zahlungsbeweis wieder her.
-        // Ohne Restore müsste die App den Beweis erneut
-        // auf Nostr-Relays suchen — was langsam ist und
-        // fehlschlagen kann wenn die Relays den alten
-        // Zap-Receipt nicht mehr vorhalten.
-        // =============================================
+        // Security Audit 2, Fund #4: NICHT direkt als verified setzen!
+        // Stattdessen Receipt-Daten speichern und als "pending" markieren.
+        // HumanityProofService prüft beim nächsten Start auf Relays
+        // ob der Zap-Receipt tatsächlich existiert.
         if (data['humanity_proof'] != null) {
           final hp = data['humanity_proof'] as Map<String, dynamic>;
           final hpVerified = hp['verified'] as bool? ?? false;
 
           if (hpVerified) {
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('humanity_verified', true);
-            final firstZapAt = hp['first_zap_at'] as int? ?? 0;
-            if (firstZapAt > 0) {
-              await prefs.setInt('humanity_first_zap_at', firstZapAt);
-            }
+            // NICHT: await prefs.setBool('humanity_verified', true);
+            // Stattdessen: als "pending reverification" markieren
+            await prefs.setBool('humanity_verified', false);
+            await prefs.setBool('humanity_needs_reverification', true);
+
             final receiptId = hp['receipt_event_id'] as String? ?? '';
             if (receiptId.isNotEmpty) {
               await prefs.setString('humanity_receipt_id', receiptId);
+            }
+            final firstZapAt = hp['first_zap_at'] as int? ?? 0;
+            if (firstZapAt > 0) {
+              await prefs.setInt('humanity_first_zap_at', firstZapAt);
             }
             final checkedAt = hp['checked_at'] as int? ?? 0;
             if (checkedAt > 0) {
               await prefs.setInt('humanity_checked_at', checkedAt);
             }
+
+            AppLogger.debug('Backup',
+              'Humanity-Proof als pending_reverification markiert. '
+              'Receipt: ${receiptId.isNotEmpty ? "vorhanden" : "fehlt"}');
           }
         }
 

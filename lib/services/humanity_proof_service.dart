@@ -53,6 +53,9 @@ class HumanityProofService {
   static const String _keyFirstZapAt = 'humanity_first_zap_at';
   static const String _keyReceiptId = 'humanity_receipt_id';
   static const String _keyCheckedAt = 'humanity_checked_at';
+  // Security Audit 2, Fund #4: Nach Backup-Restore muss der
+  // Humanity-Proof gegen Relays re-verifiziert werden.
+  static const String _keyNeedsReverification = 'humanity_needs_reverification';
 
   // =============================================
   // STATUS PRÜFEN
@@ -60,12 +63,53 @@ class HumanityProofService {
 
   static Future<HumanityStatus> getStatus() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Wenn Reverifikation ansteht, erst als unverified melden
+    if (prefs.getBool(_keyNeedsReverification) == true) {
+      return HumanityStatus(
+        verified: false,
+        firstZapAt: prefs.getInt(_keyFirstZapAt) ?? 0,
+        receiptEventId: prefs.getString(_keyReceiptId) ?? '',
+        lastCheckedAt: prefs.getInt(_keyCheckedAt) ?? 0,
+        needsReverification: true,
+      );
+    }
+
     return HumanityStatus(
       verified: prefs.getBool(_keyVerified) ?? false,
       firstZapAt: prefs.getInt(_keyFirstZapAt) ?? 0,
       receiptEventId: prefs.getString(_keyReceiptId) ?? '',
       lastCheckedAt: prefs.getInt(_keyCheckedAt) ?? 0,
     );
+  }
+
+  /// Security Audit 2, Fund #4: Prüft ob ein aus dem Backup
+  /// wiederhergestellter Humanity-Proof tatsächlich gültig ist.
+  /// Wird beim App-Start aufgerufen wenn needsReverification=true.
+  static Future<bool> reverifyIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_keyNeedsReverification) != true) return false;
+
+    try {
+      final result = await checkForZaps();
+      if (result.found) {
+        // Proof bestätigt → als verified markieren
+        await prefs.setBool(_keyVerified, true);
+        await prefs.remove(_keyNeedsReverification);
+        AppLogger.debug('HumanityProof', 'Reverifikation erfolgreich: Zap-Receipt bestätigt');
+        return true;
+      } else {
+        // Proof konnte nicht bestätigt werden → bleibt pending
+        AppLogger.debug('HumanityProof',
+          'Reverifikation fehlgeschlagen: Kein Zap-Receipt gefunden. '
+          'Nächster Versuch beim nächsten App-Start.');
+        return false;
+      }
+    } catch (e) {
+      // Offline oder Relay-Fehler → nächstes Mal erneut versuchen
+      AppLogger.debug('HumanityProof', 'Reverifikation fehlgeschlagen (offline?): $e');
+      return false;
+    }
   }
 
   // =============================================
@@ -404,12 +448,14 @@ class HumanityStatus {
   final int firstZapAt;
   final String receiptEventId;
   final int lastCheckedAt;
+  final bool needsReverification;
 
   HumanityStatus({
     required this.verified,
     this.firstZapAt = 0,
     this.receiptEventId = '',
     this.lastCheckedAt = 0,
+    this.needsReverification = false,
   });
 
   String get firstZapDateStr {

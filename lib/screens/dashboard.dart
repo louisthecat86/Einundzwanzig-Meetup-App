@@ -109,7 +109,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _loadIdentityData() async {
     try {
       final proofs = await PlatformProofService.getSavedProofs();
-      final humanity = await HumanityProofService.getStatus();
+      var humanity = await HumanityProofService.getStatus();
+
+      // Security Audit 2, Fund #4: Nach Backup-Restore muss der
+      // Humanity-Proof gegen Relays re-verifiziert werden.
+      if (humanity.needsReverification) {
+        final reverified = await HumanityProofService.reverifyIfNeeded();
+        if (reverified) {
+          humanity = await HumanityProofService.getStatus();
+        }
+      }
 
       // NIP-05 prüfen (nur wenn Nostr-Key vorhanden)
       bool nip05 = false;

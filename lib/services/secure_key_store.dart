@@ -15,6 +15,7 @@
 //   anschließend aus SharedPreferences gelöscht.
 // ============================================
 
+import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_logger.dart';
@@ -52,45 +53,64 @@ class SecureKeyStore {
   // Wird einmalig beim ersten Zugriff ausgeführt.
   // =============================================
   static bool _migrated = false;
+  // Security Audit 2, Fund #8: Mutex verhindert Race Condition
+  // wenn mehrere Futures gleichzeitig ensureMigrated() aufrufen.
+  // Ohne Mutex könnte der zweite Aufruf Keys aus SharedPreferences
+  // lesen NACHDEM der erste sie bereits gelöscht hat.
+  static Completer<void>? _migrationCompleter;
 
   static Future<void> ensureMigrated() async {
     if (_migrated) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyDone = prefs.getBool(_migrationDoneKey) ?? false;
-
-    if (!alreadyDone) {
-      // Alte Keys aus SharedPreferences lesen
-      final nsec = prefs.getString(_nsecKey);
-      final npub = prefs.getString(_npubKey);
-      final privHex = prefs.getString(_privHexKey);
-
-      // In SecureStorage schreiben (wenn vorhanden)
-      if (nsec != null && nsec.isNotEmpty) {
-        await _storage.write(key: _nsecKey, value: nsec);
-      }
-      if (npub != null && npub.isNotEmpty) {
-        await _storage.write(key: _npubKey, value: npub);
-      }
-      if (privHex != null && privHex.isNotEmpty) {
-        await _storage.write(key: _privHexKey, value: privHex);
-      }
-
-      // Alte Keys aus SharedPreferences LÖSCHEN
-      await prefs.remove(_nsecKey);
-      await prefs.remove(_npubKey);
-      await prefs.remove(_privHexKey);
-
-      // Migration als erledigt markieren
-      await prefs.setBool(_migrationDoneKey, true);
-
-      if (nsec != null) {
-        AppLogger.debug('SecureKeyStore', 'Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
-
-      }
+    // Wenn Migration bereits läuft, auf Completion warten
+    if (_migrationCompleter != null) {
+      await _migrationCompleter!.future;
+      return;
     }
 
-    _migrated = true;
+    // Migration starten und Completer setzen
+    _migrationCompleter = Completer<void>();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyDone = prefs.getBool(_migrationDoneKey) ?? false;
+
+      if (!alreadyDone) {
+        // Alte Keys aus SharedPreferences lesen
+        final nsec = prefs.getString(_nsecKey);
+        final npub = prefs.getString(_npubKey);
+        final privHex = prefs.getString(_privHexKey);
+
+        // In SecureStorage schreiben (wenn vorhanden)
+        if (nsec != null && nsec.isNotEmpty) {
+          await _storage.write(key: _nsecKey, value: nsec);
+        }
+        if (npub != null && npub.isNotEmpty) {
+          await _storage.write(key: _npubKey, value: npub);
+        }
+        if (privHex != null && privHex.isNotEmpty) {
+          await _storage.write(key: _privHexKey, value: privHex);
+        }
+
+        // Alte Keys aus SharedPreferences LÖSCHEN
+        await prefs.remove(_nsecKey);
+        await prefs.remove(_npubKey);
+        await prefs.remove(_privHexKey);
+
+        // Migration als erledigt markieren
+        await prefs.setBool(_migrationDoneKey, true);
+
+        if (nsec != null) {
+          AppLogger.debug('SecureKeyStore',
+              'Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
+        }
+      }
+
+      _migrated = true;
+    } finally {
+      _migrationCompleter!.complete();
+      _migrationCompleter = null;
+    }
   }
 
   // =============================================

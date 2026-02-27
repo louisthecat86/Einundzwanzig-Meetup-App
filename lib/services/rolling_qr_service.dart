@@ -75,6 +75,9 @@ class RollingQRService {
     ),
   );
   static const String _secureKeySessionSeed = 'rqr_session_seed_secure';
+  // Security Audit 2, Fund #3: Base-Payload enthält Schnorr-Signatur
+  // und gehört in hardware-geschützten Storage statt SharedPreferences.
+  static const String _secureKeyBasePayload = 'rqr_session_base_payload_secure';
 
   // SharedPreferences Keys (nicht-sensible Session-Metadaten)
   static const String _keySessionSeed = 'rqr_session_seed'; // LEGACY → wird migriert
@@ -113,6 +116,31 @@ class RollingQRService {
 
   static Future<void> _deleteSeedSecure() async {
     await _secureStorage.delete(key: _secureKeySessionSeed);
+  }
+
+  // =============================================
+  // BASE PAYLOAD: SecureStorage (Security Audit 2, Fund #3)
+  // =============================================
+  static Future<void> _saveBasePayloadSecure(String payload) async {
+    await _secureStorage.write(key: _secureKeyBasePayload, value: payload);
+  }
+
+  static Future<String?> _loadBasePayloadSecure() async {
+    // Migration: Falls noch in SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getString(_keySessionBasePayload);
+    if (legacy != null && legacy.isNotEmpty) {
+      await _secureStorage.write(key: _secureKeyBasePayload, value: legacy);
+      await prefs.remove(_keySessionBasePayload);
+    }
+    return await _secureStorage.read(key: _secureKeyBasePayload);
+  }
+
+  static Future<void> _deleteBasePayloadSecure() async {
+    await _secureStorage.delete(key: _secureKeyBasePayload);
+    // Auch Legacy-Key aufräumen falls vorhanden
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keySessionBasePayload);
   }
 
   // =============================================
@@ -269,8 +297,8 @@ class RollingQRService {
     await prefs.setInt(_keySessionBlockHeight, blockHeight);
     await prefs.setString(_keySessionPubkey, pubkey);
     
-    // Base-Payload speichern (Für QR und NFC)
-    await prefs.setString(_keySessionBasePayload, jsonEncode(basePayload));
+    // Base-Payload in SecureStorage speichern (enthält Schnorr-Signatur)
+    await _saveBasePayloadSecure(jsonEncode(basePayload));
 
     return session;
   }
@@ -287,7 +315,7 @@ class RollingQRService {
     await prefs.remove(_keySessionMeetupCountry);
     await prefs.remove(_keySessionBlockHeight);
     await prefs.remove(_keySessionPubkey);
-    await prefs.remove(_keySessionBasePayload);
+    await _deleteBasePayloadSecure();
   }
 
   // =============================================
@@ -299,8 +327,7 @@ class RollingQRService {
     final session = await loadSession();
     if (session == null) return null;
     
-    final prefs = await SharedPreferences.getInstance();
-    final payloadStr = prefs.getString(_keySessionBasePayload);
+    final payloadStr = await _loadBasePayloadSecure();
     if (payloadStr == null) return null;
     
     return jsonDecode(payloadStr);
@@ -328,9 +355,8 @@ class RollingQRService {
   // =============================================
 
   static Future<String> generateQRString(MeetupSession session) async {
-    // 1. Hole den EINMALIG signierten Base-Payload
-    final prefs = await SharedPreferences.getInstance();
-    final basePayloadStr = prefs.getString(_keySessionBasePayload);
+    // 1. Hole den EINMALIG signierten Base-Payload aus SecureStorage
+    final basePayloadStr = await _loadBasePayloadSecure();
     
     Map<String, dynamic> payload;
     if (basePayloadStr != null) {

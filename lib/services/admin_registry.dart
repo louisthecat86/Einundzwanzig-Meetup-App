@@ -123,6 +123,17 @@ class AdminRegistry {
 
     // Wenn Sunset schon mal erreicht wurde, bleibt es für immer true
     if (prefs.getBool(_sunsetFlagKey) == true) {
+      // Security Audit 2, Fund #6: Konsistenzprüfung.
+      // Sunset-Flag darf nur true sein wenn uniqueAuthors >= threshold.
+      // Falls manipuliert (z.B. auf gerooteten Geräten): Flag zurücksetzen.
+      final int uniqueAuthors = prefs.getInt(_uniqueAuthorsKey) ?? 0;
+      if (uniqueAuthors < sunsetThreshold) {
+        AppLogger.security('AdminRegistry',
+          'Sunset-Flag inkonsistent! Flag=true aber uniqueAuthors='
+          '$uniqueAuthors < threshold=$sunsetThreshold. Flag zurückgesetzt.');
+        await prefs.setBool(_sunsetFlagKey, false);
+        return false;
+      }
       return true;
     }
 

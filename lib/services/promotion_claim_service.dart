@@ -251,6 +251,17 @@ class PromotionClaimService {
 
     if (proofs.isEmpty || meetup.isEmpty) return null;
 
+    // Security Audit 2, Fund #5: Claim-Alter prüfen (max 90 Tage).
+    // Verhindert dass uralte Claims auf Basis längst suspendierter
+    // Admins unbegrenzt gültig bleiben.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    const maxClaimAgeDays = 90;
+    if (now - claim.createdAt > maxClaimAgeDays * 86400) {
+      AppLogger.debug('PromotionClaim',
+        'Claim abgelehnt: Zu alt (>${maxClaimAgeDays} Tage)');
+      return null;
+    }
+
     // 2. Jeden Badge-Beweis einzeln verifizieren
     int validBadgeCount = 0;
     final verifiedSigners = <String>{};
@@ -298,11 +309,27 @@ class PromotionClaimService {
     if (validBadgeCount < minVerifiedBadges) return null;
     if (verifiedSigners.length < minUniqueSigners) return null;
 
+    // Security Audit 2, Fund #5: Sicherstellen dass die Signer
+    // AKTUELL noch Admins sind (nicht nur zum Zeitpunkt des Claims).
+    // knownAdminPubkeys wird von syncOrganicAdmins() aus der aktuellen
+    // AdminRegistry befüllt. Suspendierte Admins sind dort nicht mehr
+    // enthalten → deren Badges werden oben bereits übersprungen.
+    // Doppelter Check: verifiedSigners ∩ knownAdminPubkeys
+    final currentlyActiveSigners = verifiedSigners
+        .where((s) => knownAdminPubkeys.contains(s))
+        .length;
+    if (currentlyActiveSigners < minUniqueSigners) {
+      AppLogger.debug('PromotionClaim',
+        'Claim abgelehnt: Nur $currentlyActiveSigners von '
+        '${verifiedSigners.length} Signern sind noch aktive Admins');
+      return null;
+    }
+
     return VerifiedClaim(
       claimerPubkey: claim.pubkey,
       meetup: meetup,
       verifiedBadgeCount: validBadgeCount,
-      uniqueSignerCount: verifiedSigners.length,
+      uniqueSignerCount: currentlyActiveSigners,
       claimedAt: claim.createdAt,
     );
   }
