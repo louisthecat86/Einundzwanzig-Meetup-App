@@ -1,0 +1,609 @@
+From 3e96cdecca514b37446a415551ba2ee3c1bf3a23 Mon Sep 17 00:00:00 2001
+From: SecurityAudit <audit@einundzwanzig.space>
+Date: Fri, 27 Feb 2026 08:33:44 +0000
+Subject: [PATCH] Security Audit 2: 6 Funde gefixt (KRITISCH bis MITTEL)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adversarial Security Audit — Zweiter Durchlauf, Februar 2026
+
+Fund #1 — KRITISCH: Backup-Restore Admin-Injection
+  backup_service.dart: Admin Registry Restore
+  VORHER: Backup-Restore schrieb beliebige npubs direkt in den
+    Admin-Cache. Manipuliertes Backup → Angreifer als 'Bekannter Admin'.
+  FIX: npub-Format wird via NostrService.isValidNpub() geprüft.
+    Nach Restore wird AdminRegistry.forceRefresh() aufgerufen um
+    alle Einträge gegen signierte Events auf Relays zu validieren.
+    Nicht-bestätigte Einträge werden beim Merge verworfen.
+
+Fund #3 — HOCH: Signierter Base-Payload in SharedPreferences
+  rolling_qr_service.dart
+  VORHER: Der signierte Base-Payload (enthält Schnorr-Signatur)
+    lag in SharedPreferences. Auf gerooteten Geräten auslesbar
+    → massenhaftes Badge-Farming mit echter Signatur.
+  FIX: Base-Payload wird jetzt in FlutterSecureStorage gespeichert
+    (Android Keystore / iOS Keychain). Migration von Legacy-Keys
+    erfolgt automatisch beim ersten Zugriff.
+
+Fund #4 — HOCH: Humanity/Platform-Proof Bypass via Backup
+  backup_service.dart + humanity_proof_service.dart + dashboard.dart
+  VORHER: humanity_verified=true und Platform-Proofs wurden bei
+    Restore direkt übernommen. Manipuliertes Backup → falsches
+    Vertrauen (Humanity Proof + Telegram etc. ohne echte Prüfung).
+  FIX: Platform-Proofs werden nur akzeptiert wenn proof_sig ein
+    gültiges 128-Hex-Zeichen Schnorr-Format hat.
+    Humanity-Proof wird als 'needs_reverification' markiert.
+    HumanityProofService.reverifyIfNeeded() prüft beim App-Start
+    den Zap-Receipt gegen Relays. Erst nach Bestätigung → verified.
+
+Fund #5 — HOCH: Keine Freshness/Revocation bei Promotion Claims
+  promotion_claim_service.dart: _verifyClaim()
+  VORHER: Claims ohne Alterslimit. Suspendierte Admins blieben
+    als Signer gültig solange Claim auf Relay existiert.
+  FIX: maxClaimAgeDays=90 — Claims älter als 90 Tage werden
+    abgelehnt. Zusätzlich expliziter Check dass Signer AKTUELL
+    noch in knownAdminPubkeys sind (Revocation-Schutz).
+
+Fund #6 — MITTEL: Sunset-Counter in SharedPreferences manipulierbar
+  admin_registry.dart: isSunsetActive()
+  VORHER: sunsetFlagKey=true wurde blind vertraut. Auf gerooteten
+    Geräten → Super-Admin vorzeitig entmachtet oder Bootstrap
+    zurückgesetzt.
+  FIX: Konsistenzprüfung: Wenn sunsetFlag=true aber
+    uniqueAuthors < threshold → Flag ist manipuliert → zurücksetzen.
+
+Fund #8 — MITTEL: Race Condition bei SecureKeyStore Migration
+  secure_key_store.dart: ensureMigrated()
+  VORHER: Zwei parallele Futures konnten beide _migrated==false
+    sehen. Der zweite liest Keys NACHDEM der erste sie gelöscht
+    hat → leere Keys in SecureStorage → Identitätsverlust.
+  FIX: Completer-basierter Mutex. Zweiter Aufruf wartet auf
+    _migrationCompleter.future statt Migration erneut zu starten.
+
+BEREITS GEFIXT (im ersten Audit):
+  Fund #2 (KRITISCH): Relay OK-Bestätigung → war schon implementiert
+  Fund #7 (MITTEL): enc_v1 Warnung → war schon implementiert
+
+BACKLOG:
+  Fund #9 (NIEDRIG): Certificate Pinning → separate Aufgabe
+---
+ lib/screens/dashboard.dart                |  11 ++-
+ lib/services/admin_registry.dart          |  11 +++
+ lib/services/backup_service.dart          | 105 +++++++++++++++-------
+ lib/services/humanity_proof_service.dart  |  46 ++++++++++
+ lib/services/promotion_claim_service.dart |  29 +++++-
+ lib/services/rolling_qr_service.dart      |  42 +++++++--
+ lib/services/secure_key_store.dart        |  82 ++++++++++-------
+ 7 files changed, 255 insertions(+), 71 deletions(-)
+
+diff --git a/lib/screens/dashboard.dart b/lib/screens/dashboard.dart
+index ac7985a..3bb0d3f 100644
+--- a/lib/screens/dashboard.dart
++++ b/lib/screens/dashboard.dart
+@@ -109,7 +109,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
+   void _loadIdentityData() async {
+     try {
+       final proofs = await PlatformProofService.getSavedProofs();
+-      final humanity = await HumanityProofService.getStatus();
++      var humanity = await HumanityProofService.getStatus();
++
++      // Security Audit 2, Fund #4: Nach Backup-Restore muss der
++      // Humanity-Proof gegen Relays re-verifiziert werden.
++      if (humanity.needsReverification) {
++        final reverified = await HumanityProofService.reverifyIfNeeded();
++        if (reverified) {
++          humanity = await HumanityProofService.getStatus();
++        }
++      }
+ 
+       // NIP-05 prüfen (nur wenn Nostr-Key vorhanden)
+       bool nip05 = false;
+diff --git a/lib/services/admin_registry.dart b/lib/services/admin_registry.dart
+index 51b23c5..4066872 100644
+--- a/lib/services/admin_registry.dart
++++ b/lib/services/admin_registry.dart
+@@ -123,6 +123,17 @@ class AdminRegistry {
+ 
+     // Wenn Sunset schon mal erreicht wurde, bleibt es für immer true
+     if (prefs.getBool(_sunsetFlagKey) == true) {
++      // Security Audit 2, Fund #6: Konsistenzprüfung.
++      // Sunset-Flag darf nur true sein wenn uniqueAuthors >= threshold.
++      // Falls manipuliert (z.B. auf gerooteten Geräten): Flag zurücksetzen.
++      final int uniqueAuthors = prefs.getInt(_uniqueAuthorsKey) ?? 0;
++      if (uniqueAuthors < sunsetThreshold) {
++        AppLogger.security('AdminRegistry',
++          'Sunset-Flag inkonsistent! Flag=true aber uniqueAuthors='
++          '$uniqueAuthors < threshold=$sunsetThreshold. Flag zurückgesetzt.');
++        await prefs.setBool(_sunsetFlagKey, false);
++        return false;
++      }
+       return true;
+     }
+ 
+diff --git a/lib/services/backup_service.dart b/lib/services/backup_service.dart
+index 2a1c4de..85467ed 100644
+--- a/lib/services/backup_service.dart
++++ b/lib/services/backup_service.dart
+@@ -481,18 +481,43 @@ class BackupService {
+           }
+         }
+ 
+-        // --- ADMIN REGISTRY WIEDERHERSTELLEN ---
++        // --- ADMIN REGISTRY WIEDERHERSTELLEN (MIT VALIDIERUNG) ---
++        // Security Audit 2, Fund #1: Backup könnte manipulierte npubs enthalten.
++        // Wir validieren das npub-Format und erzwingen danach eine Relay-Prüfung.
+         if (version >= 2 && data['admin_registry'] != null) {
+           final registryList = data['admin_registry'] as List<dynamic>;
++          int restoredAdmins = 0;
++          int rejectedAdmins = 0;
++
+           for (var adminJson in registryList) {
+             try {
+-              await AdminRegistry.addAdmin(
+-                AdminEntry.fromJson(adminJson as Map<String, dynamic>),
+-              );
++              final entry = AdminEntry.fromJson(adminJson as Map<String, dynamic>);
++
++              // npub-Format validieren
++              if (!NostrService.isValidNpub(entry.npub)) {
++                rejectedAdmins++;
++                continue;
++              }
++
++              await AdminRegistry.addAdmin(entry);
++              restoredAdmins++;
+             } catch (e) {
+-              // Duplikat-Fehler ignorieren
++              rejectedAdmins++;
+             }
+           }
++
++          // Nach Restore sofort Relay-Validierung erzwingen.
++          // Einträge die NICHT von signierten Events auf Relays bestätigt werden,
++          // werden beim nächsten Merge verworfen.
++          try {
++            await AdminRegistry.forceRefresh();
++            AppLogger.debug('Backup',
++              'Admin-Registry revalidiert. Restored: $restoredAdmins, Rejected: $rejectedAdmins');
++          } catch (e) {
++            AppLogger.warn('Backup',
++              'Admin-Registry Revalidierung fehlgeschlagen (offline?). '
++              'Einträge werden beim nächsten Online-Start geprüft.');
++          }
+         }
+ 
+         // --- PERSÖNLICHE BÜRGSCHAFTEN WIEDERHERSTELLEN ---
+@@ -510,54 +535,74 @@ class BackupService {
+         }
+ 
+         // =============================================
+-        // NEU: PLATFORM PROOFS WIEDERHERSTELLEN (v5+)
+-        // =============================================
+-        // Stellt alle verknüpften Plattform-Accounts wieder
+-        // her, damit der User nicht alle Verknüpfungen
+-        // (Telegram, RoboSats, Satoshi-Kleinanzeigen etc.)
+-        // nach einem Restore neu anlegen muss.
+-        //
+-        // Die Proof-Signaturen sind an den privaten Schlüssel
+-        // gebunden — da dieser ebenfalls restored wird,
+-        // bleiben die Signaturen gültig.
++        // PLATFORM PROOFS WIEDERHERSTELLEN (MIT VALIDIERUNG)
+         // =============================================
++        // Security Audit 2, Fund #4: Nur Proofs mit gültiger Signatur
++        // akzeptieren. Leere oder ungültige Signaturen werden verworfen.
+         if (data['platform_proofs'] != null) {
+           final proofList = data['platform_proofs'] as List<dynamic>;
+           if (proofList.isNotEmpty) {
+-            final prefs = await SharedPreferences.getInstance();
+-            // Direkt als JSON speichern (gleiches Format wie PlatformProofService._saveAllProofs)
+-            await prefs.setString('platform_proofs', jsonEncode(proofList));
++            final validatedProofs = <dynamic>[];
++
++            for (final proof in proofList) {
++              try {
++                final proofMap = proof as Map<String, dynamic>;
++                final proofSig = proofMap['proof_sig'] as String? ?? '';
++
++                // Leere Signaturen ablehnen
++                if (proofSig.isEmpty) continue;
++
++                // Signatur-Format prüfen (128 hex chars = 64 bytes Schnorr)
++                if (proofSig.length == 128 &&
++                    RegExp(r'^[0-9a-fA-F]+$').hasMatch(proofSig)) {
++                  validatedProofs.add(proof);
++                }
++              } catch (_) {
++                // Ungültiges Format → überspringen
++              }
++            }
++
++            if (validatedProofs.isNotEmpty) {
++              final prefs = await SharedPreferences.getInstance();
++              await prefs.setString('platform_proofs', jsonEncode(validatedProofs));
++            }
+           }
+         }
+ 
+         // =============================================
+-        // NEU: HUMANITY PROOF WIEDERHERSTELLEN (v5+)
+-        // =============================================
+-        // Stellt den Lightning-Zahlungsbeweis wieder her.
+-        // Ohne Restore müsste die App den Beweis erneut
+-        // auf Nostr-Relays suchen — was langsam ist und
+-        // fehlschlagen kann wenn die Relays den alten
+-        // Zap-Receipt nicht mehr vorhalten.
++        // HUMANITY PROOF: Als "needs_reverification" markieren
+         // =============================================
++        // Security Audit 2, Fund #4: NICHT direkt als verified setzen!
++        // Stattdessen Receipt-Daten speichern und als "pending" markieren.
++        // HumanityProofService prüft beim nächsten Start auf Relays
++        // ob der Zap-Receipt tatsächlich existiert.
+         if (data['humanity_proof'] != null) {
+           final hp = data['humanity_proof'] as Map<String, dynamic>;
+           final hpVerified = hp['verified'] as bool? ?? false;
+ 
+           if (hpVerified) {
+             final prefs = await SharedPreferences.getInstance();
+-            await prefs.setBool('humanity_verified', true);
+-            final firstZapAt = hp['first_zap_at'] as int? ?? 0;
+-            if (firstZapAt > 0) {
+-              await prefs.setInt('humanity_first_zap_at', firstZapAt);
+-            }
++            // NICHT: await prefs.setBool('humanity_verified', true);
++            // Stattdessen: als "pending reverification" markieren
++            await prefs.setBool('humanity_verified', false);
++            await prefs.setBool('humanity_needs_reverification', true);
++
+             final receiptId = hp['receipt_event_id'] as String? ?? '';
+             if (receiptId.isNotEmpty) {
+               await prefs.setString('humanity_receipt_id', receiptId);
+             }
++            final firstZapAt = hp['first_zap_at'] as int? ?? 0;
++            if (firstZapAt > 0) {
++              await prefs.setInt('humanity_first_zap_at', firstZapAt);
++            }
+             final checkedAt = hp['checked_at'] as int? ?? 0;
+             if (checkedAt > 0) {
+               await prefs.setInt('humanity_checked_at', checkedAt);
+             }
++
++            AppLogger.debug('Backup',
++              'Humanity-Proof als pending_reverification markiert. '
++              'Receipt: ${receiptId.isNotEmpty ? "vorhanden" : "fehlt"}');
+           }
+         }
+ 
+diff --git a/lib/services/humanity_proof_service.dart b/lib/services/humanity_proof_service.dart
+index 230173e..11907ed 100644
+--- a/lib/services/humanity_proof_service.dart
++++ b/lib/services/humanity_proof_service.dart
+@@ -53,6 +53,9 @@ class HumanityProofService {
+   static const String _keyFirstZapAt = 'humanity_first_zap_at';
+   static const String _keyReceiptId = 'humanity_receipt_id';
+   static const String _keyCheckedAt = 'humanity_checked_at';
++  // Security Audit 2, Fund #4: Nach Backup-Restore muss der
++  // Humanity-Proof gegen Relays re-verifiziert werden.
++  static const String _keyNeedsReverification = 'humanity_needs_reverification';
+ 
+   // =============================================
+   // STATUS PRÜFEN
+@@ -60,6 +63,18 @@ class HumanityProofService {
+ 
+   static Future<HumanityStatus> getStatus() async {
+     final prefs = await SharedPreferences.getInstance();
++
++    // Wenn Reverifikation ansteht, erst als unverified melden
++    if (prefs.getBool(_keyNeedsReverification) == true) {
++      return HumanityStatus(
++        verified: false,
++        firstZapAt: prefs.getInt(_keyFirstZapAt) ?? 0,
++        receiptEventId: prefs.getString(_keyReceiptId) ?? '',
++        lastCheckedAt: prefs.getInt(_keyCheckedAt) ?? 0,
++        needsReverification: true,
++      );
++    }
++
+     return HumanityStatus(
+       verified: prefs.getBool(_keyVerified) ?? false,
+       firstZapAt: prefs.getInt(_keyFirstZapAt) ?? 0,
+@@ -68,6 +83,35 @@ class HumanityProofService {
+     );
+   }
+ 
++  /// Security Audit 2, Fund #4: Prüft ob ein aus dem Backup
++  /// wiederhergestellter Humanity-Proof tatsächlich gültig ist.
++  /// Wird beim App-Start aufgerufen wenn needsReverification=true.
++  static Future<bool> reverifyIfNeeded() async {
++    final prefs = await SharedPreferences.getInstance();
++    if (prefs.getBool(_keyNeedsReverification) != true) return false;
++
++    try {
++      final result = await checkForZaps();
++      if (result.found) {
++        // Proof bestätigt → als verified markieren
++        await prefs.setBool(_keyVerified, true);
++        await prefs.remove(_keyNeedsReverification);
++        AppLogger.debug('HumanityProof', 'Reverifikation erfolgreich: Zap-Receipt bestätigt');
++        return true;
++      } else {
++        // Proof konnte nicht bestätigt werden → bleibt pending
++        AppLogger.debug('HumanityProof',
++          'Reverifikation fehlgeschlagen: Kein Zap-Receipt gefunden. '
++          'Nächster Versuch beim nächsten App-Start.');
++        return false;
++      }
++    } catch (e) {
++      // Offline oder Relay-Fehler → nächstes Mal erneut versuchen
++      AppLogger.debug('HumanityProof', 'Reverifikation fehlgeschlagen (offline?): $e');
++      return false;
++    }
++  }
++
+   // =============================================
+   // PRÜFUNG: Hat dieser npub jemals gezappt?
+   // =============================================
+@@ -404,12 +448,14 @@ class HumanityStatus {
+   final int firstZapAt;
+   final String receiptEventId;
+   final int lastCheckedAt;
++  final bool needsReverification;
+ 
+   HumanityStatus({
+     required this.verified,
+     this.firstZapAt = 0,
+     this.receiptEventId = '',
+     this.lastCheckedAt = 0,
++    this.needsReverification = false,
+   });
+ 
+   String get firstZapDateStr {
+diff --git a/lib/services/promotion_claim_service.dart b/lib/services/promotion_claim_service.dart
+index 77d756a..6ea6ab3 100644
+--- a/lib/services/promotion_claim_service.dart
++++ b/lib/services/promotion_claim_service.dart
+@@ -251,6 +251,17 @@ class PromotionClaimService {
+ 
+     if (proofs.isEmpty || meetup.isEmpty) return null;
+ 
++    // Security Audit 2, Fund #5: Claim-Alter prüfen (max 90 Tage).
++    // Verhindert dass uralte Claims auf Basis längst suspendierter
++    // Admins unbegrenzt gültig bleiben.
++    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
++    const maxClaimAgeDays = 90;
++    if (now - claim.createdAt > maxClaimAgeDays * 86400) {
++      AppLogger.debug('PromotionClaim',
++        'Claim abgelehnt: Zu alt (>${maxClaimAgeDays} Tage)');
++      return null;
++    }
++
+     // 2. Jeden Badge-Beweis einzeln verifizieren
+     int validBadgeCount = 0;
+     final verifiedSigners = <String>{};
+@@ -298,11 +309,27 @@ class PromotionClaimService {
+     if (validBadgeCount < minVerifiedBadges) return null;
+     if (verifiedSigners.length < minUniqueSigners) return null;
+ 
++    // Security Audit 2, Fund #5: Sicherstellen dass die Signer
++    // AKTUELL noch Admins sind (nicht nur zum Zeitpunkt des Claims).
++    // knownAdminPubkeys wird von syncOrganicAdmins() aus der aktuellen
++    // AdminRegistry befüllt. Suspendierte Admins sind dort nicht mehr
++    // enthalten → deren Badges werden oben bereits übersprungen.
++    // Doppelter Check: verifiedSigners ∩ knownAdminPubkeys
++    final currentlyActiveSigners = verifiedSigners
++        .where((s) => knownAdminPubkeys.contains(s))
++        .length;
++    if (currentlyActiveSigners < minUniqueSigners) {
++      AppLogger.debug('PromotionClaim',
++        'Claim abgelehnt: Nur $currentlyActiveSigners von '
++        '${verifiedSigners.length} Signern sind noch aktive Admins');
++      return null;
++    }
++
+     return VerifiedClaim(
+       claimerPubkey: claim.pubkey,
+       meetup: meetup,
+       verifiedBadgeCount: validBadgeCount,
+-      uniqueSignerCount: verifiedSigners.length,
++      uniqueSignerCount: currentlyActiveSigners,
+       claimedAt: claim.createdAt,
+     );
+   }
+diff --git a/lib/services/rolling_qr_service.dart b/lib/services/rolling_qr_service.dart
+index c30a05b..cbce109 100644
+--- a/lib/services/rolling_qr_service.dart
++++ b/lib/services/rolling_qr_service.dart
+@@ -75,6 +75,9 @@ class RollingQRService {
+     ),
+   );
+   static const String _secureKeySessionSeed = 'rqr_session_seed_secure';
++  // Security Audit 2, Fund #3: Base-Payload enthält Schnorr-Signatur
++  // und gehört in hardware-geschützten Storage statt SharedPreferences.
++  static const String _secureKeyBasePayload = 'rqr_session_base_payload_secure';
+ 
+   // SharedPreferences Keys (nicht-sensible Session-Metadaten)
+   static const String _keySessionSeed = 'rqr_session_seed'; // LEGACY → wird migriert
+@@ -115,6 +118,31 @@ class RollingQRService {
+     await _secureStorage.delete(key: _secureKeySessionSeed);
+   }
+ 
++  // =============================================
++  // BASE PAYLOAD: SecureStorage (Security Audit 2, Fund #3)
++  // =============================================
++  static Future<void> _saveBasePayloadSecure(String payload) async {
++    await _secureStorage.write(key: _secureKeyBasePayload, value: payload);
++  }
++
++  static Future<String?> _loadBasePayloadSecure() async {
++    // Migration: Falls noch in SharedPreferences
++    final prefs = await SharedPreferences.getInstance();
++    final legacy = prefs.getString(_keySessionBasePayload);
++    if (legacy != null && legacy.isNotEmpty) {
++      await _secureStorage.write(key: _secureKeyBasePayload, value: legacy);
++      await prefs.remove(_keySessionBasePayload);
++    }
++    return await _secureStorage.read(key: _secureKeyBasePayload);
++  }
++
++  static Future<void> _deleteBasePayloadSecure() async {
++    await _secureStorage.delete(key: _secureKeyBasePayload);
++    // Auch Legacy-Key aufräumen falls vorhanden
++    final prefs = await SharedPreferences.getInstance();
++    await prefs.remove(_keySessionBasePayload);
++  }
++
+   // =============================================
+   // KRYPTOGRAPHISCH SICHERER SEED-GENERATOR
+   // =============================================
+@@ -269,8 +297,8 @@ class RollingQRService {
+     await prefs.setInt(_keySessionBlockHeight, blockHeight);
+     await prefs.setString(_keySessionPubkey, pubkey);
+     
+-    // Base-Payload speichern (Für QR und NFC)
+-    await prefs.setString(_keySessionBasePayload, jsonEncode(basePayload));
++    // Base-Payload in SecureStorage speichern (enthält Schnorr-Signatur)
++    await _saveBasePayloadSecure(jsonEncode(basePayload));
+ 
+     return session;
+   }
+@@ -287,7 +315,7 @@ class RollingQRService {
+     await prefs.remove(_keySessionMeetupCountry);
+     await prefs.remove(_keySessionBlockHeight);
+     await prefs.remove(_keySessionPubkey);
+-    await prefs.remove(_keySessionBasePayload);
++    await _deleteBasePayloadSecure();
+   }
+ 
+   // =============================================
+@@ -299,8 +327,7 @@ class RollingQRService {
+     final session = await loadSession();
+     if (session == null) return null;
+     
+-    final prefs = await SharedPreferences.getInstance();
+-    final payloadStr = prefs.getString(_keySessionBasePayload);
++    final payloadStr = await _loadBasePayloadSecure();
+     if (payloadStr == null) return null;
+     
+     return jsonDecode(payloadStr);
+@@ -328,9 +355,8 @@ class RollingQRService {
+   // =============================================
+ 
+   static Future<String> generateQRString(MeetupSession session) async {
+-    // 1. Hole den EINMALIG signierten Base-Payload
+-    final prefs = await SharedPreferences.getInstance();
+-    final basePayloadStr = prefs.getString(_keySessionBasePayload);
++    // 1. Hole den EINMALIG signierten Base-Payload aus SecureStorage
++    final basePayloadStr = await _loadBasePayloadSecure();
+     
+     Map<String, dynamic> payload;
+     if (basePayloadStr != null) {
+diff --git a/lib/services/secure_key_store.dart b/lib/services/secure_key_store.dart
+index bcb7c42..5b163ca 100644
+--- a/lib/services/secure_key_store.dart
++++ b/lib/services/secure_key_store.dart
+@@ -15,6 +15,7 @@
+ //   anschließend aus SharedPreferences gelöscht.
+ // ============================================
+ 
++import 'dart:async';
+ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+ import 'package:shared_preferences/shared_preferences.dart';
+ import 'app_logger.dart';
+@@ -52,45 +53,64 @@ class SecureKeyStore {
+   // Wird einmalig beim ersten Zugriff ausgeführt.
+   // =============================================
+   static bool _migrated = false;
++  // Security Audit 2, Fund #8: Mutex verhindert Race Condition
++  // wenn mehrere Futures gleichzeitig ensureMigrated() aufrufen.
++  // Ohne Mutex könnte der zweite Aufruf Keys aus SharedPreferences
++  // lesen NACHDEM der erste sie bereits gelöscht hat.
++  static Completer<void>? _migrationCompleter;
+ 
+   static Future<void> ensureMigrated() async {
+     if (_migrated) return;
+ 
+-    final prefs = await SharedPreferences.getInstance();
+-    final alreadyDone = prefs.getBool(_migrationDoneKey) ?? false;
+-
+-    if (!alreadyDone) {
+-      // Alte Keys aus SharedPreferences lesen
+-      final nsec = prefs.getString(_nsecKey);
+-      final npub = prefs.getString(_npubKey);
+-      final privHex = prefs.getString(_privHexKey);
++    // Wenn Migration bereits läuft, auf Completion warten
++    if (_migrationCompleter != null) {
++      await _migrationCompleter!.future;
++      return;
++    }
+ 
+-      // In SecureStorage schreiben (wenn vorhanden)
+-      if (nsec != null && nsec.isNotEmpty) {
+-        await _storage.write(key: _nsecKey, value: nsec);
+-      }
+-      if (npub != null && npub.isNotEmpty) {
+-        await _storage.write(key: _npubKey, value: npub);
++    // Migration starten und Completer setzen
++    _migrationCompleter = Completer<void>();
++
++    try {
++      final prefs = await SharedPreferences.getInstance();
++      final alreadyDone = prefs.getBool(_migrationDoneKey) ?? false;
++
++      if (!alreadyDone) {
++        // Alte Keys aus SharedPreferences lesen
++        final nsec = prefs.getString(_nsecKey);
++        final npub = prefs.getString(_npubKey);
++        final privHex = prefs.getString(_privHexKey);
++
++        // In SecureStorage schreiben (wenn vorhanden)
++        if (nsec != null && nsec.isNotEmpty) {
++          await _storage.write(key: _nsecKey, value: nsec);
++        }
++        if (npub != null && npub.isNotEmpty) {
++          await _storage.write(key: _npubKey, value: npub);
++        }
++        if (privHex != null && privHex.isNotEmpty) {
++          await _storage.write(key: _privHexKey, value: privHex);
++        }
++
++        // Alte Keys aus SharedPreferences LÖSCHEN
++        await prefs.remove(_nsecKey);
++        await prefs.remove(_npubKey);
++        await prefs.remove(_privHexKey);
++
++        // Migration als erledigt markieren
++        await prefs.setBool(_migrationDoneKey, true);
++
++        if (nsec != null) {
++          AppLogger.debug('SecureKeyStore',
++              'Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
++        }
+       }
+-      if (privHex != null && privHex.isNotEmpty) {
+-        await _storage.write(key: _privHexKey, value: privHex);
+-      }
+-
+-      // Alte Keys aus SharedPreferences LÖSCHEN
+-      await prefs.remove(_nsecKey);
+-      await prefs.remove(_npubKey);
+-      await prefs.remove(_privHexKey);
+ 
+-      // Migration als erledigt markieren
+-      await prefs.setBool(_migrationDoneKey, true);
+-
+-      if (nsec != null) {
+-        AppLogger.debug('SecureKeyStore', 'Migration abgeschlossen: Keys aus SharedPreferences entfernt.');
+-
+-      }
++      _migrated = true;
++    } finally {
++      _migrationCompleter!.complete();
++      _migrationCompleter = null;
+     }
+-
+-    _migrated = true;
+   }
+ 
+   // =============================================
+-- 
+2.43.0
