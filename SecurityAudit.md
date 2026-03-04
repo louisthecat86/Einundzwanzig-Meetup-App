@@ -119,21 +119,22 @@ Wird konsistent in `signCompact()`, `verifyCompact()`, `signWithNostr()` und
 
 ---
 
-## ⚠️ Noch offen (Empfehlungen für Post-Beta)
+## Status der offenen Punkte
 
-1. **Passwort-Referenzen in Markdown-Dateien entfernen:**  
-   `QUICKSTART_APK.md`, `REPUTATION.md` enthalten noch `#21AdminTag21#`. 
-   Diese sollten manuell bereinigt werden.
+1. ~~**Passwort-Referenzen in Markdown-Dateien entfernen:**~~  
+   **ERLEDIGT** — `QUICKSTART_APK.md`, `REPUTATION.md`, `BUILD_APK.md` und `README.md`
+   wurden vollständig bereinigt. Keine Referenz auf `#21AdminTag21#` mehr vorhanden.
 
-2. **Legacy v1 komplett entfernen:**  
-   Sobald alle NFC-Tags mit v2-Signaturen überschrieben sind, 
-   kann `signLegacy()` / `verifyLegacy()` entfernt werden.
+2. ~~**Legacy v1 komplett entfernen:**~~  
+   **ERLEDIGT (deaktiviert)** — `signLegacy()` gibt `''` zurück, `verifyLegacy()` gibt `false` zurück.
+   Legacy v1 ist damit vollständig deaktiviert. Die Methoden bleiben als Stubs erhalten,
+   damit alte Call-Sites nicht brechen, erzeugen aber keine gültigen Signaturen mehr.
 
-3. **Schnorr-Library Audit:**  
+3. **Schnorr-Library Audit** (offen):  
    Das `nostr`-Package nutzt intern `secp256k1`. Ein unabhängiger 
    Audit der BIP-340 Implementierung wird für Public Release empfohlen.
 
-4. **Android minSdkVersion:**  
+4. **Android minSdkVersion** (offen):  
    Aktuell 21. `flutter_secure_storage` mit `encryptedSharedPreferences: true`
    benötigt API 23+. Auf API 21-22 Geräten fällt die Library auf AES-Verschlüsselung
    mit RSA-wrapped Key zurück — funktional aber weniger sicher als EncryptedSharedPreferences.

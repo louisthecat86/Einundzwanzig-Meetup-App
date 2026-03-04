@@ -1,11 +1,11 @@
-# 📱 Android APK Build-Anleitung
+# Android APK Build-Anleitung
 
 Diese Anleitung zeigt dir Schritt-für-Schritt, wie du die Einundzwanzig Meetup App als APK baust und auf deinem Android-Handy installierst.
 
-## 🔧 Voraussetzungen
+## Voraussetzungen
 
-### 1. Flutter SDK (bereits vorhanden)
-Du hast Flutter bereits im Projekt unter `flutter/` - perfekt!
+### 1. Flutter SDK
+Flutter wird für den Build benötigt. Installationsanweisungen: https://flutter.dev/docs/get-started/install
 
 ### 2. Android SDK
 Falls noch nicht installiert:
@@ -29,7 +29,7 @@ sudo apt-get install openjdk-17-jdk
 
 ---
 
-## 🚀 Schritt 1: Dependencies installieren
+## Schritt 1: Dependencies installieren
 
 ```bash
 # Im Projekt-Verzeichnis
@@ -56,7 +56,7 @@ Changed 45 dependencies!
 
 ---
 
-## 🏗️ Schritt 2: APK bauen
+## Schritt 2: APK bauen
 
 ### Option A: Release APK (empfohlen für Handy)
 
@@ -83,7 +83,7 @@ Schneller, aber größere Datei + Debug-Informationen.
 
 ---
 
-## 📱 Schritt 3: APK auf Handy installieren
+## Schritt 3: APK auf Handy installieren
 
 ### Methode 1: USB-Kabel (adb)
 
@@ -136,44 +136,47 @@ cp build/app/outputs/flutter-apk/app-release.apk ~/public_html/einundzwanzig.apk
 
 ---
 
-## 🧪 Schritt 4: App testen
+## Schritt 4: App testen
 
 Nach Installation öffne die App:
 
 ### Test-Checkliste:
 
-#### ✅ Basis-Funktionen
+#### Basis-Funktionen
 - [ ] App öffnet ohne Crash
 - [ ] Intro-Screen wird angezeigt
 - [ ] Profil erstellen (Nickname eingeben)
 - [ ] Dashboard lädt
 
-#### ✅ NFC-Funktionen (benötigt NFC-Handy)
+#### NFC-Funktionen (benötigt NFC-Handy)
 - [ ] "BADGES" Kachel öffnen
 - [ ] NFC-Scanner aktiviert sich
 - [ ] NFC-Karte wird erkannt
 
-#### ✅ Admin-Funktionen
-- [ ] "Admin werden" → Passwort: `#21AdminTag21#`
+#### Admin-Funktionen
+Der Admin-Status wird automatisch über den Trust Score vergeben
+(oder über Seed-Admin-Eintrag in der Admin-Registry).
+- [ ] Badges sammeln (verschiedene Meetups + Organisatoren)
+- [ ] Trust Score erreicht Promotion-Schwellenwert
 - [ ] Admin-Kachel erscheint auf Dashboard
 - [ ] "NFC Tag beschreiben" öffnet sich
 - [ ] NFC-Tag kann beschrieben werden
 
-#### ✅ Badge-Sammlung
+#### Badge-Sammlung
 - [ ] Badge-Wallet öffnen
 - [ ] Share-Button funktioniert
 - [ ] QR-Code wird angezeigt
 - [ ] Text wird in Zwischenablage kopiert
 
-#### ✅ Daten-Persistenz
+#### Daten-Persistenz
 - [ ] App schließen
 - [ ] App neu öffnen
-- [ ] Bist du noch eingeloggt? ✅
-- [ ] Badges noch vorhanden? ✅
+- [ ] Bist du noch eingeloggt?
+- [ ] Badges noch vorhanden?
 
 ---
 
-## 🔍 Fehlersuche
+## Fehlersuche
 
 ### Problem: "flutter: command not found"
 
@@ -228,7 +231,7 @@ adb logcat | grep Flutter
 
 ---
 
-## 📊 Build-Optimierungen
+## Build-Optimierungen
 
 ### Kleinere APK-Größe
 
@@ -252,53 +255,38 @@ adb logcat | grep Flutter
 
 ---
 
-## 🎯 Nächste Schritte nach Installation
+## Nächste Schritte nach Installation
 
-### 1. Admin-Setup
-```bash
-# Als Admin testen:
-1. Öffne App
-2. Erstelle Profil
-3. Tippe "Admin werden"
-4. Passwort: #21AdminTag21#
-5. ADMIN-Kachel erscheint
-```
+### 1. Profil + Nostr-Key
+1. App öffnen
+2. Profil erstellen (Nickname)
+3. Nostr-Key wird automatisch generiert (oder bestehenden nsec importieren)
+4. Home-Meetup wählen
 
-### 2. NFC-Tags beschreiben
-```bash
-# Benötigt:
-- NFC-fähiges Android-Handy
-- Leere NFC-Karten (NTAG213/215/216 empfohlen)
-- Amazon: "NFC Tags NTAG215" (ca. 15€ für 30 Stück)
+### 2. Badges sammeln
+1. Dashboard → BADGES
+2. NFC-Tag oder Rolling-QR eines Organisators scannen
+3. Badge erscheint im Wallet
+4. Claim-Binding wird automatisch erstellt
 
-# Prozess:
-1. Dashboard → ADMIN → "NFC Tag beschreiben"
-2. Wähle "Badge Tag"
-3. Halte NFC-Karte an Handy-Rückseite
-4. Tag ist beschrieben! ✅
-```
+### 3. Admin werden (kryptographisch)
+Der Admin-Status wird **automatisch** vergeben, sobald der Trust Score
+den Promotion-Schwellenwert erreicht (abhängig von der Bootstrap-Phase).
+Alternativ: Aufnahme als Seed-Admin durch bestehenden Admin.
 
-### 3. Identitäten verifizieren
-```bash
-1. Andere Person öffnet App
-2. Erstellt Profil
-3. Du (Admin) → ADMIN → "Identitäten verifizieren"
-4. Person scannt deinen Verify-Tag
-5. Person ist verifiziert! ✅
-```
+### 4. NFC-Tags beschreiben (als Admin)
+- Benötigt: NFC-fähiges Android-Handy + NTAG215 Tags
+- Dashboard → ADMIN → Session starten → "NFC Tag beschreiben"
+- Halte NFC-Karte an Handy-Rückseite
 
-### 4. Badges sammeln (als User testen)
-```bash
-1. Zweites Handy / Zweite App-Installation
-2. Erstelle User-Profil (nicht als Admin)
-3. Dashboard → BADGES
-4. Scanne Badge-Tag (den du als Admin erstellt hast)
-5. Badge erscheint im Wallet! ✅
-```
+### 5. Reputation teilen
+1. Dashboard → Reputation-QR
+2. QR vorzeigen oder als Nostr-Event publizieren
+3. Gegenüber scannt und verifiziert
 
 ---
 
-## 🔐 Signierte APK (für Play Store)
+## Signierte APK (für Play Store)
 
 Falls du die App später im Play Store veröffentlichen möchtest:
 
@@ -320,7 +308,7 @@ storeFile=/home/user/einundzwanzig-key.jks
 
 ---
 
-## 📞 Hilfe & Support
+## Hilfe & Support
 
 Bei Problemen:
 
@@ -339,12 +327,11 @@ Bei Problemen:
 
 ---
 
-## ✅ Erfolg!
+## Erfolg!
 
 Wenn die APK läuft:
-- ✨ Du hast eine voll funktionsfähige Android-App
-- ✨ Du kannst NFC-Tags beschreiben
-- ✨ Du kannst Identitäten verifizieren
-- ✨ Du kannst Badges sammeln & teilen
-
-**Viel Spaß beim Testen! 🚀**
+- Du hast eine voll funktionsfähige Android-App
+- Du kannst Badges sammeln und Reputation aufbauen
+- Du kannst NFC-Tags und Rolling-QRs als Admin erstellen
+- Du kannst Reputation teilen und verifizieren
+- Du kannst verschlüsselte Backups erstellen und wiederherstellen

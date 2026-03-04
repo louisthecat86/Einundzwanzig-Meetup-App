@@ -1,155 +1,168 @@
-# Einundzwanzig Meetup Badge Reputation System
+# Einundzwanzig Meetup — Reputation System
 
 ## Übersicht
 
-Die Einundzwanzig Meetup App bietet ein dezentrales Reputationssystem basierend auf gesammelten Meetup-Badges. Nutzer können ihre physische Teilnahme an Meetups nachweisen und diese Reputation mit der Community teilen.
+Das Reputationssystem der Einundzwanzig Meetup App übersetzt **physische Meetup-Teilnahme** in **kryptographisch verifizierbare Reputation** — ohne zentrale Datenbank, ohne KYC, ohne Vertrauensvorschuss.
+
+---
 
 ## Wie funktioniert es?
 
 ### 1. Badges sammeln
-- Besuche Einundzwanzig Meetups
-- Scanne den NFC-Tag am Meetup
-- Erhalte ein Badge mit:
-  - Meetup-Name
-  - Datum
-  - Bitcoin-Blockhöhe zum Zeitpunkt
-  - Eindeutige Badge-ID
 
-### 2. Reputation teilen
+- Besuche ein Bitcoin-Meetup.
+- Scanne den **NFC-Tag** oder den **Rolling-QR-Code** des Organisators.
+- Die App verifiziert automatisch:
+  - Schnorr-Signatur (BIP-340) des Organisators
+  - Ablauf-/Zeitfenstergültigkeit
+  - Admin-Registry-Status des Signers
+- Bei Erfolg wird ein **Badge** lokal gespeichert.
 
-Die App bietet mehrere Möglichkeiten, deine Badges zu teilen:
+### 2. Claim-Binding (Badge an dich binden)
 
-#### A) Als Text (für Social Media)
-```
-🏆 MEINE EINUNDZWANZIG REPUTATION
+- Nach dem Scan erstellt die App automatisch eine **Claim-Signatur** (Nostr Kind 21002).
+- Damit ist das Badge kryptographisch an **deine** Nostr-Identität gebunden.
+- Ohne Claim-Binding zählt ein Badge **nicht** für die Reputation.
 
-Total Badges: 5
-Meetups besucht: 3
-Nostr: npub1abc...xyz
+### 3. Trust Score
 
-📍 Besuchte Meetups:
-  • München (15.1.2026)
-  • Berlin (22.1.2026)
-  • Hamburg (29.1.2026)
-```
+Aus allen gebundenen Badges berechnet die App einen **Trust Score**, der folgende Faktoren gewichtet:
 
-#### B) Als JSON (für Verifizierung)
-```json
-{
-  "version": "1.0",
-  "user": "npub1abc...xyz",
-  "total_badges": 5,
-  "meetups_visited": 3,
-  "badges": [
-    {
-      "meetup": "München",
-      "date": "2026-01-15T19:00:00.000Z",
-      "block": 875432,
-      "hash": "a3f9b2c1e5d4f8a2"
-    }
-  ],
-  "exported_at": "2026-02-09T12:30:00.000Z",
-  "checksum": "d8e7f5a3"
-}
-```
+| Faktor | Beschreibung |
+|--------|-------------|
+| **Aktivität** | Summe gewichteter Badge-Werte |
+| **Diversität** | Verschiedene Meetups x verschiedene Organisatoren |
+| **Reife** | Account-Alter (max. Einfluss nach 180 Tagen) |
+| **Qualität** | Vertrauenswürdigkeit der Signer (Veteran-Bonus) |
+| **Time Decay** | Halbwertszeit 26 Wochen — alte Badges verlieren an Gewicht |
+| **Frequency Cap** | Max. 2 Badges pro Woche zählen (Anti-Farming) |
 
-#### C) Als QR-Code
-- Zeige deinen QR-Code vor Ort
-- Enthält alle Badges als JSON
-- Kann gescannt und verifiziert werden
+**Trust Level:**
 
-### 3. Reputation verifizieren
+| Score | Level |
+|-------|-------|
+| >= 40 | VETERAN |
+| >= 20 | ETABLIERT |
+| >= 10 | AKTIV |
+| >= 3  | STARTER |
+| < 3   | NEU |
 
-Jedes Badge hat:
-- **Hash**: Eindeutige Prüfsumme aus `ID-Meetup-Datum-Block`
-- **Checksum**: Gesamtprüfsumme des Exports
-- **Blockzeit**: Unveränderbare Bitcoin-Blockhöhe
+### 4. Reputation teilen
 
-## Anwendungsfälle
+Die Reputation kann geteilt werden als:
 
-### 1. satoshikleinanzeigen.space
-- Zeige beim Verkauf deine Meetup-Reputation
-- Käufer sehen: "Diese Person war bei 5 Meetups"
-- Erhöht Vertrauen ohne KYC
+- **QR-Code** — enthält signierte Reputation-Daten, vor Ort vorzeigbar
+- **Nostr-Event** — wird als Kind 30078 auf Relays publiziert, von jedem abrufbar
+- **Text/JSON** — für Social Media oder direkte Weitergabe
 
-### 2. Peer-to-Peer Handel
-- QR-Code beim persönlichen Treffen zeigen
-- Andere können deine Community-Aktivität prüfen
+### 5. Reputation verifizieren
 
-### 3. Community-Events
-- Nachweis für vergünstigte Tickets
-- "Nur für Mitglieder mit 3+ Badges"
+Ein Verifizierer prüft:
 
-### 4. Social Media
-- Badge-Screenshots teilen
-- Community-Engagement zeigen
-
-## Technische Details
-
-### Badge-Hash-Berechnung
-```dart
-String getVerificationHash() {
-  final data = '$id-$meetupName-${date.toIso8601String()}-$blockHeight';
-  final bytes = utf8.encode(data);
-  final digest = sha256.convert(bytes);
-  return digest.toString().substring(0, 16);
-}
-```
-
-### Checksum-Berechnung
-```dart
-final jsonString = jsonEncode(data);
-final checksum = sha256.convert(utf8.encode(jsonString))
-                       .toString()
-                       .substring(0, 8);
-```
-
-## Sicherheit & Datenschutz
-
-- ✅ **Lokal gespeichert**: Badges liegen nur auf deinem Gerät
-- ✅ **Selektives Teilen**: Du entscheidest, was du teilst
-- ✅ **Pseudonym**: Nur Nostr npub, kein Realname nötig
-- ✅ **Verifizierbar**: Hashes können überprüft werden
-- ⚠️ **Nicht fälschungssicher**: Jemand könnte falsche Daten erstellen (in v2: Nostr-Signaturen)
-
-## Zukünftige Features (v2)
-
-- [ ] Nostr-Integration: Badges als signed Events
-- [ ] NIP-XX: Badge-Verifikation über Relays
-- [ ] Meetup-Admin-Signaturen für Badges
-- [ ] Badge-Marketplace: Seltene Badges handeln
-- [ ] Reputation-Score-Berechnung
-- [ ] Web-Verifizierungstool
-
-## Für Entwickler
-
-### Badge-Export verwenden
-
-```dart
-import 'package:einundzwanzig_meetup_app/models/badge.dart';
-
-// Badges exportieren
-final badges = await MeetupBadge.loadBadges();
-final json = MeetupBadge.exportBadgesForReputation(badges, userNpub);
-
-// Als String teilen
-await Share.share(json);
-
-// Badge-Hash prüfen
-final hash = badge.getVerificationHash();
-print('Badge Hash: $hash');
-```
-
-### JSON-Schema
-
-Siehe `lib/models/badge.dart` für die vollständige Implementierung.
-
-## Support & Feedback
-
-- GitHub Issues: [louisthecat86/Einundzwanzig-Meetup-App](https://github.com/louisthecat86/Einundzwanzig-Meetup-App)
-- Telegram: @einundzwanzig
-- Nostr: npub1einundzwanzig...
+1. **Organisator-Signatur** (Schnorr/BIP-340)
+2. **Claim-Signatur** des Sammlers
+3. **Badge Proof Hash** (SHA-256 über alle gebundenen Badges)
+4. **Admin-Registry** — ist der Signer ein bekannter Organisator?
+5. Optional: Plattform-Proofs, Social Graph, Humanity-Proof, NIP-05
 
 ---
 
-**Disclaimer**: Dieses System dient als soziales Reputationssignal, nicht als kryptografischer Identitätsnachweis. Für v2 ist eine Integration mit Nostr-Signaturen geplant.
+## Multi-Layer Identity
+
+Neben Badges fließen weitere Signale in die Reputation ein:
+
+| Layer | Beschreibung | Implementierung |
+|-------|-------------|----------------|
+| **Meetup-Badges** | Kernschicht — physische Präsenz | `badge_claim_service.dart`, `trust_score_service.dart` |
+| **Plattform-Proofs** | Verknüpfte Accounts (z. B. Telegram, Twitter) | `platform_proof_service.dart` |
+| **Social Graph** | Nostr-Follows, Mutuals, Common Contacts | `social_graph_service.dart` |
+| **Lightning/Zaps** | Zap-Aktivität als Echtheitssignal | `zap_verification_service.dart` |
+| **Humanity Proof** | Lightning-Zahlung = Anti-Bot | `humanity_proof_service.dart` |
+| **NIP-05** | Domain-basierte Identitätsprüfung | `nip05_service.dart` |
+
+---
+
+## Datenschutz
+
+- Auf Relays werden **nur aggregierte Zahlen** publiziert (Score, Badge-Anzahl, Signer-Anzahl etc.).
+- **Keine** Meetup-Namen, Orte oder Besuchsdaten.
+- Der `badge_proof_hash` beweist kryptographisch, welche Badges verwendet wurden — **ohne** Details preiszugeben.
+- Plattform-Proofs werden **nur** publiziert, wenn der Nutzer sie explizit erstellt hat.
+
+---
+
+## Anwendungsfälle
+
+### P2P-Handel (z. B. satoshikleinanzeigen.space)
+Zeige QR-Code → Gegenüber sieht verifizierbare Community-Reputation → Vertrauen ohne KYC.
+
+### Meetup-Events
+Badge-Wallet als Teilnahmenachweis, z. B. für vergünstigte Tickets oder Community-Zugang.
+
+### Social Media / Nostr
+Reputation als signiertes Event (Kind 30078) auf Relays publizieren, von jedem Client abrufbar.
+
+---
+
+## Technische Referenz
+
+### Badge Proof Hash (v2)
+
+```dart
+// Nur gebundene Badges (mit Claim-Signatur) werden einbezogen
+final bound = badges.where((b) => b.isFullyBound).toList();
+bound.sort((a, b) => a.claimTimestamp.compareTo(b.claimTimestamp));
+final proofChain = bound.map((b) => b.claimProofId).join('|');
+return sha256.convert(utf8.encode(proofChain)).toString();
+```
+
+### Reputation Event (Nostr Kind 30078)
+
+```json
+{
+  "version": 2,
+  "identity": { "nickname": "..." },
+  "stats": {
+    "score": 7.2,
+    "level": "AKTIV",
+    "total_badges": 8,
+    "verified_badges": 8,
+    "bound_badges": 7,
+    "meetup_count": 4,
+    "signer_count": 3,
+    "account_age_days": 120,
+    "since": "2025-11"
+  },
+  "proof": {
+    "badge_proof_hash": "a3f9b2c1...",
+    "proof_version": 2
+  },
+  "humanity_proof": {
+    "verified": true,
+    "method": "lightning_zap",
+    "first_zap_at": 1739905680
+  },
+  "updated_at": 1739927280
+}
+```
+
+### Sybil-Erkennung
+
+Die App erkennt automatisch verdächtige Muster:
+- Alle Badges von nur einem Signer
+- Viele Badges am selben Tag
+- Keine Co-Attestors bei keinem Badge
+
+---
+
+## Quellcode-Referenz
+
+| Datei | Funktion |
+|-------|----------|
+| `lib/models/badge.dart` | Badge-Modell, Proof-Hash, verschlüsselte Persistenz |
+| `lib/services/trust_score_service.dart` | Score-Berechnung, Bootstrap-Phasen, Promotion |
+| `lib/services/badge_claim_service.dart` | Claim-Binding (Kind 21002) |
+| `lib/services/reputation_publisher.dart` | Relay-Publishing (Kind 30078) |
+| `lib/screens/reputation_qr.dart` | QR-Erstellung + Teilen |
+| `lib/screens/reputation_verify_screen.dart` | Verifizierung eingehender Reputation |
+| `lib/screens/qr_scanner.dart` | Scanner für Reputation-QRs |

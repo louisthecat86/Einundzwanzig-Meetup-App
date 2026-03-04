@@ -1,6 +1,6 @@
-# 🚀 Schnellstart: APK auf deinem Smartphone
+# Schnellstart: APK auf deinem Smartphone
 
-## ✅ **Schritt 1: Android SDK installieren + APK bauen**
+## Schritt 1: Android SDK installieren + APK bauen
 
 Führe **einmalig** aus:
 
@@ -10,13 +10,13 @@ chmod +x setup-android-and-build.sh
 ./setup-android-and-build.sh
 ```
 
-⏱️ **Dauert ca. 10-15 Minuten** (Downloads + Build)
+Dauert ca. 10-15 Minuten (Downloads + Build).
 
 ---
 
-## 📱 **Schritt 2: APK auf Smartphone installieren**
+## Schritt 2: APK auf Smartphone installieren
 
-### **Option A: USB-Kabel** (für Entwickler)
+### Option A: USB-Kabel (für Entwickler)
 
 ```bash
 # 1. USB-Debugging aktivieren auf Smartphone:
@@ -29,26 +29,20 @@ chmod +x setup-android-and-build.sh
 ~/android-sdk/platform-tools/adb install build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### **Option B: Manueller Download** (EINFACHER!)
+### Option B: Manueller Download
 
-1. **APK herunterladen** von:
-   ```
-   build/app/outputs/flutter-apk/app-release.apk
-   ```
-
-2. **APK auf Smartphone kopieren** (USB, E-Mail, Cloud, WhatsApp)
-
-3. **Auf Smartphone:**
+1. APK-Datei kopieren: `build/app/outputs/flutter-apk/app-release.apk`
+2. Auf Smartphone übertragen (USB, E-Mail, Cloud, Messenger)
+3. Auf Smartphone:
    - Datei-Manager öffnen
    - APK-Datei antippen
    - "Aus dieser Quelle installieren" erlauben
    - INSTALLIEREN klicken
-
-4. **App öffnen** ✅
+4. App öffnen
 
 ---
 
-## 🔄 **APK neu bauen** (bei Code-Änderungen)
+## APK neu bauen (bei Code-Änderungen)
 
 Falls SDK bereits installiert ist:
 
@@ -57,84 +51,79 @@ chmod +x build-apk.sh
 ./build-apk.sh
 ```
 
-⏱️ **Dauert ca. 2-3 Minuten**
+Dauert ca. 2-3 Minuten.
 
 ---
 
-## ✅ **Was du testen kannst:**
+## Was du testen kannst
 
-### Als **Admin**:
-1. App öffnen → Profil erstellen
-2. "Admin werden" → Passwort:
-3. **ADMIN**-Kachel erscheint ✅
-4. **NFC Tag beschreiben** (braucht NFC-Karten von Amazon)
+### Als Organisator (Admin):
 
-### Als **User**:
+Der Admin-Status wird **automatisch** über den Trust Score vergeben.
+Alternativ kann ein bestehender Admin dich über die Admin-Registry als Seed-Admin aufnehmen.
+
+1. App öffnen, Profil erstellen
+2. Badges sammeln (verschiedene Meetups, verschiedene Organisatoren)
+3. Sobald Trust-Score-Schwellenwert erreicht → Admin-Kachel erscheint
+4. NFC-Tags beschreiben oder Rolling-QR starten
+
+### Als User:
+
 1. Profil erstellen
 2. Home-Meetup wählen
-3. **BADGES** → NFC scannen
-4. **Badge Wallet** ansehen
-5. **Share** → Reputation teilen
+3. BADGES → NFC scannen oder QR scannen
+4. Badge Wallet ansehen
+5. Reputation teilen (QR, Nostr, Text)
 
 ---
 
-## 🆘 **Bei Problemen:**
+## Bei Problemen
 
 ### Problem: "Gradle build failed"
 
 ```bash
 # Lösung 1: Clean Build
-./flutter/bin/flutter clean
-./build-apk.sh
+flutter clean && ./build-apk.sh
 
 # Lösung 2: Gradle Cache löschen
-rm -rf ~/.gradle/caches
-./build-apk.sh
+rm -rf ~/.gradle/caches && ./build-apk.sh
 ```
 
 ### Problem: "SDK not found"
 
 ```bash
-# Prüfe ob SDK installiert ist
 ls -la ~/android-sdk
-
-# Falls nicht, führe Setup nochmal aus
+# Falls nicht vorhanden:
 ./setup-android-and-build.sh
 ```
 
 ### Problem: "Installation blocked"
 
 Auf Smartphone:
-1. **Einstellungen** → **Sicherheit**
-2. **Unbekannte Quellen** aktivieren
-3. Oder: **Diese Quelle erlauben** (bei neueren Androids)
+1. Einstellungen → Sicherheit
+2. Unbekannte Quellen aktivieren (oder: Diese Quelle erlauben)
 
 ### Problem: App crashed beim Start
 
 ```bash
-# Logs ansehen (wenn per USB verbunden)
 ~/android-sdk/platform-tools/adb logcat | grep -i flutter
 ```
 
 ---
 
-## 📦 **NFC-Karten kaufen** (für echte Tests)
+## NFC-Karten kaufen (für echte Tests)
 
-Für Badge-Sammlung brauchst du NFC-Tags:
-
-- **Amazon**: "NFC Tags NTAG215" (ca. 15€ für 30 Stück)
-- **Empfehlung**: NTAG215 oder NTAG216 (größerer Speicher)
-- **Mindestens**: 10 Stück für Tests
+- **NTAG215** (empfohlen, 492 Bytes, reicht für Kompakt-Payload)
+- Amazon: "NFC Tags NTAG215" — ca. 15 EUR für 30 Stück
+- Alternativ: NTAG216 (größerer Speicher)
 
 ---
 
-## 🎯 **Nächste Schritte:**
+## Nächste Schritte
 
-1. ✅ APK installiert
-2. ✅ Als Admin einloggen
-3. ✅ NFC-Karten kaufen
-4. ✅ Badge-Tag beschreiben
-5. ✅ Mit zweitem Account Badge sammeln
-6. ✅ Reputation teilen testen
-
-**Viel Erfolg! 🚀**
+1. APK installiert
+2. Profil erstellt, Nostr-Key generiert
+3. Home-Meetup gewählt
+4. Badges gesammelt
+5. Trust Score aufgebaut
+6. Reputation geteilt und verifiziert
