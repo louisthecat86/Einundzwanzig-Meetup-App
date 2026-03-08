@@ -27,6 +27,7 @@ import 'dart:typed_data';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:nfc_manager_ndef/nfc_manager_ndef.dart';    // Ndef (cross-platform)
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:nostr/nostr.dart';
 import '../theme.dart';
 import '../models/badge.dart';
 import '../models/meetup.dart';
