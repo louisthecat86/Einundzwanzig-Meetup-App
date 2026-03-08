@@ -305,6 +305,82 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       b.date.day == DateTime.now().day
     );
 
+    // ============================================
+// PATCH 02: meetup_verification.dart
+// Self-Scan-Prevention
+// ============================================
+//
+// ÄNDERUNG: Verhindert dass ein Admin sich selbst
+// ein Badge gibt (Scanner-Pubkey == Signer-Pubkey).
+//
+// WO EINFÜGEN:
+//   In lib/screens/meetup_verification.dart,
+//   in der Methode _processFoundTagData(),
+//   NACH dem Block "// Duplikat-Check" und
+//   VOR dem Block "if (!alreadyCollected) {"
+//
+// ============================================
+
+// EINFÜGEN nach Zeile:
+//   bool alreadyCollected = myBadges.any((b) => ...);
+//
+// UND VOR Zeile:
+//   String msg;
+//
+// ---- NEUER CODE: ----
+
+    // =============================================
+    // SELF-SCAN PREVENTION (Security Audit 2026-03)
+    // =============================================
+    // Ein Admin darf sich nicht selbst ein Badge geben.
+    // Das wäre wie sich selbst eine Urkunde ausstellen.
+    // =============================================
+    final adminPubkeyForSelfCheck = normalized['admin_pubkey'] as String?
+        ?? tagData['p'] as String?
+        ?? '';
+
+    if (adminPubkeyForSelfCheck.isNotEmpty) {
+      try {
+        final myNpub = await NostrService.getNpub();
+        final signerNpub = normalized['admin_npub'] as String? ?? '';
+
+        // Vergleich über npub (wenn vorhanden)
+        bool isSelfScan = false;
+        if (myNpub != null && signerNpub.isNotEmpty && myNpub == signerNpub) {
+          isSelfScan = true;
+        }
+
+        // Fallback: Vergleich über Hex-Pubkey
+        if (!isSelfScan && myNpub != null) {
+          try {
+            final myPubkeyHex = Nip19.decodePubkey(myNpub);
+            if (myPubkeyHex == adminPubkeyForSelfCheck) {
+              isSelfScan = true;
+            }
+          } catch (_) {}
+        }
+
+        if (isSelfScan) {
+          setState(() {
+            _success = false;
+            _statusText = "✗ Self-Scan nicht erlaubt\n\n"
+                "Du kannst dir nicht selbst ein Badge geben.\n"
+                "Bitte lass einen Teilnehmer deinen Tag scannen.";
+          });
+          return; // ← Abbruch, kein Badge wird gespeichert
+        }
+      } catch (_) {
+        // Fehler bei der Prüfung → Badge trotzdem erlauben
+        // (Fail-open: besser ein Badge zu viel als User frustrieren)
+      }
+    }
+
+// ---- ENDE NEUER CODE ----
+//
+// Danach geht der bestehende Code normal weiter:
+//   String msg;
+//   if (!alreadyCollected) { ...
+
     String msg;
 
     if (!alreadyCollected) {

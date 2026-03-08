@@ -87,7 +87,9 @@ class VouchingStatus {
   final int distrustCount;       // Wie viele warnen
   final List<DistrustReport> distrusts; // Details
   final bool isAdmin;            // Erfüllt Schwellenwert
-  final bool isSuspended;        // Durch Distrust suspendiert
+  final bool isSuspended;
+  final double effectiveVouchScore;
+  final double liabilityPenalty;        // Durch Distrust suspendiert
 
   VouchingStatus({
     required this.npub,
@@ -99,6 +101,8 @@ class VouchingStatus {
     this.distrusts = const [],
     this.isAdmin = false,
     this.isSuspended = false,
+    this.effectiveVouchScore = 0.0,
+    this.liabilityPenalty = 0.0,
   });
 
   /// Effektiver Admin-Status (Admin UND nicht suspendiert)
@@ -106,9 +110,9 @@ class VouchingStatus {
 
   /// Vertrauenslevel als Prozent (0.0 - 1.0)
   double get trustLevel {
-    if (vouchCount == 0) return 0.0;
+    if (effectiveVouchScore <= 0) return 0.0;
     final minV = VouchingService.minVouchesForNetwork(vouchCount + 5);
-    return min(1.0, vouchCount / max(minV, 1));
+    return min(1.0, effectiveVouchScore / max(minV, 1));
   }
 }
 
@@ -226,7 +230,8 @@ class VouchingService {
     return _buildConsensus(vouchingLists, distrusts, isSunset);
   }
 
-  /// Berechnet Konsens aus gesammelten Daten
+ /// Berechnet Konsens aus gesammelten Daten
+  /// NEU: Vouches werden nach Liability des Vouchers gewichtet
   static NetworkConsensus _buildConsensus(
     Map<String, List<AdminEntry>> vouchingLists,
     List<DistrustReport> distrusts,
@@ -268,21 +273,86 @@ class VouchingService {
       distrustMap[report.targetNpub]!.add(report);
     }
 
+    // =============================================
+    // NEU: Liability-Berechnung pro Voucher (Phase 1)
+    // =============================================
+    // Erst alle Suspensionen berechnen (benötigt für Liability)
+    final suspendedNpubs = <String>{};
+    final warnedNpubs = <String>{};
+    for (final npub in allNpubs) {
+      final npubDistrusts = distrustMap[npub] ?? [];
+      final uniqueDistrusters = npubDistrusts.map((d) => d.authorNpub).toSet();
+      if (uniqueDistrusters.length >= distrustThresh) {
+        suspendedNpubs.add(npub);
+      } else if (uniqueDistrusters.isNotEmpty) {
+        warnedNpubs.add(npub);
+      }
+    }
+
+    // Jetzt Liability pro Voucher berechnen
+    // "Wie viele deiner Schützlinge sind suspendiert/gewarnt?"
+    final voucherLiability = <String, double>{}; // npub → penalty (0.0 = sauber, 1.0 = alles suspendiert)
+    for (final authorNpub in vouchingLists.keys) {
+      final myVouches = vouchingLists[authorNpub] ?? [];
+      if (myVouches.isEmpty) {
+        voucherLiability[authorNpub] = 0.0;
+        continue;
+      }
+
+      int suspendedCount = 0;
+      int warnedCount = 0;
+      for (final admin in myVouches) {
+        if (suspendedNpubs.contains(admin.npub)) {
+          suspendedCount++;
+        } else if (warnedNpubs.contains(admin.npub)) {
+          warnedCount++;
+        }
+      }
+
+      // Penalty: suspendiert zählt doppelt
+      final penalty = ((suspendedCount * 2 + warnedCount) / (myVouches.length * 2))
+          .clamp(0.0, 1.0);
+      voucherLiability[authorNpub] = penalty;
+    }
+    // =============================================
+    // ENDE Liability-Berechnung
+    // =============================================
+
     // Status für jeden npub berechnen
     final statuses = <VouchingStatus>[];
 
     for (final npub in allNpubs) {
       final vouches = vouchMap[npub] ?? [];
-      final npubDistusts = distrustMap[npub] ?? [];
+      final npubDistrusts = distrustMap[npub] ?? [];
 
       // Unique Voucher zählen (gleicher Author zählt nur 1x)
       final uniqueVouchers = vouches.map((v) => v.authorNpub).toSet();
 
       // Unique Distrust-Reporter zählen
-      final uniqueDistrusters = npubDistusts.map((d) => d.authorNpub).toSet();
+      final uniqueDistrusters = npubDistrusts.map((d) => d.authorNpub).toSet();
 
-      // Admin wenn genug Vouches ODER Super-Admin in Pre-Sunset
-      final hasEnoughVouches = uniqueVouchers.length >= minV;
+      // =============================================
+      // NEU: Gewichtete Vouch-Stärke berechnen
+      // =============================================
+      // Ein Voucher mit hoher Liability zählt weniger.
+      // Beispiel:
+      //   3 Voucher, davon 1 mit 50% Liability
+      //   → effectiveScore = 1.0 + 1.0 + 0.5 = 2.5 statt 3.0
+      double effectiveVouchScore = 0.0;
+      double totalLiabilityPenalty = 0.0;
+      for (final voucherNpub in uniqueVouchers) {
+        final penalty = voucherLiability[voucherNpub] ?? 0.0;
+        final weight = (1.0 - penalty).clamp(0.0, 1.0);
+        effectiveVouchScore += weight;
+        totalLiabilityPenalty += penalty;
+      }
+      final avgLiabilityPenalty = uniqueVouchers.isNotEmpty
+          ? totalLiabilityPenalty / uniqueVouchers.length
+          : 0.0;
+
+      // Admin wenn genug GEWICHTETE Vouches ODER Super-Admin in Pre-Sunset
+      // NEU: Verwende effectiveVouchScore statt uniqueVouchers.length
+      final hasEnoughVouches = effectiveVouchScore >= minV;
       final isSuperAdmin = !isSunset && npub == AdminRegistry.superAdminNpub;
       final isAdmin = hasEnoughVouches || isSuperAdmin;
 
@@ -306,14 +376,17 @@ class VouchingService {
         vouchCount: uniqueVouchers.length,
         vouchers: uniqueVouchers.toList(),
         distrustCount: uniqueDistrusters.length,
-        distrusts: npubDistusts,
+        distrusts: npubDistrusts,
         isAdmin: isAdmin,
         isSuspended: isSuspended,
+        // NEU: Liability-Daten
+        effectiveVouchScore: effectiveVouchScore,
+        liabilityPenalty: avgLiabilityPenalty,
       ));
     }
 
-    // Nach vouchCount sortieren (höchste zuerst)
-    statuses.sort((a, b) => b.vouchCount.compareTo(a.vouchCount));
+    // Nach effectiveVouchScore sortieren (höchste zuerst)
+    statuses.sort((a, b) => b.effectiveVouchScore.compareTo(a.effectiveVouchScore));
 
     return NetworkConsensus(
       allAdmins: statuses,
@@ -324,6 +397,7 @@ class VouchingService {
       fetchedAt: DateTime.now(),
     );
   }
+
 
   // =============================================
   // RELAY FETCH: VOUCHING-LISTEN

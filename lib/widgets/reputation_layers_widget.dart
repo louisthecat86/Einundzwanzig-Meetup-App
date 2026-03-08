@@ -1,12 +1,25 @@
 // ============================================
-// REPUTATION LAYERS WIDGET — Multi-Layer Anzeige
+// PATCH 03: reputation_layers_widget.dart
+// KOMPLETT NEUE VERSION — Verständliche UX
 // ============================================
-// Wiederverwendbares Widget zur Anzeige aller
-// Vertrauens-Layer mit Scores und Details.
 //
-// Wird verwendet in:
-//   - reputation_verify_screen.dart (fremde Reputation)
-//   - reputation_qr.dart (eigene Reputation)
+// ÄNDERUNG: Komplettes Redesign des Multi-Layer-Widgets
+// für sofortige Verständlichkeit.
+//
+// VORHER:
+//   - Technische Darstellung (Score-Zahlen, Layer-Gewichtung)
+//   - User muss verstehen was "25% Social" bedeutet
+//   - Keine Handlungsempfehlung
+//
+// JETZT:
+//   1. VERTRAUENS-AMPEL oben: Rot/Gelb/Grün mit einem Satz
+//   2. Jeder Layer hat ein klares "Was bedeutet das?" Label
+//   3. Fehlende Layer zeigen "Warum das wichtig ist"
+//   4. Konkrete Handlungsempfehlung am Ende
+//
+// ERSETZE: Die komplette Datei
+//   lib/widgets/reputation_layers_widget.dart
+//
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -34,7 +47,7 @@ class ReputationLayersWidget extends StatelessWidget {
   // Layer 4: Identität
   final Nip05Result? nip05;
   final int? platformProofCount;
-  final Map<String, dynamic>? platformProofs; // NEU: Volle Plattform-Details
+  final Map<String, dynamic>? platformProofs;
   final int? accountAgeDays;
 
   // Gesamtscore
@@ -53,421 +66,21 @@ class ReputationLayersWidget extends StatelessWidget {
     this.socialAnalysis,
     this.nip05,
     this.platformProofCount,
-    this.platformProofs, // NEU
+    this.platformProofs,
     this.accountAgeDays,
     this.totalScore,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Gesamtscore Header
-        if (totalScore != null)
-          _buildTotalScoreHeader(),
-
-        const SizedBox(height: 16),
-
-        // Layer 1: Physischer Beweis
-        _buildLayer(
-          icon: Icons.nfc,
-          title: "PHYSISCHER BEWEIS",
-          subtitle: "Meetup-Badges & Anwesenheit",
-          color: cOrange,
-          weight: "40%",
-          score: _physicalScore,
-          children: [
-            if (badgeCount != null)
-              _buildDetail(Icons.military_tech, "$badgeCount Badges", 
-                boundBadges != null && boundBadges! > 0 
-                    ? "$boundBadges gebunden" 
-                    : "Nicht gebunden",
-                boundBadges != null && boundBadges == badgeCount 
-                    ? Colors.green : Colors.grey),
-            if (meetupCount != null)
-              _buildDetail(Icons.location_on, "$meetupCount Meetups",
-                "Verschiedene Standorte", cCyan),
-            if (signerCount != null)
-              _buildDetail(Icons.people_outline, "$signerCount Signer",
-                "Verschiedene Organisatoren", cPurple),
-            if (since != null && since!.isNotEmpty)
-              _buildDetail(Icons.calendar_today, "Seit $since",
-                "${accountAgeDays ?? 0} Tage", Colors.green),
-          ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // Layer 2: Lightning-Beweis
-        _buildLayer(
-          icon: Icons.bolt,
-          title: "LIGHTNING-BEWEIS",
-          subtitle: "Zap-Aktivität & Zahlungen",
-          color: Colors.amber,
-          weight: "25%",
-          score: zapStats?.lightningScore,
-          children: zapStats != null && zapStats!.totalCount > 0
-              ? [
-                  if (humanityVerified)
-                    _buildDetail(Icons.verified_user, "Mensch verifiziert",
-                      "21-Sat Lightning-Beweis aktiv", Colors.green),
-                  _buildDetail(Icons.arrow_upward, "${zapStats!.sentCount} gesendet",
-                    "${zapStats!.uniqueRecipientCount} verschiedene Empfänger",
-                    zapStats!.sentCount > 5 ? Colors.green : Colors.grey),
-                  _buildDetail(Icons.arrow_downward, "${zapStats!.receivedCount} empfangen",
-                    "${zapStats!.uniqueSenderCount} verschiedene Sender",
-                    zapStats!.receivedCount > 0 ? Colors.green : Colors.grey),
-                  if (zapStats!.activeMonths > 0)
-                    _buildDetail(Icons.schedule, "${zapStats!.activeMonths} Monate aktiv",
-                      zapStats!.activityLabel, Colors.amber),
-                  if (zapStats!.hasLightningProof)
-                    _buildDetail(Icons.check_circle, "Lightning verifiziert",
-                      "Echte Zahlung nachgewiesen", Colors.green),
-                ]
-              : humanityVerified
-                  ? [
-                      _buildDetail(Icons.verified_user, "Mensch verifiziert",
-                        "21-Sat Lightning-Beweis aktiv", Colors.green),
-                    ]
-                  : [
-                      _buildDetail(Icons.info_outline, "Keine Zap-Aktivität",
-                        "Keine Lightning-Zahlungen gefunden", Colors.grey),
-                    ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // Layer 3: Sozialer Beweis
-        _buildLayer(
-          icon: Icons.hub,
-          title: "SOZIALER BEWEIS",
-          subtitle: "Nostr-Netzwerk & Verbindungen",
-          color: cCyan,
-          weight: "25%",
-          score: socialAnalysis?.socialScore,
-          children: socialAnalysis != null
-              ? [
-                  // Direkte Verbindung
-                  if (socialAnalysis!.isMutual)
-                    _buildDetail(Icons.sync_alt, "Gegenseitiger Follow",
-                      "Direkte bidirektionale Verbindung", Colors.green)
-                  else if (socialAnalysis!.iFollow)
-                    _buildDetail(Icons.person_add, "Du folgst",
-                      "Einseitige Verbindung", cCyan)
-                  else if (socialAnalysis!.followsMe)
-                    _buildDetail(Icons.person, "Folgt dir",
-                      "Einseitige Verbindung", cCyan)
-                  else
-                    _buildDetail(Icons.person_off, "Kein direkter Follow",
-                      "", Colors.grey),
-
-                  // Gemeinsame Kontakte
-                  _buildDetail(Icons.group, "${socialAnalysis!.commonContactCount} gemeinsame Kontakte",
-                    socialAnalysis!.commonContactCount > 3
-                        ? "Starke Netzwerk-Überlappung"
-                        : socialAnalysis!.commonContactCount > 0
-                            ? "Teilweise verbunden"
-                            : "Keine Überlappung",
-                    socialAnalysis!.commonContactCount > 0 ? Colors.green : Colors.grey),
-
-                  // Organisator-Follows
-                  if (socialAnalysis!.orgFollowerCount > 0)
-                    _buildDetail(Icons.verified_user, "${socialAnalysis!.orgFollowerCount} Organisatoren folgen",
-                      "Endorsement von bekannten Admins", Colors.green),
-
-                  // Hop-Distanz
-                  if (socialAnalysis!.hops > 0)
-                    _buildDetail(Icons.route, "${socialAnalysis!.hops} Hop${socialAnalysis!.hops > 1 ? 's' : ''} entfernt",
-                      socialAnalysis!.hops == 1 ? "Direkte Verbindung" : "Über gemeinsame Kontakte",
-                      socialAnalysis!.hops == 1 ? Colors.green : Colors.amber),
-                ]
-              : [
-                  _buildDetail(Icons.info_outline, "Social-Graph nicht geladen",
-                    "Nostr-Kontakte werden analysiert...", Colors.grey),
-                ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // Layer 4: Identitäts-Beweis
-        _buildLayer(
-          icon: Icons.fingerprint,
-          title: "IDENTITÄTS-BEWEIS",
-          subtitle: "NIP-05, Plattform-Verknüpfung, Alter",
-          color: Colors.purple,
-          weight: "10%",
-          score: _identityScore,
-          children: [
-            // NIP-05 Status
-            if (nip05 != null && nip05!.valid)
-              _buildDetail(Icons.verified, nip05!.nip05,
-                nip05!.domainLabel, Colors.green)
-            else if (nip05 != null)
-              _buildDetail(Icons.cancel, "NIP-05 ungültig",
-                nip05!.nip05, Colors.red)
-            else
-              _buildDetail(Icons.help_outline, "Kein NIP-05",
-                "Keine Internet-Identifikation", Colors.grey),
-
-            // ========================================
-            // NEU: Plattform-Proofs einzeln mit Handle
-            // ========================================
-            if (platformProofs != null && platformProofs!.isNotEmpty)
-              ..._buildPlatformProofDetails()
-            else if (platformProofCount != null && platformProofCount! > 0)
-              // Fallback: Nur Anzahl (Abwärtskompatibilität)
-              _buildDetail(Icons.link, "$platformProofCount Plattform${platformProofCount! > 1 ? 'en' : ''}",
-                "Aktive Verknüpfungen", Colors.green),
-          ],
-        ),
-      ],
-    );
-  }
-
   // =============================================
-  // GESAMTSCORE HEADER
-  // =============================================
-
-  Widget _buildTotalScoreHeader() {
-    // Layer-Scores zusammenrechnen (gewichtet)
-    final physical = (_physicalScore ?? 0) * 0.4;
-    final lightning = (zapStats?.lightningScore ?? 0) * 0.25;
-    final social = (socialAnalysis?.socialScore ?? 0) * 0.25;
-    final identity = (_identityScore ?? 0) * 0.1;
-
-    final combined = (physical + lightning + social + identity).clamp(0.0, 10.0);
-    final layerCount = [
-      _physicalScore != null && _physicalScore! > 0,
-      zapStats != null && zapStats!.totalCount > 0,
-      socialAnalysis != null && socialAnalysis!.socialScore > 0,
-      _identityScore != null && _identityScore! > 0,
-    ].where((b) => b).length;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cCard,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          // Score-Kreis
-          Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [cOrange, Colors.amber],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                combined.toStringAsFixed(1),
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("MULTI-LAYER SCORE",
-                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                const SizedBox(height: 2),
-                Text("$layerCount von 4 Beweis-Layern aktiv",
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =============================================
-  // LAYER CARD
-  // =============================================
-
-  Widget _buildLayer({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required String weight,
-    double? score,
-    required List<Widget> children,
-  }) {
-    final hasData = score != null && score > 0;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: cCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: hasData ? color.withOpacity(0.3) : Colors.white10),
-      ),
-      child: Theme(
-        data: ThemeData(
-          dividerColor: Colors.transparent,
-          colorScheme: ColorScheme.dark(primary: color),
-        ),
-        child: ExpansionTile(
-          leading: Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(
-              color: color.withOpacity(hasData ? 0.15 : 0.05),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: hasData ? color : Colors.grey, size: 20),
-          ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(title,
-                  style: TextStyle(
-                    color: hasData ? Colors.white : Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                  )),
-              ),
-              // Score Badge
-              if (score != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    score.toStringAsFixed(1),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          subtitle: Text(subtitle,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Column(children: children),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // =============================================
-  // DETAIL-ZEILE
-  // =============================================
-
-  Widget _buildDetail(IconData icon, String title, String subtitle, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12, fontWeight: FontWeight.w600)),
-                if (subtitle.isNotEmpty)
-                  Text(subtitle, style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =============================================
-  // PLATTFORM-PROOF DETAILS (NEU)
-  // =============================================
-  // Zeigt jede verknüpfte Plattform einzeln an
-  // mit Icon, Plattformname und @Handle.
-  //
-  // Daten kommen aus dem Reputation-Event:
-  //   platform_proofs: {
-  //     "telegram": {"username": "satoshi", "proof_sig": "abc...", "created_at": 1234},
-  //     "robosats": {"username": "robot42", "proof_sig": "def...", "created_at": 5678},
-  //   }
-  // =============================================
-
-  List<Widget> _buildPlatformProofDetails() {
-    if (platformProofs == null || platformProofs!.isEmpty) return [];
-
-    return platformProofs!.entries.map((entry) {
-      final platform = entry.key;
-      final data = entry.value as Map<String, dynamic>? ?? {};
-      final username = data['username'] as String? ?? '';
-      final hasSig = (data['proof_sig'] as String? ?? '').isNotEmpty;
-
-      return _buildDetail(
-        _platformIcon(platform),
-        '${_platformLabel(platform)}${username.isNotEmpty ? ': @$username' : ''}',
-        hasSig ? 'Signatur verifiziert' : 'Verknüpft',
-        hasSig ? Colors.green : Colors.amber,
-      );
-    }).toList();
-  }
-
-  /// Icon für bekannte Plattformen
-  /// (Muss mit PlatformProofService.platforms übereinstimmen)
-  IconData _platformIcon(String platform) {
-    switch (platform) {
-      case 'telegram': return Icons.send;
-      case 'satoshikleinanzeigen': return Icons.shopping_cart;
-      case 'robosats': return Icons.smart_toy;
-      case 'nostr': return Icons.hub;
-      default: return Icons.language;
-    }
-  }
-
-  /// Anzeigename für bekannte Plattformen
-  String _platformLabel(String platform) {
-    switch (platform) {
-      case 'telegram': return 'Telegram';
-      case 'satoshikleinanzeigen': return 'Satoshi-Kleinanzeigen';
-      case 'robosats': return 'RoboSats';
-      case 'nostr': return 'Nostr';
-      case 'other': return 'Andere';
-      default: return platform;
-    }
-  }
-
-  // =============================================
-  // BERECHNETE SCORES
+  // SCORES BERECHNEN
   // =============================================
 
   double? get _physicalScore {
     if (badgeCount == null || badgeCount == 0) return null;
     double score = 0;
-    // Badges (max 3.0)
     score += (badgeCount! / (badgeCount! + 5)) * 3.0;
-    // Meetup-Diversität (max 2.0)
     if (meetupCount != null) score += (meetupCount! / (meetupCount! + 3)) * 2.0;
-    // Signer-Diversität (max 2.0)
     if (signerCount != null) score += (signerCount! / (signerCount! + 3)) * 2.0;
-    // Binding-Bonus (max 1.0)
     if (boundBadges != null && badgeCount! > 0) {
       score += (boundBadges! / badgeCount!) * 1.0;
     }
@@ -487,4 +100,680 @@ class ReputationLayersWidget extends StatelessWidget {
     }
     return score > 0 ? score.clamp(0.0, 2.0) : null;
   }
+
+  // =============================================
+  // VERTRAUENS-STUFE BERECHNEN
+  // =============================================
+
+  /// Wie viele der 4 Layer sind aktiv (Score > 0)?
+  int get _activeLayerCount {
+    int count = 0;
+    if (_physicalScore != null && _physicalScore! > 0) count++;
+    if (zapStats != null && zapStats!.totalCount > 0 || humanityVerified) count++;
+    if (socialAnalysis != null && socialAnalysis!.socialScore > 0) count++;
+    if (_identityScore != null && _identityScore! > 0) count++;
+    return count;
+  }
+
+  /// Gesamt-Score (gewichtet)
+  double get _combinedScore {
+    final physical = (_physicalScore ?? 0) * 0.4;
+    final lightning = (zapStats?.lightningScore ?? 0) * 0.25;
+    final social = (socialAnalysis?.socialScore ?? 0) * 0.25;
+    final identity = (_identityScore ?? 0) * 0.1;
+    return (physical + lightning + social + identity).clamp(0.0, 10.0);
+  }
+
+  /// Vertrauens-Stufe als Ampel
+  _TrustSignal get _trustSignal {
+    final layers = _activeLayerCount;
+    final score = _combinedScore;
+
+    // Nur Badges, nichts anderes → Warnung
+    if (layers <= 1 && score < 3.0) {
+      return _TrustSignal(
+        color: Colors.red.shade400,
+        icon: Icons.warning_amber_rounded,
+        label: 'Schwaches Profil',
+        explanation: 'Nur ein Beweis-Layer aktiv. '
+            'Dieser Nutzer hat kaum nachprüfbare Verbindungen. '
+            'Bei größeren Transaktionen: Vorsicht.',
+        actionHint: 'Frage nach weiteren Beweisen (Lightning, NIP-05) '
+            'oder triff die Person zuerst persönlich.',
+      );
+    }
+
+    if (layers <= 1) {
+      return _TrustSignal(
+        color: Colors.orange,
+        icon: Icons.info_outline,
+        label: 'Eingeschränkt',
+        explanation: 'Es gibt Meetup-Badges, aber keine weiteren '
+            'unabhängigen Beweise. Der Nutzer könnte echt sein — '
+            'aber es fehlt die Bestätigung durch andere Layer.',
+        actionHint: 'Für Kleinstbeträge OK. Für größere Beträge: '
+            'Abwarten bis mehr Layer aktiv sind.',
+      );
+    }
+
+    if (layers == 2 && score < 4.0) {
+      return _TrustSignal(
+        color: Colors.amber,
+        icon: Icons.shield_outlined,
+        label: 'Aufbauend',
+        explanation: 'Zwei Beweis-Layer aktiv. Der Nutzer baut '
+            'Reputation auf, hat aber noch nicht die volle Breite.',
+        actionHint: 'Für moderate Transaktionen geeignet.',
+      );
+    }
+
+    if (layers >= 3 && score >= 4.0) {
+      return _TrustSignal(
+        color: Colors.green,
+        icon: Icons.verified_user,
+        label: 'Gut vernetzt',
+        explanation: 'Mehrere unabhängige Beweise: Meetups, '
+            'Lightning-Aktivität und soziale Verbindungen. '
+            'Schwer zu faken.',
+        actionHint: 'Vertrauenswürdig für die meisten Transaktionen.',
+      );
+    }
+
+    if (layers >= 3 || score >= 5.0) {
+      return _TrustSignal(
+        color: Colors.green.shade300,
+        icon: Icons.shield,
+        label: 'Solide',
+        explanation: 'Breite Basis an Beweisen. Manipulation wäre '
+            'aufwändig und teuer.',
+        actionHint: 'Für die meisten Zwecke vertrauenswürdig.',
+      );
+    }
+
+    return _TrustSignal(
+      color: Colors.amber,
+      icon: Icons.shield_outlined,
+      label: 'Aufbauend',
+      explanation: 'Einige Beweise vorhanden, aber Raum für mehr.',
+      actionHint: 'Eigene Einschätzung nutzen.',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final signal = _trustSignal;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // =============================================
+        // VERTRAUENS-AMPEL — Das Erste was man sieht
+        // =============================================
+        _buildTrustSignalCard(signal),
+
+        const SizedBox(height: 16),
+
+        // =============================================
+        // DIE 4 BEWEIS-LAYER
+        // =============================================
+        _buildPhysicalLayer(),
+        const SizedBox(height: 10),
+        _buildLightningLayer(),
+        const SizedBox(height: 10),
+        _buildSocialLayer(),
+        const SizedBox(height: 10),
+        _buildIdentityLayer(),
+
+        // =============================================
+        // HANDLUNGSEMPFEHLUNG
+        // =============================================
+        if (signal.actionHint.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildActionHint(signal),
+        ],
+      ],
+    );
+  }
+
+  // =============================================
+  // VERTRAUENS-AMPEL CARD
+  // =============================================
+
+  Widget _buildTrustSignalCard(_TrustSignal signal) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: signal.color.withOpacity(0.4), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          // Ampel-Icon
+          Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: signal.color.withOpacity(0.15),
+              border: Border.all(color: signal.color.withOpacity(0.3)),
+            ),
+            child: Icon(signal.icon, color: signal.color, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Stufe + Layer-Count
+                Row(
+                  children: [
+                    Text(
+                      signal.label.toUpperCase(),
+                      style: TextStyle(
+                        color: signal.color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$_activeLayerCount / 4 Beweise',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  signal.explanation,
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =============================================
+  // LAYER 1: PHYSISCHER BEWEIS (Meetup-Badges)
+  // =============================================
+
+  Widget _buildPhysicalLayer() {
+    final hasData = _physicalScore != null && _physicalScore! > 0;
+    final bool hasDiversity = (signerCount ?? 0) >= 2;
+    final bool hasBound = boundBadges != null && badgeCount != null && boundBadges == badgeCount;
+
+    return _buildLayerCard(
+      icon: Icons.nfc,
+      color: cOrange,
+      title: 'Meetup-Beweise',
+      hasData: hasData,
+      // Was bedeutet das?
+      meaningWhenPresent: hasDiversity
+          ? 'War bei verschiedenen Meetups mit verschiedenen Organisatoren. '
+            'Das erfordert physische Anwesenheit an mehreren Orten.'
+          : badgeCount != null && badgeCount! > 0
+              ? 'Hat Meetup-Badges, aber nur von ${signerCount ?? 1} Organisator(en). '
+                'Mehr Vielfalt wäre überzeugender.'
+              : null,
+      meaningWhenMissing: 'Keine Meetup-Badges vorhanden. '
+          'Dieser Nutzer hat noch kein Einundzwanzig-Meetup besucht — '
+          'oder nutzt die App erst seit kurzem.',
+      details: hasData
+          ? [
+              _LayerDetail(
+                label: '${badgeCount ?? 0} Badge${(badgeCount ?? 0) != 1 ? 's' : ''}',
+                sublabel: hasBound
+                    ? 'Alle kryptographisch gebunden'
+                    : '${boundBadges ?? 0} von ${badgeCount ?? 0} gebunden',
+                positive: hasBound,
+              ),
+              _LayerDetail(
+                label: '${meetupCount ?? 0} verschiedene Meetups',
+                sublabel: (meetupCount ?? 0) >= 3
+                    ? 'Gute regionale Streuung'
+                    : 'Wenig Streuung',
+                positive: (meetupCount ?? 0) >= 2,
+              ),
+              _LayerDetail(
+                label: '${signerCount ?? 0} Organisator${(signerCount ?? 0) != 1 ? 'en' : ''}',
+                sublabel: hasDiversity
+                    ? 'Von verschiedenen Personen bestätigt'
+                    : 'Nur ein Organisator — wenig unabhängige Bestätigung',
+                positive: hasDiversity,
+              ),
+              if (since != null && since!.isNotEmpty)
+                _LayerDetail(
+                  label: 'Dabei seit $since',
+                  sublabel: '${accountAgeDays ?? 0} Tage',
+                  positive: (accountAgeDays ?? 0) > 60,
+                ),
+            ]
+          : [],
+    );
+  }
+
+  // =============================================
+  // LAYER 2: LIGHTNING-BEWEIS
+  // =============================================
+
+  Widget _buildLightningLayer() {
+    final hasZaps = zapStats != null && zapStats!.totalCount > 0;
+    final hasData = hasZaps || humanityVerified;
+
+    return _buildLayerCard(
+      icon: Icons.bolt,
+      color: Colors.amber,
+      title: 'Lightning-Beweis',
+      hasData: hasData,
+      meaningWhenPresent: humanityVerified && hasZaps
+          ? 'Hat echte Lightning-Zahlungen getätigt und empfangen. '
+            'Bots haben keine Lightning-Wallets — das ist ein starkes Echtheitssignal.'
+          : humanityVerified
+              ? 'Hat mindestens einmal über Lightning gezahlt. '
+                'Grundlegender Beweis dass eine echte Wallet existiert.'
+              : 'Lightning-Aktivität vorhanden, '
+                'aber Humanity-Proof noch nicht aktiv.',
+      meaningWhenMissing: 'Keine Lightning-Aktivität. '
+          'Das heißt nicht dass der Nutzer unecht ist — '
+          'vielleicht nutzt er Lightning nicht über Nostr. '
+          'Aber es fehlt ein wichtiges Anti-Bot-Signal.',
+      details: hasData
+          ? [
+              if (humanityVerified)
+                _LayerDetail(
+                  label: 'Mensch verifiziert',
+                  sublabel: 'Echte Lightning-Zahlung nachgewiesen',
+                  positive: true,
+                ),
+              if (hasZaps) ...[
+                _LayerDetail(
+                  label: '${zapStats!.sentCount} Zaps gesendet',
+                  sublabel: 'An ${zapStats!.uniqueRecipientCount} verschiedene Empfänger',
+                  positive: zapStats!.uniqueRecipientCount > 3,
+                ),
+                _LayerDetail(
+                  label: '${zapStats!.receivedCount} Zaps empfangen',
+                  sublabel: 'Von ${zapStats!.uniqueSenderCount} verschiedenen Sendern',
+                  positive: zapStats!.receivedCount > 0,
+                ),
+                if (zapStats!.activeMonths > 0)
+                  _LayerDetail(
+                    label: '${zapStats!.activeMonths} Monate aktiv',
+                    sublabel: zapStats!.activityLabel,
+                    positive: zapStats!.activeMonths >= 3,
+                  ),
+              ],
+            ]
+          : [],
+    );
+  }
+
+  // =============================================
+  // LAYER 3: SOZIALER BEWEIS
+  // =============================================
+
+  Widget _buildSocialLayer() {
+    final hasData = socialAnalysis != null && socialAnalysis!.socialScore > 0;
+    final sa = socialAnalysis;
+
+    String? meaning;
+    if (sa != null) {
+      if (sa.isMutual && sa.commonContactCount > 3) {
+        meaning = 'Ihr kennt euch gegenseitig auf Nostr und habt viele '
+            'gemeinsame Kontakte. Starke Verbindung.';
+      } else if (sa.isMutual) {
+        meaning = 'Gegenseitiger Follow — ihr kennt euch auf Nostr.';
+      } else if (sa.commonContactCount > 5) {
+        meaning = 'Viele gemeinsame Kontakte — ihr bewegt euch '
+            'im selben Netzwerk.';
+      } else if (sa.iFollow || sa.followsMe) {
+        meaning = 'Einseitige Verbindung. Ihr kennt euch flüchtig.';
+      } else if (sa.orgFollowerCount > 0) {
+        meaning = 'Bekannte Einundzwanzig-Organisatoren folgen diesem Nutzer. '
+            'Das ist ein positives Signal.';
+      }
+    }
+
+    return _buildLayerCard(
+      icon: Icons.hub,
+      color: cCyan,
+      title: 'Soziales Netzwerk',
+      hasData: hasData,
+      meaningWhenPresent: meaning ??
+          'Es gibt Verbindungen im Nostr-Netzwerk zu diesem Nutzer.',
+      meaningWhenMissing: 'Keine Verbindung im Nostr-Netzwerk gefunden. '
+          'Das kann bedeuten: Ihr seid euch noch nie auf Nostr begegnet, '
+          'oder der Nutzer ist sehr neu. '
+          'Bei Fremden ist das normal — bei angeblich bekannten Gesichtern ein Warnsignal.',
+      details: sa != null
+          ? [
+              // Direkte Verbindung
+              _LayerDetail(
+                label: sa.isMutual
+                    ? 'Gegenseitiger Follow'
+                    : sa.iFollow
+                        ? 'Du folgst'
+                        : sa.followsMe
+                            ? 'Folgt dir'
+                            : 'Kein Follow',
+                sublabel: sa.isMutual
+                    ? 'Ihr kennt euch auf Nostr'
+                    : 'Keine direkte Verbindung',
+                positive: sa.isMutual || sa.iFollow || sa.followsMe,
+              ),
+              // Gemeinsame Kontakte
+              _LayerDetail(
+                label: '${sa.commonContactCount} gemeinsame Kontakte',
+                sublabel: sa.commonContactCount > 5
+                    ? 'Gleiches Netzwerk'
+                    : sa.commonContactCount > 0
+                        ? 'Einige Überlappungen'
+                        : 'Getrennte Netzwerke',
+                positive: sa.commonContactCount > 0,
+              ),
+              // Organisator-Follows
+              if (sa.orgFollowerCount > 0)
+                _LayerDetail(
+                  label: '${sa.orgFollowerCount} Organisatoren folgen',
+                  sublabel: 'Endorsement von bekannten Admins',
+                  positive: true,
+                ),
+            ]
+          : [],
+    );
+  }
+
+  // =============================================
+  // LAYER 4: IDENTITÄTS-BEWEIS
+  // =============================================
+
+  Widget _buildIdentityLayer() {
+    final hasNip05 = nip05 != null && nip05!.valid;
+    final hasPlatforms = (platformProofCount ?? 0) > 0 ||
+        (platformProofs != null && platformProofs!.isNotEmpty);
+    final hasData = hasNip05 || hasPlatforms;
+
+    return _buildLayerCard(
+      icon: Icons.fingerprint,
+      color: Colors.purple,
+      title: 'Identitäts-Nachweis',
+      hasData: hasData,
+      meaningWhenPresent: hasNip05
+          ? 'Hat eine NIP-05-Adresse${hasPlatforms ? ' und verknüpfte Plattformen' : ''}. '
+            'Das verknüpft die Nostr-Identität mit einer Domain — '
+            'schwerer zu faken als ein anonymer Account.'
+          : 'Verknüpfte Plattform-Accounts. '
+            'Mehr Plattformen = mehr Aufwand für Fälscher.',
+      meaningWhenMissing: 'Keine Internet-Identifikation. '
+          'Komplett anonym. Das ist für Privatsphäre OK, '
+          'aber gibt auch weniger Anhaltspunkte für Vertrauen.',
+      details: [
+        if (hasNip05)
+          _LayerDetail(
+            label: nip05!.nip05,
+            sublabel: nip05!.domainLabel,
+            positive: true,
+          ),
+        if (platformProofs != null && platformProofs!.isNotEmpty)
+          ...platformProofs!.entries.map((entry) {
+            final data = entry.value as Map<String, dynamic>? ?? {};
+            final username = data['username'] as String? ?? '';
+            return _LayerDetail(
+              label: '${_platformLabel(entry.key)}${username.isNotEmpty ? ': @$username' : ''}',
+              sublabel: 'Verknüpft',
+              positive: true,
+            );
+          }),
+        if (!hasNip05 && !hasPlatforms)
+          _LayerDetail(
+            label: 'Keine Identifikation',
+            sublabel: 'Anonym',
+            positive: false,
+          ),
+      ],
+    );
+  }
+
+  // =============================================
+  // HANDLUNGSEMPFEHLUNG
+  // =============================================
+
+  Widget _buildActionHint(_TrustSignal signal) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: signal.color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: signal.color.withOpacity(0.15)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lightbulb_outline, color: signal.color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              signal.actionHint,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =============================================
+  // GENERISCHER LAYER-CARD BUILDER
+  // =============================================
+
+  Widget _buildLayerCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required bool hasData,
+    String? meaningWhenPresent,
+    required String meaningWhenMissing,
+    required List<_LayerDetail> details,
+  }) {
+    final meaning = hasData ? meaningWhenPresent : meaningWhenMissing;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: hasData ? color.withOpacity(0.25) : Colors.white.withOpacity(0.05),
+        ),
+      ),
+      child: Theme(
+        data: ThemeData(
+          dividerColor: Colors.transparent,
+          colorScheme: ColorScheme.dark(primary: color),
+        ),
+        child: ExpansionTile(
+          // Layer-Header
+          leading: Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+              color: color.withOpacity(hasData ? 0.15 : 0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: hasData ? color : Colors.grey, size: 20),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: TextStyle(
+                    color: hasData ? Colors.white : Colors.grey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              // Status-Chip: ✓ oder ✗
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: hasData
+                      ? color.withOpacity(0.12)
+                      : Colors.white.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  hasData ? '✓ aktiv' : '— fehlt',
+                  style: TextStyle(
+                    color: hasData ? color : Colors.grey.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Kurze Erklärung immer sichtbar
+          subtitle: meaning != null
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    meaning,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                      height: 1.35,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              : null,
+          // Details im Aufklapp-Bereich
+          children: details.isNotEmpty
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Column(
+                      children: details.map((d) => _buildDetailRow(d, color)).toList(),
+                    ),
+                  ),
+                ]
+              : [],
+        ),
+      ),
+    );
+  }
+
+  // =============================================
+  // DETAIL-ZEILE (in Aufklapp)
+  // =============================================
+
+  Widget _buildDetailRow(_LayerDetail detail, Color layerColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(
+            detail.positive ? Icons.check_circle_outline : Icons.radio_button_unchecked,
+            color: detail.positive ? Colors.green.shade400 : Colors.grey.shade600,
+            size: 16,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detail.label,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (detail.sublabel.isNotEmpty)
+                  Text(
+                    detail.sublabel,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =============================================
+  // PLATTFORM-LABELS
+  // =============================================
+
+  String _platformLabel(String platform) {
+    switch (platform) {
+      case 'telegram': return 'Telegram';
+      case 'satoshikleinanzeigen': return 'Satoshi-Kleinanzeigen';
+      case 'robosats': return 'RoboSats';
+      case 'nostr': return 'Nostr';
+      case 'other': return 'Andere';
+      default: return platform;
+    }
+  }
+}
+
+// =============================================
+// HILFSKLASSEN
+// =============================================
+
+class _TrustSignal {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final String explanation;
+  final String actionHint;
+
+  _TrustSignal({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.explanation,
+    this.actionHint = '',
+  });
+}
+
+class _LayerDetail {
+  final String label;
+  final String sublabel;
+  final bool positive;
+
+  _LayerDetail({
+    required this.label,
+    this.sublabel = '',
+    this.positive = false,
+  });
 }
