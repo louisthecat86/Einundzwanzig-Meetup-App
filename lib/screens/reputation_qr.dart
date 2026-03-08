@@ -471,6 +471,9 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
   }
 
   Widget _buildQRCard() {
+    // Nickname bestimmen
+    final nickname = _user.nickname.isNotEmpty ? _user.nickname : 'Anon';
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -479,6 +482,29 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
         boxShadow: [BoxShadow(color: cOrange.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Column(children: [
+        // =============================================
+        // NEU: Nickname oben auf der Karte
+        // =============================================
+        Text(
+          'Reputationscode von',
+          style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          nickname,
+          style: TextStyle(
+            color: Colors.grey.shade800,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // QR Code
         QrImageView(
           data: _qrData,
           version: QrVersions.auto,
@@ -487,6 +513,8 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
           errorCorrectionLevel: QrErrorCorrectLevel.L,
         ),
         const SizedBox(height: 12),
+
+        // Signatur-Status
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -510,6 +538,7 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       ]),
     );
   }
+
 
   Widget _buildStatsRow() {
     final score = _trustScore;

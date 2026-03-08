@@ -15,6 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nostr/nostr.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import '../services/badge_security.dart';
 import '../services/nostr_service.dart';
@@ -33,6 +34,19 @@ class SecureQRScanner extends StatefulWidget {
 
 class _SecureQRScannerState extends State<SecureQRScanner> {
   bool _isScanned = false;
+  late final MobileScannerController _scannerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scannerController = MobileScannerController();
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
 
   void _onDetect(BarcodeCapture capture) {
     if (_isScanned) return;
@@ -42,6 +56,63 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         setState(() => _isScanned = true);
         _verifyAndShow(code);
         break;
+      }
+    }
+  }
+
+  // =============================================
+  // QR-CODE AUS GALERIE LADEN
+  // =============================================
+  void _pickFromGallery() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+      final path = result.files.single.path;
+      if (path == null) return;
+
+      final barcodes = await _scannerController.analyzeImage(path);
+
+      if (barcodes == null || barcodes.barcodes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Kein QR-Code im Bild gefunden'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      for (final barcode in barcodes.barcodes) {
+        final code = barcode.rawValue;
+        if (code != null && (code.startsWith("21:") || code.startsWith("21v2:") || code.startsWith("21v3:"))) {
+          setState(() => _isScanned = true);
+          _verifyAndShow(code);
+          return;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('QR-Code gefunden, aber kein Einundzwanzig-Format'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -141,7 +212,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
     final id = data['id'] as Map<String, dynamic>? ?? {};
     final rp = data['rp'] as Map<String, dynamic>? ?? {};
     final pf = data['pf'] as Map<String, dynamic>? ?? {};
-    final pp = data['pp'] as Map<String, dynamic>? ?? {}; // NEU: Platform Proofs
+    final pp = data['pp'] as Map<String, dynamic>? ?? {};
 
     final bool hasRealIdentity =
         (id['np'] != null && id['np'].toString().isNotEmpty) ||
@@ -159,7 +230,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         trustScore: (rp['sc'] as num?)?.toDouble() ?? 0,
         badgeCount: rp['bc'] as int? ?? 0,
         verifiedBadgeCount: rp['vc'] as int? ?? pf['vc'] as int? ?? 0,
-        boundBadgeCount: rp['bb'] as int? ?? pf['bb'] as int? ?? 0, // NEU
+        boundBadgeCount: rp['bb'] as int? ?? pf['bb'] as int? ?? 0,
         meetupCount: rp['mc'] as int? ?? 0,
         signerCount: rp['si'] as int? ?? 0,
         accountAgeDays: rp['ad'] as int? ?? 0,
@@ -167,7 +238,7 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         badgeProof: pf['bp'] as String? ?? '',
         proofTotalCount: pf['tc'] as int? ?? 0,
         proofVerifiedCount: pf['vc'] as int? ?? 0,
-        platformProofsFromQR: pp, // NEU
+        platformProofsFromQR: pp,
       ),
     ));
   }
@@ -219,16 +290,55 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: cDark,
-      appBar: AppBar(title: const Text("REPUTATION PRÜFEN")),
+      appBar: AppBar(
+        title: const Text("REPUTATION PRÜFEN"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.photo_library_outlined, color: cCyan),
+            tooltip: 'QR aus Galerie laden',
+            onPressed: _isScanned ? null : _pickFromGallery,
+          ),
+        ],
+      ),
       body: Stack(children: [
-        MobileScanner(onDetect: _onDetect),
+        MobileScanner(
+          controller: _scannerController,
+          onDetect: _onDetect,
+        ),
         Positioned(
-          bottom: 60, left: 40, right: 40,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
-            child: const Text("Scanne einen Einundzwanzig\nReputation QR-Code",
-              style: TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
+          bottom: 60, left: 24, right: 24,
+          child: Column(
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _isScanned ? null : _pickFromGallery,
+                  icon: const Icon(Icons.photo_library, size: 20),
+                  label: const Text("QR AUS GALERIE LADEN"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.15),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  "Scanne einen Einundzwanzig\nReputation QR-Code",
+                  style: TextStyle(color: Colors.white, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
           ),
         ),
       ]),
