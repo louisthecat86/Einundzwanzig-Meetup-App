@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Einundzwanzig Farb-Palette
 const Color cDark = Color(0xFF101012);
 const Color cCard = Color(0xFF1A1A1E);
 const Color cCardHover = Color(0xFF242428);
@@ -27,24 +26,18 @@ const LinearGradient gradientOrange = LinearGradient(colors: [Color(0xFFF7931A),
 const LinearGradient gradientCyan = LinearGradient(colors: [Color(0xFF00B4CF), Color(0xFF0088A0)], begin: Alignment.topLeft, end: Alignment.bottomRight);
 const LinearGradient gradientPurple = LinearGradient(colors: [Color(0xFFA915FF), Color(0xFF7B00CC)], begin: Alignment.topLeft, end: Alignment.bottomRight);
 
-// ============================================================
-// FONT: Rajdhani — Geometrisch, semi-condensed, nah an "The Bold Font"
-// Inconsolata bleibt für monospace Zahlen
-// ============================================================
+// Font
 String? _rajdhani = GoogleFonts.rajdhani().fontFamily;
 String? _mono = GoogleFonts.inconsolata().fontFamily;
-
-// Exportiert für direkten Zugriff in Widgets
 String? get fontMono => _mono;
 
-final ThemeData appTheme = ThemeData(
-  brightness: Brightness.dark,
-  scaffoldBackgroundColor: cDark,
-  primaryColor: cOrange,
-  useMaterial3: true,
-  fontFamily: _rajdhani,
-  colorScheme: const ColorScheme.dark(primary: cOrange, secondary: cCyan, surface: cCard, error: cRed),
+// Tile-Konstanten — exportiert für alle Screens
+const double kTileGap = 12;
+const double kTileRadius = 14; // Kantiger als vorher (war 20)
 
+final ThemeData appTheme = ThemeData(
+  brightness: Brightness.dark, scaffoldBackgroundColor: cDark, primaryColor: cOrange, useMaterial3: true, fontFamily: _rajdhani,
+  colorScheme: const ColorScheme.dark(primary: cOrange, secondary: cCyan, surface: cCard, error: cRed),
   textTheme: TextTheme(
     displayLarge: TextStyle(fontFamily: _rajdhani, fontWeight: FontWeight.w700, fontSize: 34, letterSpacing: -0.5, color: cText, height: 1.15),
     displayMedium: TextStyle(fontFamily: _rajdhani, fontWeight: FontWeight.w700, fontSize: 26, letterSpacing: -0.3, color: cText, height: 1.2),
@@ -55,17 +48,16 @@ final ThemeData appTheme = ThemeData(
     bodySmall: TextStyle(fontFamily: _rajdhani, fontSize: 12, color: cTextTertiary, height: 1.4),
     labelSmall: TextStyle(fontFamily: _rajdhani, fontSize: 11, color: cTextSecondary, fontWeight: FontWeight.w600, letterSpacing: 1.2),
   ),
-
   appBarTheme: AppBarTheme(backgroundColor: Colors.transparent, surfaceTintColor: Colors.transparent, elevation: 0, scrolledUnderElevation: 0, centerTitle: false,
     titleTextStyle: TextStyle(fontFamily: _rajdhani, color: cText, fontSize: 22, fontWeight: FontWeight.w700), iconTheme: const IconThemeData(color: cTextSecondary, size: 22)),
-  cardTheme: CardThemeData(color: cCard, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: cTileBorder, width: 0.8)), margin: const EdgeInsets.symmetric(vertical: 6)),
-  elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black, elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: TextStyle(fontFamily: _rajdhani, fontSize: 15, fontWeight: FontWeight.w700))),
-  outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(foregroundColor: cText, side: const BorderSide(color: cTileBorder, width: 1), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: TextStyle(fontFamily: _rajdhani, fontSize: 15, fontWeight: FontWeight.w600))),
-  textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: cOrange, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), textStyle: TextStyle(fontFamily: _rajdhani, fontSize: 14, fontWeight: FontWeight.w600))),
-  inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: cSurface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: cTileBorder, width: 0.8)), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: cTileBorder, width: 0.8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: cOrange, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16), hintStyle: const TextStyle(color: cTextTertiary)),
+  cardTheme: CardThemeData(color: cCard, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius), side: const BorderSide(color: cTileBorder, width: 0.8))),
+  elevatedButtonTheme: ElevatedButtonThemeData(style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black, elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius)), textStyle: TextStyle(fontFamily: _rajdhani, fontSize: 15, fontWeight: FontWeight.w700))),
+  outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(foregroundColor: cText, side: const BorderSide(color: cTileBorder, width: 1), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius)))),
+  textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: cOrange, textStyle: TextStyle(fontFamily: _rajdhani, fontSize: 14, fontWeight: FontWeight.w600))),
+  inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: cSurface, border: OutlineInputBorder(borderRadius: BorderRadius.circular(kTileRadius), borderSide: const BorderSide(color: cTileBorder, width: 0.8)), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(kTileRadius), borderSide: const BorderSide(color: cTileBorder, width: 0.8)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(kTileRadius), borderSide: const BorderSide(color: cOrange, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16)),
   dividerTheme: const DividerThemeData(color: cBorder, thickness: 0.5, space: 32),
-  bottomNavigationBarTheme: BottomNavigationBarThemeData(backgroundColor: cCard, selectedItemColor: cOrange, unselectedItemColor: cTextTertiary, type: BottomNavigationBarType.fixed, elevation: 0, selectedLabelStyle: TextStyle(fontFamily: _rajdhani, fontSize: 11, fontWeight: FontWeight.w600), unselectedLabelStyle: TextStyle(fontFamily: _rajdhani, fontSize: 11)),
-  snackBarTheme: SnackBarThemeData(backgroundColor: cCard, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), behavior: SnackBarBehavior.floating, elevation: 0),
-  dialogTheme: DialogThemeData(backgroundColor: cCard, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-  bottomSheetTheme: const BottomSheetThemeData(backgroundColor: cCard, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24)))),
+  bottomNavigationBarTheme: BottomNavigationBarThemeData(backgroundColor: cCard, selectedItemColor: cOrange, unselectedItemColor: cTextTertiary, type: BottomNavigationBarType.fixed, elevation: 0),
+  snackBarTheme: SnackBarThemeData(backgroundColor: cCard, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius)), behavior: SnackBarBehavior.floating, elevation: 0),
+  dialogTheme: DialogThemeData(backgroundColor: cCard, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius + 4))),
+  bottomSheetTheme: const BottomSheetThemeData(backgroundColor: cCard, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20)))),
 );

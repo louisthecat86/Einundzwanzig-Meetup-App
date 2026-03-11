@@ -20,16 +20,14 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
   final _homeKey = GlobalKey<HomeScreenState>();
 
-  Future<void> _haptic(HapticFeedback Function()? type) async {
+  Future<void> _doHaptic() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('haptic_enabled') ?? true) {
-      HapticFeedback.selectionClick();
-    }
+    if (prefs.getBool('haptic_enabled') ?? true) HapticFeedback.selectionClick();
   }
 
   void _onTabTap(int index) {
-    if (index == 2) { _openScanner(); return; }
-    _haptic(null);
+    if (index == 2) return; // Mittlerer Slot = Leerraum (Scan ist drüber)
+    _doHaptic();
     setState(() => _currentIndex = index);
   }
 
@@ -47,9 +45,10 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
       backgroundColor: cDark,
-      extendBody: true,
       body: IndexedStack(
         index: _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
         children: [
@@ -59,32 +58,60 @@ class _AppShellState extends State<AppShell> {
           const ProfileEditScreen(),
         ],
       ),
-      bottomNavigationBar: _buildNav(context),
-    );
-  }
-
-  Widget _buildNav(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: cBorder, width: 0.5))),
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: Container(
-            color: cDark.withOpacity(0.92),
-            child: SafeArea(
-              top: false,
-              child: SizedBox(
-                height: 56,
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  _navItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
-                  _navItem(1, Icons.style_rounded, Icons.style_outlined, 'Wallet'),
-                  _scanBtn(),
-                  _navItem(3, Icons.event_rounded, Icons.event_outlined, 'Events'),
-                  _navItem(4, Icons.person_rounded, Icons.person_outline_rounded, 'Profil'),
-                ]),
+      // Stack-Ansatz: NavBar + FAB getrennt, kein Clipping
+      bottomNavigationBar: SizedBox(
+        height: 56 + bottomPad + 16, // 16px Extra für FAB-Überstand
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Hintergrund: Frosted Glass NavBar
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              height: 56 + bottomPad,
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cDark.withOpacity(0.92),
+                      border: const Border(top: BorderSide(color: cBorder, width: 0.5)),
+                    ),
+                    padding: EdgeInsets.only(bottom: bottomPad),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _navItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+                        _navItem(1, Icons.style_rounded, Icons.style_outlined, 'Wallet'),
+                        const SizedBox(width: 60), // Platzhalter für FAB
+                        _navItem(3, Icons.event_rounded, Icons.event_outlined, 'Events'),
+                        _navItem(4, Icons.person_rounded, Icons.person_outline_rounded, 'Profil'),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            // FAB: Ragt heraus, ÜBER der NavBar
+            Positioned(
+              bottom: bottomPad + 10, // 10px über der NavBar-Unterkante
+              left: 0, right: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: _openScanner,
+                  child: Container(
+                    width: 62, height: 62,
+                    decoration: BoxDecoration(
+                      gradient: gradientOrange,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: cDark, width: 3),
+                      boxShadow: [BoxShadow(color: cOrange.withOpacity(0.3), blurRadius: 20, spreadRadius: -2, offset: const Offset(0, 4))],
+                    ),
+                    child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 26),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -99,30 +126,5 @@ class _AppShellState extends State<AppShell> {
         const SizedBox(height: 2),
         Text(l, style: TextStyle(color: active ? cText : cTextTertiary, fontSize: 10, fontWeight: active ? FontWeight.w600 : FontWeight.w400)),
       ])));
-  }
-
-  // ============================================================
-  // SCAN BUTTON — Ragt aus der NavBar heraus
-  // ============================================================
-  Widget _scanBtn() {
-    return GestureDetector(
-      onTap: _openScanner,
-      child: Transform.translate(
-        offset: const Offset(0, -14), // Ragt 14px über die NavBar hinaus
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            gradient: gradientOrange,
-            shape: BoxShape.circle,
-            border: Border.all(color: cDark, width: 3), // Ring in Hintergrundfarbe
-            boxShadow: [
-              BoxShadow(color: cOrange.withOpacity(0.25), blurRadius: 16, spreadRadius: -2, offset: const Offset(0, 4)),
-            ],
-          ),
-          child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 26),
-        ),
-      ),
-    );
   }
 }

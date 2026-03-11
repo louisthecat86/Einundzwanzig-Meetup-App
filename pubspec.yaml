@@ -16,6 +16,7 @@ dependencies:
   mobile_scanner: ^7.1.4
   url_launcher: ^6.2.5
   google_fonts: ^6.2.1
+  image_picker: ^1.0.7
 
   # Networking & Data
   http: ^1.6.0
