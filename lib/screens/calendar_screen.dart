@@ -66,7 +66,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(100),
           height: 500, // Feste Höhe oder dynamisch
           child: SingleChildScrollView(
             child: Column(

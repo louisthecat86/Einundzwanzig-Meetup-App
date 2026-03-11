@@ -9,11 +9,10 @@ import 'profile_edit.dart';
 import 'meetup_verification.dart';
 import '../models/meetup.dart';
 
-/// Haupt-Shell mit Bottom Navigation.
+/// AppShell mit Bottom Navigation.
 /// Tabs: Home | Wallet | [Scan] | Events | Profil
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
-
   @override
   State<AppShell> createState() => _AppShellState();
 }
@@ -30,18 +29,12 @@ class _AppShellState extends State<AppShell> {
 
   void _openScanner() async {
     HapticFeedback.mediumImpact();
-    final dummy = Meetup(id: "global", city: "GLOBAL", country: "", telegramLink: "", lat: 0, lng: 0);
-    await Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => MeetupVerificationScreen(meetup: dummy),
-        transitionsBuilder: (_, animation, __, child) => SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
-            .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-          child: child,
-        ),
-      ),
-    );
+    final d = Meetup(id: "global", city: "GLOBAL", country: "", telegramLink: "", lat: 0, lng: 0);
+    await Navigator.push(context, PageRouteBuilder(
+      pageBuilder: (_, __, ___) => MeetupVerificationScreen(meetup: d),
+      transitionsBuilder: (_, a, __, c) => SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero)
+          .animate(CurvedAnimation(parent: a, curve: Curves.easeOutCubic)), child: c)));
     _homeKey.currentState?.refreshAfterScan();
   }
 
@@ -59,15 +52,13 @@ class _AppShellState extends State<AppShell> {
           const ProfileEditScreen(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildNav(),
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildNav() {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: cBorder, width: 0.5)),
-      ),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: cBorder, width: 0.5))),
       child: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
@@ -77,16 +68,13 @@ class _AppShellState extends State<AppShell> {
               top: false,
               child: SizedBox(
                 height: 56,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _navItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
-                    _navItem(1, Icons.style_rounded, Icons.style_outlined, 'Wallet'),
-                    _scanButton(),
-                    _navItem(3, Icons.event_rounded, Icons.event_outlined, 'Events'),
-                    _navItem(4, Icons.person_rounded, Icons.person_outline_rounded, 'Profil'),
-                  ],
-                ),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+                  _navItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+                  _navItem(1, Icons.style_rounded, Icons.style_outlined, 'Wallet'),
+                  _scanBtn(),
+                  _navItem(3, Icons.event_rounded, Icons.event_outlined, 'Events'),
+                  _navItem(4, Icons.person_rounded, Icons.person_outline_rounded, 'Profil'),
+                ]),
               ),
             ),
           ),
@@ -95,45 +83,22 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
-  Widget _navItem(int index, IconData active, IconData inactive, String label) {
-    final isActive = _currentIndex == index;
+  Widget _navItem(int i, IconData a, IconData ia, String l) {
+    final active = _currentIndex == i;
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _onTabTap(index),
-      child: SizedBox(
-        width: 60,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isActive ? active : inactive,
-              color: isActive ? cText : cTextTertiary,
-              size: 24,
-            ),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(
-              color: isActive ? cText : cTextTertiary,
-              fontSize: 10,
-              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-            )),
-          ],
-        ),
-      ),
-    );
+      behavior: HitTestBehavior.opaque, onTap: () => _onTabTap(i),
+      child: SizedBox(width: 60, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(active ? a : ia, color: active ? cText : cTextTertiary, size: 24),
+        const SizedBox(height: 2),
+        Text(l, style: TextStyle(color: active ? cText : cTextTertiary, fontSize: 10, fontWeight: active ? FontWeight.w600 : FontWeight.w400)),
+      ])));
   }
 
-  Widget _scanButton() {
+  Widget _scanBtn() {
     return GestureDetector(
       onTap: _openScanner,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          gradient: gradientOrange,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 22),
-      ),
-    );
+      child: Container(width: 48, height: 48,
+        decoration: BoxDecoration(gradient: gradientOrange, shape: BoxShape.circle),
+        child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 22)));
   }
 }

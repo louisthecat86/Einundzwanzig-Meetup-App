@@ -48,8 +48,10 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  flutter_svg: ^2.0.16
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
+    - assets/images/einundzwanzig_logo.svg

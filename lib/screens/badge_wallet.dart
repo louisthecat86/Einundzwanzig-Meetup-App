@@ -214,7 +214,7 @@ Exportiert am ${DateTime.now().day}.${DateTime.now().month}.${DateTime.now().yea
       context: context,
       backgroundColor: cCard,
       builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(100),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
