@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme.dart';
 import 'home_screen.dart';
 import 'badge_wallet.dart';
@@ -9,8 +10,6 @@ import 'profile_edit.dart';
 import 'meetup_verification.dart';
 import '../models/meetup.dart';
 
-/// AppShell mit Bottom Navigation.
-/// Tabs: Home | Wallet | [Scan] | Events | Profil
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
   @override
@@ -21,14 +20,22 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
   final _homeKey = GlobalKey<HomeScreenState>();
 
+  Future<void> _haptic(HapticFeedback Function()? type) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('haptic_enabled') ?? true) {
+      HapticFeedback.selectionClick();
+    }
+  }
+
   void _onTabTap(int index) {
     if (index == 2) { _openScanner(); return; }
-    HapticFeedback.selectionClick();
+    _haptic(null);
     setState(() => _currentIndex = index);
   }
 
   void _openScanner() async {
-    HapticFeedback.mediumImpact();
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('haptic_enabled') ?? true) HapticFeedback.mediumImpact();
     final d = Meetup(id: "global", city: "GLOBAL", country: "", telegramLink: "", lat: 0, lng: 0);
     await Navigator.push(context, PageRouteBuilder(
       pageBuilder: (_, __, ___) => MeetupVerificationScreen(meetup: d),
@@ -52,11 +59,11 @@ class _AppShellState extends State<AppShell> {
           const ProfileEditScreen(),
         ],
       ),
-      bottomNavigationBar: _buildNav(),
+      bottomNavigationBar: _buildNav(context),
     );
   }
 
-  Widget _buildNav() {
+  Widget _buildNav(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(border: Border(top: BorderSide(color: cBorder, width: 0.5))),
       child: ClipRect(
@@ -94,11 +101,28 @@ class _AppShellState extends State<AppShell> {
       ])));
   }
 
+  // ============================================================
+  // SCAN BUTTON — Ragt aus der NavBar heraus
+  // ============================================================
   Widget _scanBtn() {
     return GestureDetector(
       onTap: _openScanner,
-      child: Container(width: 48, height: 48,
-        decoration: BoxDecoration(gradient: gradientOrange, shape: BoxShape.circle),
-        child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 22)));
+      child: Transform.translate(
+        offset: const Offset(0, -14), // Ragt 14px über die NavBar hinaus
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            gradient: gradientOrange,
+            shape: BoxShape.circle,
+            border: Border.all(color: cDark, width: 3), // Ring in Hintergrundfarbe
+            boxShadow: [
+              BoxShadow(color: cOrange.withOpacity(0.25), blurRadius: 16, spreadRadius: -2, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.black, size: 26),
+        ),
+      ),
+    );
   }
 }
