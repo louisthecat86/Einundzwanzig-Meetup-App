@@ -5,7 +5,7 @@ import '../models/meetup.dart';
 import '../services/meetup_service.dart';
 import '../services/nostr_service.dart';
 import '../theme.dart';
-import 'dashboard.dart';
+import 'app_shell.dart';
 import 'platform_proof_screen.dart';
 import 'humanity_proof_screen.dart';
 import '../services/platform_proof_service.dart';
@@ -385,7 +385,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       // Direkt zum Dashboard — kein Review-Screen mehr nötig
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const AppShell()),
         (route) => false,
       );
     }
