@@ -1188,13 +1188,13 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        badge.date,
+                        '${badge.date.day}.${badge.date.month}.${badge.date.year}',
                         style: TextStyle(color: cTextTertiary, fontSize: 11),
                       ),
                     ],
                   ),
                 ),
-                if (badge.isBound)
+                if (badge.isFullyBound)
                   Icon(Icons.link_rounded, color: cGreen.withOpacity(0.5), size: 16),
                 const SizedBox(width: 4),
                 Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 18),
