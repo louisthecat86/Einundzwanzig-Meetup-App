@@ -98,6 +98,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? _profilePicUrl;
   String? _localProfilePic;
 
+  // Nostr
+  bool _nostrHasNew = false;
+  static const _nostrEinundzwanzigNpub = 'npub1qv02xpsc3lhxxx5x7xswf88w3u7kykft9ea7t78tz7ywxf7mxs9qrxujnc';
+  // ↑ npub von Einundzwanzig auf Nostr. Bei Bedarf anpassen.
+
   // Tile Order & Visibility
   List<String> _tileOrder = [];
   Set<String> _hiddenTiles = {};
@@ -169,7 +174,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (_user.nickname == 'Anon' || _user.nickname.isEmpty) { if (mounted) { await Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileEditScreen())); await _loadUser(); } }
     await _loadBadges(); await _calculateTrustScore(); await _reVerifyAdminStatus();
     _loadIdentityData(); _checkActiveSession(); _syncOrganicAdminsInBackground(); _checkDeviceIntegrity();
-    _loadNextHomeMeetup(); _loadProfilePicture();
+    _loadNextHomeMeetup(); _loadProfilePicture(); _checkNostrNew();
   }
 
   void _loadProfilePicture() async {
@@ -183,6 +188,36 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final url = await NostrProfileService.fetchProfilePicture(pk);
         if (url != null && mounted) setState(() => _profilePicUrl = url);
       } catch (_) {}
+    }
+  }
+
+  void _checkNostrNew() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSeen = prefs.getInt('nostr_last_seen') ?? 0;
+      // Prüfe via NostrService ob es neue Events gibt (einfache Timestamp-Prüfung)
+      // Falls der Service keine direkte Methode hat, nutzen wir einen 24h-Hinweis
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final dayAgo = now - 86400;
+      if (lastSeen < dayAgo) {
+        if (mounted) setState(() => _nostrHasNew = true);
+      }
+    } catch (_) {}
+  }
+
+  void _openNostr() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('nostr_last_seen', DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    if (mounted) setState(() => _nostrHasNew = false);
+    // Versuche zunächst die Nostr-App zu öffnen (universelles Schema)
+    final nostrUri = Uri.parse('nostr:$_nostrEinundzwanzigNpub');
+    final webUri = Uri.parse('https://njump.me/$_nostrEinundzwanzigNpub');
+    try {
+      if (!await launchUrl(nostrUri, mode: LaunchMode.externalApplication)) {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -314,6 +349,33 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildLogoBar() => Row(children: [
     SvgPicture.asset('assets/images/einundzwanzig_logo.svg', height: 18),
     const Spacer(),
+    // Nostr-Button
+    GestureDetector(
+      onTap: _openNostr,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: const Color(0xFF3B1D6E),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.5), width: 1),
+            ),
+            child: const Icon(Icons.bolt_rounded, color: Color(0xFF8B5CF6), size: 18),
+          ),
+          if (_nostrHasNew)
+            Positioned(
+              top: -2, right: -2,
+              child: Container(
+                width: 10, height: 10,
+                decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle),
+              ),
+            ),
+        ],
+      ),
+    ),
+    const SizedBox(width: 4),
     _headerIcon(Icons.help_outline_rounded, _showHelpSheet),
     const SizedBox(width: 4),
     _headerIcon(Icons.settings_rounded, _showSettings),
@@ -458,16 +520,123 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildHomeMeetupTile() {
-    final hasHome = _homeMeetup != null; final bh = hasHome ? myBadges.where((b) => b.meetupName == _homeMeetup!.city).length : 0;
-    if (!_user.homeMeetupId.isNotEmpty) return _tile(accentColor: cTextTertiary, opacity: 0.04, onTap: _selectHomeMeetup, child: Row(children: [Container(width: 44, height: 44, decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: Colors.white.withOpacity(0.05)), child: const Icon(Icons.add_rounded, color: cTextTertiary, size: 22)), const SizedBox(width: 14), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Home Meetup wählen', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w600)), Text('Dein Stammtisch-Meetup', style: TextStyle(color: cTextTertiary, fontSize: 11))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 20)]));
-    return _tile(accentColor: cOrange, onTap: hasHome ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarScreen(initialSearch: _homeMeetup!.city))) : null, child: Row(children: [
-      Container(width: 48, height: 48, decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: cOrange.withOpacity(0.12)),
-        child: hasHome && _homeMeetup!.coverImagePath.isNotEmpty ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(_homeMeetup!.coverImagePath, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.home_rounded, color: cOrange, size: 22))) : const Icon(Icons.home_rounded, color: cOrange, size: 22)),
-      const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Flexible(child: Text(hasHome ? _homeMeetup!.city : _user.homeMeetupId, style: const TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)), const SizedBox(width: 8),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: cOrange.withOpacity(0.15), borderRadius: BorderRadius.circular(5)), child: const Text('HOME', style: TextStyle(color: cOrange, fontSize: 8, fontWeight: FontWeight.w800)))]),
-        const SizedBox(height: 4), Text(hasHome ? [_homeMeetup!.country, if (bh > 0) '$bh Badges hier'].join(' · ') : 'Lade...', style: const TextStyle(color: cTextTertiary, fontSize: 11))])),
-      if (hasHome) ...[const SizedBox(width: 8), _miniAct(Icons.info_outline_rounded, () => Navigator.push(context, MaterialPageRoute(builder: (_) => MeetupDetailsScreen(meetup: _homeMeetup!)))), const SizedBox(width: 6), _miniAct(Icons.swap_horiz_rounded, _selectHomeMeetup)]]));
+    final hasHome = _user.homeMeetupId.isNotEmpty;
+    final cityName = _homeMeetup?.city ?? _user.homeMeetupId;
+    final bh = _homeMeetup != null ? myBadges.where((b) => b.meetupName == _homeMeetup!.city).length : 0;
+
+    if (!hasHome) {
+      // Call-to-Action: noch kein Home Meetup gewählt
+      return GestureDetector(
+        onLongPress: _showReorderSheet,
+        onTap: _selectHomeMeetup,
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(kTileRadius),
+            border: Border.all(color: cOrange.withOpacity(0.35), width: 1.5),
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [cOrange.withOpacity(0.10), const Color(0xFF141416)]),
+          ),
+          child: Row(children: [
+            Container(width: 54, height: 54,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: cOrange.withOpacity(0.14)),
+              child: const Icon(Icons.add_location_rounded, color: cOrange, size: 28)),
+            const SizedBox(width: 16),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('HOME MEETUP', style: TextStyle(color: cOrange, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+              SizedBox(height: 5),
+              Text('Wähle deinen Stammtisch', style: TextStyle(color: cText, fontSize: 17, fontWeight: FontWeight.w800)),
+              SizedBox(height: 3),
+              Text('Dein regelmäßiges Meetup auswählen', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+            ])),
+            const Icon(Icons.chevron_right_rounded, color: cOrange, size: 24),
+          ]),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onLongPress: _showReorderSheet,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(kTileRadius),
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [cOrange.withOpacity(0.20), cOrange.withOpacity(0.07), const Color(0xFF141416)],
+            stops: const [0.0, 0.45, 1.0]),
+          border: Border.all(color: cOrange.withOpacity(0.38), width: 1.2),
+          boxShadow: [BoxShadow(color: cOrange.withOpacity(0.08), blurRadius: 24, offset: const Offset(0, 6))],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+          // ── Header: Label + Badge-Count ──
+          Row(children: [
+            Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: cOrange.withOpacity(0.22), borderRadius: BorderRadius.circular(6)),
+              child: const Text('HOME MEETUP', style: TextStyle(color: cOrange, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1))),
+            const Spacer(),
+            if (bh > 0) Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.07), borderRadius: BorderRadius.circular(6)),
+              child: Row(children: [
+                const Icon(Icons.military_tech_rounded, color: cOrange, size: 11),
+                const SizedBox(width: 4),
+                Text('$bh Badges', style: const TextStyle(color: cOrange, fontSize: 9, fontWeight: FontWeight.w700)),
+              ])),
+          ]),
+
+          const SizedBox(height: 16),
+
+          // ── City Name — PROMINANT ──
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            // Meetup Bild oder Home-Icon
+            Container(width: 52, height: 52,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: cOrange.withOpacity(0.14)),
+              child: _homeMeetup != null && _homeMeetup!.coverImagePath.isNotEmpty
+                ? ClipRRect(borderRadius: BorderRadius.circular(12),
+                    child: Image.network(_homeMeetup!.coverImagePath, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.home_rounded, color: cOrange, size: 26)))
+                : const Icon(Icons.home_rounded, color: cOrange, size: 26)),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(cityName.toUpperCase(),
+                style: const TextStyle(color: cText, fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -0.5, height: 1.05)),
+              const SizedBox(height: 3),
+              Text(_homeMeetup?.country ?? '∙∙∙',
+                style: const TextStyle(color: cTextSecondary, fontSize: 13, fontWeight: FontWeight.w500)),
+            ])),
+          ]),
+
+          const SizedBox(height: 18),
+
+          // ── Action Buttons ──
+          Row(children: [
+            Expanded(child: GestureDetector(
+              onTap: _homeMeetup != null
+                ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => CalendarScreen(initialSearch: _homeMeetup!.city)))
+                : null,
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(gradient: gradientOrange, borderRadius: BorderRadius.circular(10),
+                  boxShadow: [BoxShadow(color: cOrange.withOpacity(0.25), blurRadius: 10, offset: const Offset(0, 3))]),
+                child: const Center(child: Text('EVENTS', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.8)))),
+            )),
+            const SizedBox(width: 8),
+            if (_homeMeetup != null) GestureDetector(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MeetupDetailsScreen(meetup: _homeMeetup!))),
+              child: Container(width: 40, height: 40,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.info_outline_rounded, color: cTextSecondary, size: 17))),
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: _selectHomeMeetup,
+              child: Container(width: 40, height: 40,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.swap_horiz_rounded, color: cTextSecondary, size: 17))),
+          ]),
+        ]),
+      ),
+    );
   }
 
   Widget _miniAct(IconData i, VoidCallback onTap) => GestureDetector(onTap: onTap, child: Container(width: 32, height: 32, decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(8)), child: Icon(i, color: cTextSecondary, size: 16)));
