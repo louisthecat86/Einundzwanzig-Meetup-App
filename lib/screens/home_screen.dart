@@ -107,9 +107,9 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<String> _tileOrder = [];
   Set<String> _hiddenTiles = {};
   // Pflicht-Kacheln (nicht löschbar)
-  static const _requiredTiles = {'trust_score', 'countdown', 'home_meetup', 'reputation'};
+  static const _requiredTiles = {'trust_score', 'home_meetup', 'reputation'};
   // Standard-Reihenfolge (alle optionalen Tiles sind sichtbar by default, wot_dashboard versteckt)
-  static const _defaultOrder = ['trust_score', 'countdown', 'home_meetup', 'reputation', 'community', 'events', 'shoutout', 'podcast', 'organisator', 'wot_dashboard'];
+  static const _defaultOrder = ['trust_score', 'home_meetup', 'reputation', 'community', 'events', 'shoutout', 'podcast', 'organisator', 'wot_dashboard'];
   static const _defaultHidden = {'wot_dashboard'};
 
   late List<_TileDef> _tileDefs;
@@ -127,7 +127,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _tileDefs = [
       // ── Pflicht-Kacheln (removable: false) ──
       _TileDef(id: 'trust_score',  label: 'Trust Score',      span: 2, removable: false, builder: _buildTrustScoreTile),
-      _TileDef(id: 'countdown',    label: 'Nächstes Meetup',  span: 1, removable: false, builder: _buildCountdownTile),
+      // countdown-Kachel wurde in Home Meetup integriert
       _TileDef(id: 'home_meetup',  label: 'Home Meetup',      span: 3, removable: false, builder: _buildHomeMeetupTile),
       _TileDef(id: 'reputation',   label: 'Reputation',       span: 1, removable: false, builder: _buildReputationTile),
       // ── Optionale Kacheln (removable: true) ──
@@ -602,7 +602,35 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ])),
           ]),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
+
+          // ── Nächster Termin ──
+          if (_countdownLoading)
+            const SizedBox(height: 16, child: LinearProgressIndicator(color: cOrange, backgroundColor: Colors.transparent))
+          else if (_nextHomeMeetup != null) Builder(builder: (_) {
+            final days = _nextHomeMeetup!.startTime.difference(DateTime.now()).inDays;
+            return Row(children: [
+              const Icon(Icons.event_available_rounded, color: cTextTertiary, size: 12),
+              const SizedBox(width: 6),
+              Text(
+                days == 0 ? 'Heute!' : days == 1 ? 'Morgen' : 'in ${days} Tagen',
+                style: TextStyle(
+                  color: days == 0 ? cOrange : days <= 3 ? cOrange.withOpacity(0.8) : cTextSecondary,
+                  fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 4),
+              Expanded(child: Text(
+                '· ${_nextHomeMeetup!.startTime.day}.${_nextHomeMeetup!.startTime.month}.',
+                style: const TextStyle(color: cTextTertiary, fontSize: 11))),
+            ]);
+          })
+          else if (_user.homeMeetupId.isNotEmpty)
+            const Row(children: [
+              Icon(Icons.event_busy_rounded, color: cTextTertiary, size: 12),
+              SizedBox(width: 6),
+              Text('Kein Termin geplant', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+            ]),
+
+          const SizedBox(height: 14),
 
           // ── Action Buttons ──
           Row(children: [
@@ -791,7 +819,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   late List<String> _order;
   late Set<String> _hidden;
 
-  static const _requiredTiles = {'trust_score', 'countdown', 'home_meetup', 'reputation'};
+  static const _requiredTiles = {'trust_score', 'home_meetup', 'reputation'};
 
   @override
   void initState() {
@@ -805,7 +833,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   IconData _iconFor(String id) {
     switch (id) {
       case 'trust_score': return Icons.shield_rounded;
-      case 'countdown': return Icons.timer_rounded;
+
       case 'home_meetup': return Icons.home_rounded;
       case 'reputation': return Icons.workspace_premium_rounded;
       case 'community': return Icons.hub_rounded;
@@ -821,7 +849,6 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   Color _colorFor(String id) {
     switch (id) {
       case 'trust_score': return Colors.amber;
-      case 'countdown': return const Color(0xFF00B4CF);
       case 'home_meetup': return const Color(0xFFF7931A);
       case 'reputation': return Colors.amber;
       case 'community': return const Color(0xFF00B4CF);
@@ -839,19 +866,15 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Aktive optionale Tiles (in _order, NOT hidden, removable)
-    final activeTiles = _order.where((id) {
+    // Alle sichtbaren Tiles in gespeicherter Reihenfolge
+    final visibleTiles = _order.where((id) {
       final d = _defFor(id);
-      return d != null && d.removable && !_hidden.contains(id);
+      if (d == null) return false;
+      if (_hidden.contains(id)) return false;
+      return true;
     }).toList();
 
-    // Fixierte Tiles (required)
-    final fixedTiles = _order.where((id) {
-      final d = _defFor(id);
-      return d != null && !d.removable;
-    }).toList();
-
-    // Verfügbare Tiles (hidden or not in order but available via tileDefs)
+    // Ausgeblendete optionale Tiles
     final availableTiles = widget.tileDefs
       .where((d) => d.removable && _hidden.contains(d.id))
       .map((d) => d.id)
@@ -874,36 +897,29 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           ),
         ]),
         const SizedBox(height: 4),
-        const Text('Halten & ziehen zum Sortieren  ·  ✕ ausblenden  ·  + hinzufügen', style: TextStyle(color: cTextTertiary, fontSize: 10)),
+        const Text('Halten & ziehen zum Sortieren  ·  🔒 = Pflicht  ·  ✕ = ausblenden', style: TextStyle(color: cTextTertiary, fontSize: 10)),
         const SizedBox(height: 16),
         Flexible(
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-              // ── FIXIERTE KACHELN ──
-              _sectionHeader(Icons.lock_rounded, 'FIXIERT', 'Können nicht entfernt werden'),
-              const SizedBox(height: 8),
-              ...fixedTiles.map((id) => _fixedRow(id)),
-              const SizedBox(height: 20),
-
-              // ── AKTIVE KACHELN ──
-              _sectionHeader(Icons.drag_indicator_rounded, 'AKTIV', 'Halten & ziehen zum Sortieren'),
+              // ── ALLE AKTIVEN KACHELN (sortierbar) ──
+              _sectionHeader(Icons.drag_indicator_rounded, 'AKTIV', 'Alle Kacheln können verschoben werden'),
               const SizedBox(height: 8),
               ReorderableListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: activeTiles.length,
+                itemCount: visibleTiles.length,
                 onReorder: (oldI, newI) {
                   setState(() {
                     if (newI > oldI) newI--;
-                    // Reorder in _order list (only among removable visible tiles)
-                    final oldOrderIdx = _order.indexOf(activeTiles[oldI]);
-                    final newOrderIdx = _order.indexOf(activeTiles[newI]);
+                    final oldOrderIdx = _order.indexOf(visibleTiles[oldI]);
+                    final newOrderIdx = _order.indexOf(visibleTiles[newI]);
                     final item = _order.removeAt(oldOrderIdx);
                     _order.insert(newOrderIdx, item);
                   });
                 },
-                itemBuilder: (_, i) => _activeRow(activeTiles[i], ValueKey(activeTiles[i])),
+                itemBuilder: (_, i) => _tileRow(visibleTiles[i], ValueKey(visibleTiles[i])),
               ),
 
               if (availableTiles.isNotEmpty) ...[
@@ -928,39 +944,35 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
     Text(subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 10)),
   ]);
 
-  Widget _fixedRow(String id) => Container(
-    key: ValueKey('fixed_$id'),
-    margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: cTileBorder, width: 0.5)),
-    child: Row(children: [
-      Icon(_iconFor(id), color: cTextTertiary, size: 15),
-      const SizedBox(width: 10),
-      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cTextSecondary, fontSize: 13, fontWeight: FontWeight.w600))),
-      const Icon(Icons.lock_outline_rounded, color: cTextTertiary, size: 13),
-    ]),
-  );
-
-  Widget _activeRow(String id, Key key) => Container(
-    key: key,
-    margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-    decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: cTileBorder, width: 0.5)),
-    child: Row(children: [
-      const Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 16),
-      const SizedBox(width: 8),
-      Icon(_iconFor(id), color: cTextSecondary, size: 15),
-      const SizedBox(width: 10),
-      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
-      GestureDetector(
-        onTap: () => _hide(id),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: const Icon(Icons.close_rounded, color: cTextTertiary, size: 14),
-        ),
-      ),
-    ]),
-  );
+  // Einheitliche Zeile: für alle Tiles (fest = Schloss, entfernbar = ✕)
+  Widget _tileRow(String id, Key key) {
+    final isFixed = _requiredTiles.contains(id);
+    return Container(
+      key: key,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cTileBorder, width: 0.5)),
+      child: Row(children: [
+        const Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 16),
+        const SizedBox(width: 8),
+        Icon(_iconFor(id), color: cTextSecondary, size: 15),
+        const SizedBox(width: 10),
+        Expanded(child: Text(_labelFor(id), style: TextStyle(
+          color: isFixed ? cTextSecondary : cText,
+          fontSize: 13, fontWeight: FontWeight.w600))),
+        isFixed
+          ? const Icon(Icons.lock_outline_rounded, color: cTextTertiary, size: 13)
+          : GestureDetector(
+              onTap: () => _hide(id),
+              child: const Padding(
+                padding: EdgeInsets.all(6),
+                child: Icon(Icons.close_rounded, color: cTextTertiary, size: 14))),
+      ]),
+    );
+  }
 
   Widget _availableRow(String id) => Container(
     margin: const EdgeInsets.only(bottom: 4),
