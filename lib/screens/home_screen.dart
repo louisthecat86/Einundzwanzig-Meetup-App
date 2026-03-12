@@ -651,7 +651,35 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildEventsTile() => _tile(accentColor: cTextTertiary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: cTextSecondary, size: 22), const SizedBox(height: 12), const Text('Events', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
   Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 22), const SizedBox(height: 12), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
   Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 22), const SizedBox(height: 12), const Text('Podcast', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
-  Widget _buildNostrTile() => _tile(accentColor: cNostr, opacity: 0.07, onTap: _openNostr, child: Stack(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextSecondary, size: 22), const SizedBox(height: 12), const Text('Nostr', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Community', style: TextStyle(color: cTextTertiary, fontSize: 12))]), if (_nostrHasNew) Positioned(top: 0, right: 0, child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)))]));
+  Widget _buildNostrTile() => _tile(
+    accentColor: cNostr,
+    opacity: 0.07,
+    onTap: _openNostr,
+    child: Stack(children: [
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Opacity(
+          opacity: _nostrHasNew ? 1.0 : 0.55,
+          child: Image.asset(
+            'assets/images/nostr_icon.png',
+            width: 30,
+            height: 30,
+            fit: BoxFit.contain,
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text('Nostr', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 3),
+        const Text('Community', style: TextStyle(color: cTextTertiary, fontSize: 12)),
+      ]),
+      if (_nostrHasNew) Positioned(
+        top: 0, right: 0,
+        child: Container(
+          width: 7, height: 7,
+          decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle),
+        ),
+      ),
+    ]),
+  );
   Widget _buildOrganisatorTile() => _tile(accentColor: cOrange, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? cGreen : cOrange, size: 22), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), Text(_justPromoted ? 'Neu via Trust Score' : 'Admin-Panel', style: const TextStyle(color: cTextTertiary, fontSize: 12))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16)]));
 
   Widget _buildWotDashboardTile() => _tile(
