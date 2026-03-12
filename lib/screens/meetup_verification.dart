@@ -52,6 +52,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
   bool _success = false;
   bool _isUnknownSigner = false; // Flag für unbekannten Signer
   String _statusText = "Bereit zum Scannen";
+  MeetupBadge? _pendingBadge; // Badge wartet auf Bestätigung
 
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -457,7 +458,8 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         }
       }
 
-      myBadges.add(MeetupBadge(
+      // Badge vorbereiten — noch NICHT speichern (erst nach Bestätigung)
+      _pendingBadge = MeetupBadge(
         id: meetupId,
         meetupName: fullName,
         date: DateTime.now(),
@@ -466,57 +468,57 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
         signerNpub: signerNpub,
         meetupEventId: meetupEventId,
         delivery: delivery,
-        // Organisator-Beweis
         sig: sig,
         sigId: sigId,
         adminPubkey: adminPubkey,
         sigVersion: sigVersion,
         sigContent: sigContent,
-        // Claim-Binding (NEU)
         claimSig: claimSig,
         claimEventId: claimEventId,
         claimPubkey: claimPubkey,
         claimTimestamp: claimTimestamp,
         isRetroactive: false,
-      ));
+      );
 
-      await MeetupBadge.saveBadges(myBadges);
-
-      // NEU: Reputation automatisch auf Relays aktualisieren
-      ReputationPublisher.publishInBackground(myBadges);
-
-      // --- NEUES, CLEANES STRING FORMAT ---
-      msg = "BADGE GESAMMELT!\n\n";
+      msg = "BADGE GEFUNDEN\n\n";
       msg += "Ort: $fullName\n";
       if (currentBlockHeight > 0) msg += "Block: $currentBlockHeight\n";
       if (tagData['_verified_by'] != null) msg += "Signiert von: ${tagData['_verified_by']}\n";
       if (sigVersion == 2) msg += "Beweis: Schnorr (BIP-340)\n";
       if (claimInfo.isNotEmpty) msg += claimInfo;
 
-      // Admin-Registry Ergebnis anzeigen
       if (adminCheckInfo.isNotEmpty) {
         msg += "\n\n$adminCheckInfo";
       }
 
-      // Ablauf-Info anzeigen
       final expiryStr = BadgeSecurity.expiryInfo(tagData);
       if (expiryStr != 'Kein Ablauf') msg += "\n\nTag-Ablauf: $expiryStr";
 
-      // Flag setzen für UI (Farbe des Icons)
       if (!isKnownAdmin && verifyResult != null && verifyResult.version >= 2 && adminPubkey.isNotEmpty) {
         _isUnknownSigner = true;
       }
 
     } else {
-      msg = "Badge bereits gesammelt!\n\nOrt: $fullName";
+      msg = "Bereits gesammelt\n\nHeute hast du bereits ein Badge von:\n$fullName";
+      _pendingBadge = null;
     }
 
     setState(() {
       _success = true;
       _statusText = msg;
     });
+    // Kein Auto-Dismiss — Nutzer muss aktiv bestätigen
+  }
 
-    await Future.delayed(const Duration(seconds: 4));
+  // Badge in Wallet speichern (nach Bestätigung)
+  Future<void> _confirmSaveBadge() async {
+    if (_pendingBadge == null) {
+      Navigator.pop(context, false);
+      return;
+    }
+    myBadges.add(_pendingBadge!);
+    await MeetupBadge.saveBadges(myBadges);
+    ReputationPublisher.publishInBackground(myBadges);
     if (mounted) Navigator.pop(context, true);
   }
 
@@ -535,60 +537,123 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       appBar: AppBar(title: const Text("BADGE SCANNEN")),
       body: Center(
         child: _success
-            ? Padding(
-                padding: const EdgeInsets.all(30),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Icon bleibt mittig und prominent
-                    Icon(
-                      _isUnknownSigner ? Icons.warning_amber_rounded : Icons.check_circle,
-                      size: 100,
-                      color: _isUnknownSigner ? Colors.orange : Colors.green,
-                    ),
-                    const SizedBox(height: 30),
-                    
-                    // --- NEUER INFO-BLOCK (Linksbündig, im Card-Design) ---
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: cCard,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: _isUnknownSigner 
-                              ? Colors.orange.withOpacity(0.5) 
-                              : Colors.green.withOpacity(0.5)
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _isUnknownSigner 
-                                ? Colors.orange.withOpacity(0.1) 
-                                : Colors.green.withOpacity(0.1),
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                          )
-                        ]
-                      ),
-                      child: Text(
-                        _statusText, 
-                        textAlign: TextAlign.left, // Linksbündig!
-                        style: const TextStyle(
-                          color: Colors.white, 
-                          fontWeight: FontWeight.w600, 
-                          fontSize: 15, 
-                          height: 1.6, // Zeilenabstand für bessere Lesbarkeit
-                          letterSpacing: 0.3,
-                        )
-                      ),
-                    ),
-                  ],
+            ? _buildConfirmationView()
+            : _buildScannerView(),
+      ),
+    );
+  }
+
+  // =============================================
+  // BESTÄTIGUNGS-ANSICHT
+  // =============================================
+  Widget _buildConfirmationView() {
+    final bool isAlreadyCollected = _pendingBadge == null;
+    final Color accentColor = isAlreadyCollected
+        ? cTextSecondary
+        : _isUnknownSigner ? cOrange : cGreen;
+    final IconData icon = isAlreadyCollected
+        ? Icons.inventory_2_rounded
+        : _isUnknownSigner ? Icons.warning_amber_rounded : Icons.military_tech_rounded;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
+      child: Column(
+        children: [
+          // ── Badge-Icon ──
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accentColor.withOpacity(0.1),
+              border: Border.all(color: accentColor.withOpacity(0.35), width: 1.5),
+            ),
+            child: Icon(icon, color: accentColor, size: 36),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Titel ──
+          Text(
+            isAlreadyCollected ? 'BEREITS GESAMMELT' : 'BADGE GEFUNDEN',
+            style: TextStyle(
+              color: accentColor, fontSize: 11,
+              fontWeight: FontWeight.w800, letterSpacing: 1.6,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Info-Karte ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cCard,
+              borderRadius: BorderRadius.circular(kTileRadius),
+              border: Border.all(color: accentColor.withOpacity(0.2), width: 0.5),
+            ),
+            child: Text(
+              _statusText,
+              textAlign: TextAlign.left,
+              style: const TextStyle(
+                color: cText, fontWeight: FontWeight.w500,
+                fontSize: 13, height: 1.75, letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // ── Bestätigen-Button (nur bei neuem Badge) ──
+          if (!isAlreadyCollected) ...[
+            SizedBox(
+              width: double.infinity, height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _confirmSaveBadge,
+                icon: const Icon(Icons.add_rounded, color: Colors.black),
+                label: const Text(
+                  'ZUR WALLET HINZUFÜGEN',
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800,
+                      fontSize: 13, letterSpacing: 0.8),
                 ),
-              )
-            : Column(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cOrange,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(kTileRadius)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── Schließen/Abbrechen ──
+          SizedBox(
+            width: double.infinity, height: 48,
+            child: TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              style: TextButton.styleFrom(
+                foregroundColor: cTextSecondary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(kTileRadius),
+                  side: const BorderSide(color: cTileBorder, width: 0.5),
+                ),
+              ),
+              child: Text(
+                isAlreadyCollected ? 'SCHLIESSEN' : 'ABBRECHEN',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =============================================
+  // SCANNER-ANSICHT
+  // =============================================
+  Widget _buildScannerView() {
+    return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Animierter Kreis
                   ScaleTransition(
                     scale: _animation,
                     child: Container(
@@ -642,9 +707,7 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
                       style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   ),
                 ],
-              ),
-      ),
-    );
+              );
   }
 }
 

@@ -1,16 +1,7 @@
 // ============================================
 // COMMUNITY PORTAL SCREEN — Redesign v2
 // ============================================
-// Visuell an Einundzwanzig Brand Guidelines angepasst:
-//   Farben: #F7931A, #00B4CF, #A915FF, #151515
-//   Schrift: Inconsolata (via Google Fonts im Theme)
-//
-// Struktur:
-//   1. Hero-Header mit Brand-Identität
-//   2. Schnellzugriff (horizontale Kacheln)
-//   3. Entdecken (2er-Grid mit großen Kacheln + 4er Grid)
-//   4. Verein & Media (gruppierte Listen)
-//   5. Footer
+// Einundzwanzig Brand: #F7931A, #00B4CF, #A915FF, #151515
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -21,15 +12,18 @@ import '../theme.dart';
 class CommunityPortalScreen extends StatelessWidget {
   const CommunityPortalScreen({super.key});
 
-  static const String _portalBase = 'https://portal.einundzwanzig.space';
-  static const String _webBase = 'https://einundzwanzig.space';
+  static const String _portalBase  = 'https://portal.einundzwanzig.space';
+  static const String _webBase     = 'https://einundzwanzig.space';
 
   Future<void> _openUrl(BuildContext context, String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Konnte $url nicht öffnen"), backgroundColor: cRed),
+          SnackBar(
+            content: Text("Konnte $url nicht öffnen"),
+            backgroundColor: cRed,
+          ),
         );
       }
     }
@@ -66,41 +60,46 @@ class CommunityPortalScreen extends StatelessWidget {
             ),
           ),
 
-          // ===== CONTENT =====
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
 
-                // ===== SCHNELLZUGRIFF =====
+                // ── SCHNELLZUGRIFF ──
                 _buildSectionTitle('SCHNELLZUGRIFF'),
                 const SizedBox(height: 10),
                 _buildQuickActions(context),
 
                 const SizedBox(height: 28),
 
-                // ===== ENTDECKEN =====
+                // ── ENTDECKEN ──
                 _buildSectionTitle('ENTDECKEN'),
                 const SizedBox(height: 10),
                 _buildDiscoverGrid(context),
 
                 const SizedBox(height: 28),
 
-                // ===== VEREIN =====
+                // ── VEREIN ──
                 _buildSectionTitle('VEREIN'),
                 const SizedBox(height: 10),
                 _buildVereinSection(context),
 
                 const SizedBox(height: 28),
 
-                // ===== PODCAST & MEDIA =====
+                // ── PODCAST & MEDIA ──
                 _buildSectionTitle('PODCAST & MEDIA'),
                 const SizedBox(height: 10),
                 _buildMediaSection(context),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
-                // ===== FOOTER =====
+                // ── SOZIALE NETZWERKE ──
+                _buildSectionTitle('SOZIALE NETZWERKE'),
+                const SizedBox(height: 10),
+                _buildSocialSection(context),
+
+                const SizedBox(height: 40),
+
                 _buildFooter(context),
               ]),
             ),
@@ -110,47 +109,48 @@ class CommunityPortalScreen extends StatelessWidget {
     );
   }
 
-  // =============================================
+  // ─────────────────────────────────────────
   // SECTION TITLE
-  // =============================================
+  // ─────────────────────────────────────────
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
       child: Text(
         title,
         style: const TextStyle(
           color: cTextTertiary,
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
+          letterSpacing: 1.5,
         ),
       ),
     );
   }
 
-  // =============================================
-  // SCHNELLZUGRIFF
-  // =============================================
+  // ─────────────────────────────────────────
+  // SCHNELLZUGRIFF — horizontale Kacheln
+  // ─────────────────────────────────────────
   Widget _buildQuickActions(BuildContext context) {
-    final actions = [
-      _QuickAction(Icons.person_outline, 'Profil', '$_portalBase/profile'),
-      _QuickAction(Icons.event_outlined, 'Meetups', '$_portalBase/meetups'),
-      _QuickAction(Icons.military_tech_outlined, 'Badges', '$_portalBase/badges'),
-      _QuickAction(Icons.hub_outlined, 'Netzwerk', '$_portalBase/network'),
+    final items = [
+      _QuickItem(Icons.person_outline_rounded, 'Profil',    '$_portalBase/'),
+      _QuickItem(Icons.event_rounded,          'Meetups',   '$_webBase/meetups/'),
+      _QuickItem(Icons.podcasts_rounded,       'Podcast',   '$_webBase/podcast/'),
+      _QuickItem(Icons.campaign_rounded,       'Shoutout',  'https://shoutout.einundzwanzig.space'),
+      _QuickItem(Icons.favorite_rounded,       'Spenden',   '$_webBase/spenden/'),
     ];
 
     return SizedBox(
-      height: 80,
+      height: 82,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: actions.length,
+        itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          final a = actions[i];
+        itemBuilder: (ctx, i) {
+          final item = items[i];
           return GestureDetector(
-            onTap: () => _openUrl(context, a.url),
+            onTap: () => _openUrl(ctx, item.url),
             child: Container(
-              width: 72,
+              width: 68,
               decoration: BoxDecoration(
                 color: cCard,
                 borderRadius: BorderRadius.circular(kTileRadius),
@@ -159,9 +159,11 @@ class CommunityPortalScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(a.icon, color: cOrange, size: 22),
+                  Icon(item.icon, color: cOrange, size: 20),
                   const SizedBox(height: 6),
-                  Text(a.label, style: const TextStyle(color: cTextSecondary, fontSize: 10, fontWeight: FontWeight.w600)),
+                  Text(item.label,
+                    style: const TextStyle(color: cTextSecondary, fontSize: 9.5, fontWeight: FontWeight.w600),
+                    textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -171,15 +173,15 @@ class CommunityPortalScreen extends StatelessWidget {
     );
   }
 
-  // =============================================
-  // ENTDECKEN GRID
-  // =============================================
+  // ─────────────────────────────────────────
+  // ENTDECKEN — 2-spaltiges Grid
+  // ─────────────────────────────────────────
   Widget _buildDiscoverGrid(BuildContext context) {
     final items = [
-      _DiscoverItem(Icons.map_outlined, 'Meetup-Karte', 'Finde Treffen in deiner Nähe', cOrange, '$_webBase/map'),
-      _DiscoverItem(Icons.bar_chart_outlined, 'Statistiken', 'Community Zahlen & Fakten', cCyan, '$_webBase/stats'),
-      _DiscoverItem(Icons.school_outlined, 'Lernen', 'Bitcoin Grundlagen', cPurple, '$_webBase/learn'),
-      _DiscoverItem(Icons.store_outlined, 'Shop', 'Merchandise & mehr', cOrange, '$_webBase/shop'),
+      _GridItem(Icons.map_outlined,         'Meetup-Karte',   'Treffen in deiner Nähe',   cOrange,  '$_webBase/meetups/'),
+      _GridItem(Icons.store_outlined,       'Shop',           'Merch & Bitcoin-Produkte', cCyan,    '$_webBase/shops/'),
+      _GridItem(Icons.hub_outlined,         'Portal',         'Dein Profil & Badges',     cPurple,  '$_portalBase/'),
+      _GridItem(Icons.record_voice_over_rounded, 'Soundboard','Clips & Sounds',           cOrange,  '$_webBase/soundboard/'),
     ];
 
     return GridView.builder(
@@ -189,28 +191,31 @@ class CommunityPortalScreen extends StatelessWidget {
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 1.6,
+        childAspectRatio: 1.65,
       ),
       itemCount: items.length,
-      itemBuilder: (context, i) {
+      itemBuilder: (ctx, i) {
         final item = items[i];
         return GestureDetector(
-          onTap: () => _openUrl(context, item.url),
+          onTap: () => _openUrl(ctx, item.url),
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: cCard,
               borderRadius: BorderRadius.circular(kTileRadius),
-              border: Border.all(color: item.color.withOpacity(0.2), width: 0.5),
+              border: Border.all(color: item.color.withOpacity(0.18), width: 0.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(item.icon, color: item.color, size: 20),
+                Icon(item.icon, color: item.color, size: 18),
                 const Spacer(),
-                Text(item.title, style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)),
+                Text(item.title,
+                  style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text(item.subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(item.subtitle,
+                  style: const TextStyle(color: cTextTertiary, fontSize: 10),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -219,33 +224,49 @@ class CommunityPortalScreen extends StatelessWidget {
     );
   }
 
-  // =============================================
-  // VEREIN SECTION
-  // =============================================
+  // ─────────────────────────────────────────
+  // VEREIN
+  // ─────────────────────────────────────────
   Widget _buildVereinSection(BuildContext context) {
-    final links = [
-      _LinkItem('Über uns', '$_webBase/about'),
-      _LinkItem('Mitglied werden', '$_webBase/membership'),
-      _LinkItem('Satzung', '$_webBase/statute'),
-      _LinkItem('Impressum', '$_webBase/imprint'),
-    ];
-    return _buildLinkList(context, links);
+    return _buildLinkList(context, [
+      _LinkItem('Über den Verein',     '$_webBase/verein/'),
+      _LinkItem('Mitglied werden',     'https://verein.einundzwanzig.space/'),
+      _LinkItem('Satzung (PDF)',       '$_webBase/files/Statuten_v1.3.pdf'),
+      _LinkItem('Kontakt',             '$_webBase/kontakt/'),
+      _LinkItem('Datenschutz',         '$_webBase/datenschutz/'),
+    ]);
   }
 
-  // =============================================
-  // MEDIA SECTION
-  // =============================================
+  // ─────────────────────────────────────────
+  // PODCAST & MEDIA
+  // ─────────────────────────────────────────
   Widget _buildMediaSection(BuildContext context) {
-    final links = [
-      _LinkItem('Podcast', '$_webBase/podcast'),
-      _LinkItem('YouTube', 'https://youtube.com/@einundzwanzig'),
-      _LinkItem('Nostr', 'https://njump.me/npub1w0rthyjyp2f5gful0gm2500pwyxfrx93a85289xdz0sd6hyef33s6cjnt'),
-      _LinkItem('Telegram', 'https://t.me/einundzwanzig'),
-    ];
-    return _buildLinkList(context, links);
+    return _buildLinkList(context, [
+      _LinkItem('Podcast',             '$_webBase/podcast/'),
+      _LinkItem('Der Weg (Einsteiger)','$_webBase/podcast/der-weg/'),
+      _LinkItem('Interviews',          '$_webBase/podcast/interviews/'),
+      _LinkItem('YouTube',             'https://www.youtube.com/c/EinundzwanzigPodcast'),
+      _LinkItem('Media & Artikel',     '$_webBase/media/'),
+      _LinkItem('Soundcloud',          'https://soundcloud.com/einundzwanzig_beats'),
+    ]);
   }
 
-  Widget _buildLinkList(BuildContext context, List<_LinkItem> links) {
+  // ─────────────────────────────────────────
+  // SOZIALE NETZWERKE
+  // ─────────────────────────────────────────
+  Widget _buildSocialSection(BuildContext context) {
+    return _buildLinkList(context, [
+      _LinkItem('Nostr',       'https://njump.me/npub1qv02xpsc3lhxxx5x7xswf88w3u7kykft9ea7t78tz7ywxf7mxs9qrxujnc'),
+      _LinkItem('X / Twitter', 'https://x.com/_einundzwanzig_'),
+      _LinkItem('Instagram',   'https://www.instagram.com/einundzwanzig_podcast'),
+      _LinkItem('Shoutout senden', 'https://shoutout.einundzwanzig.space'),
+    ]);
+  }
+
+  // ─────────────────────────────────────────
+  // LINK-LISTE (generisch)
+  // ─────────────────────────────────────────
+  Widget _buildLinkList(BuildContext context, List<_LinkItem> items) {
     return Container(
       decoration: BoxDecoration(
         color: cCard,
@@ -253,93 +274,92 @@ class CommunityPortalScreen extends StatelessWidget {
         border: Border.all(color: cTileBorder, width: 0.5),
       ),
       child: Column(
-        children: links.asMap().entries.map((entry) {
+        children: items.asMap().entries.map((entry) {
           final i = entry.key;
-          final link = entry.value;
-          return Column(
-            children: [
-              InkWell(
-                onTap: () => _openUrl(context, link.url),
-                borderRadius: BorderRadius.circular(kTileRadius),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                  child: Row(
-                    children: [
-                      Text(link.label, style: const TextStyle(color: cText, fontSize: 13)),
-                      const Spacer(),
-                      const Icon(Icons.open_in_new_rounded, color: cTextTertiary, size: 14),
-                    ],
-                  ),
-                ),
+          final item = entry.value;
+          return Column(children: [
+            InkWell(
+              onTap: () => _openUrl(context, item.url),
+              borderRadius: i == 0
+                ? const BorderRadius.vertical(top: Radius.circular(kTileRadius))
+                : i == items.length - 1
+                    ? const BorderRadius.vertical(bottom: Radius.circular(kTileRadius))
+                    : BorderRadius.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(children: [
+                  Text(item.label,
+                    style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  const Icon(Icons.open_in_new_rounded, color: cTextTertiary, size: 13),
+                ]),
               ),
-              if (i < links.length - 1)
-                const Divider(height: 0, color: cBorder, thickness: 0.5, indent: 16, endIndent: 16),
-            ],
-          );
+            ),
+            if (i < items.length - 1)
+              const Divider(height: 0, thickness: 0.5, color: cBorder, indent: 16, endIndent: 0),
+          ]);
         }).toList(),
       ),
     );
   }
 
-  // =============================================
+  // ─────────────────────────────────────────
   // FOOTER
-  // =============================================
+  // ─────────────────────────────────────────
   Widget _buildFooter(BuildContext context) {
     return Center(
-      child: Column(
-        children: [
-          Container(
-            width: 40, height: 2,
-            decoration: BoxDecoration(
-              color: cOrange.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(1),
-            ),
+      child: Column(children: [
+        Container(
+          width: 40, height: 2,
+          decoration: BoxDecoration(
+            color: cOrange.withOpacity(0.25),
+            borderRadius: BorderRadius.circular(1),
           ),
-          const SizedBox(height: 16),
-          Text('Toximalistisches Infotainment',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 11,
-              fontStyle: FontStyle.italic, letterSpacing: 0.3)),
-          Text('für bullishe Bitcoiner.',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 11,
-              fontStyle: FontStyle.italic, letterSpacing: 0.3)),
-          const SizedBox(height: 10),
-          GestureDetector(
-            onTap: () => _openUrl(context, _webBase),
-            child: Text('einundzwanzig.space',
-              style: TextStyle(color: cOrange.withOpacity(0.5), fontSize: 11,
-                decoration: TextDecoration.underline,
-                decorationColor: cOrange.withOpacity(0.3))),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 16),
+        Text('Toximalistisches Infotainment',
+          style: TextStyle(color: Colors.grey.shade700, fontSize: 11,
+            fontStyle: FontStyle.italic, letterSpacing: 0.3)),
+        Text('für bullishe Bitcoiner.',
+          style: TextStyle(color: Colors.grey.shade700, fontSize: 11,
+            fontStyle: FontStyle.italic, letterSpacing: 0.3)),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () => _openUrl(context, _webBase),
+          child: Text('einundzwanzig.space',
+            style: TextStyle(
+              color: cOrange.withOpacity(0.5),
+              fontSize: 11,
+              decoration: TextDecoration.underline,
+              decorationColor: cOrange.withOpacity(0.25),
+            )),
+        ),
+      ]),
     );
   }
 }
 
-// =============================================
+// ─────────────────────────────────────────
 // DATA MODELS
-// =============================================
-class _DiscoverItem {
+// ─────────────────────────────────────────
+class _QuickItem {
+  final IconData icon;
+  final String label;
+  final String url;
+  _QuickItem(this.icon, this.label, this.url);
+}
+
+class _GridItem {
   final IconData icon;
   final String title;
   final String subtitle;
   final Color color;
   final String url;
-
-  _DiscoverItem(this.icon, this.title, this.subtitle, this.color, this.url);
-}
-
-class _QuickAction {
-  final IconData icon;
-  final String label;
-  final String url;
-
-  _QuickAction(this.icon, this.label, this.url);
+  _GridItem(this.icon, this.title, this.subtitle, this.color, this.url);
 }
 
 class _LinkItem {
   final String label;
   final String url;
-
   _LinkItem(this.label, this.url);
 }

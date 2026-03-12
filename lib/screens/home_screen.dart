@@ -109,7 +109,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // Pflicht-Kacheln (nicht löschbar)
   static const _requiredTiles = {'trust_score', 'home_meetup', 'reputation'};
   // Standard-Reihenfolge (alle optionalen Tiles sind sichtbar by default, wot_dashboard versteckt)
-  static const _defaultOrder = ['trust_score', 'home_meetup', 'reputation', 'community', 'events', 'shoutout', 'podcast', 'organisator', 'wot_dashboard'];
+  static const _defaultOrder = ['trust_score', 'home_meetup', 'reputation', 'community', 'nostr', 'events', 'shoutout', 'podcast', 'organisator', 'wot_dashboard'];
   static const _defaultHidden = {'wot_dashboard'};
 
   late List<_TileDef> _tileDefs;
@@ -135,6 +135,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _TileDef(id: 'events',       label: 'Events',           span: 1, builder: _buildEventsTile),
       _TileDef(id: 'shoutout',     label: 'Shoutout',         span: 1, builder: _buildShoutoutTile),
       _TileDef(id: 'podcast',      label: 'Podcast',          span: 1, builder: _buildPodcastTile),
+      _TileDef(id: 'nostr',        label: 'Nostr',            span: 1, builder: _buildNostrTile),
       _TileDef(id: 'organisator',  label: 'Organisator',      span: 3, builder: _buildOrganisatorTile, visible: () => _user.isAdmin),
       // ── Admin-optionale Kacheln ──
       _TileDef(id: 'wot_dashboard', label: 'WoT Dashboard',  span: 3, builder: _buildWotDashboardTile, visible: () => _user.isAdmin),
@@ -349,24 +350,6 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildLogoBar() => Row(children: [
     SvgPicture.asset('assets/images/einundzwanzig_logo.svg', height: 16),
     const Spacer(),
-    // Nostr — subtiler Text-Button mit optionalem Dot
-    GestureDetector(
-      onTap: _openNostr,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextTertiary, size: 15),
-          const SizedBox(width: 3),
-          Text('nostr', style: TextStyle(
-            color: _nostrHasNew ? cNostr : cTextTertiary,
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-          if (_nostrHasNew) ...[
-            const SizedBox(width: 4),
-            Container(width: 5, height: 5, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)),
-          ],
-        ]),
-      ),
-    ),
     _headerIcon(Icons.settings_rounded, _showSettings),
   ]);
 
@@ -668,6 +651,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildEventsTile() => _tile(accentColor: cTextTertiary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: cTextSecondary, size: 20), const SizedBox(height: 12), const Text('Events', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
   Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 20), const SizedBox(height: 12), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
   Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 20), const SizedBox(height: 12), const Text('Podcast', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildNostrTile() => _tile(accentColor: cNostr, opacity: 0.07, onTap: _openNostr, child: Stack(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextSecondary, size: 20), const SizedBox(height: 12), const Text('Nostr', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Community', style: TextStyle(color: cTextTertiary, fontSize: 10))]), if (_nostrHasNew) Positioned(top: 0, right: 0, child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)))]));
   Widget _buildOrganisatorTile() => _tile(accentColor: cOrange, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? cGreen : cOrange, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(_justPromoted ? 'Neu via Trust Score' : 'Admin-Panel', style: const TextStyle(color: cTextTertiary, fontSize: 10))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16)]));
 
   Widget _buildWotDashboardTile() => _tile(
