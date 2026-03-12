@@ -5,10 +5,10 @@ import '../theme.dart';
 import '../models/user.dart';
 import '../services/admin_registry.dart';
 import '../services/nostr_service.dart';
-import '../services/rolling_qr_service.dart'; // Import für den zentralen Session-Manager
+import '../services/rolling_qr_service.dart';
 import 'wot_dashboard.dart';
-import 'meetup_session_wizard.dart'; // Der Wizard für den Ablauf
-import 'rolling_qr_screen.dart'; // NEU: Import für den direkten Sprung zum QR Code
+import 'meetup_session_wizard.dart';
+import 'rolling_qr_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -52,11 +52,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     }
   }
 
-  // Prüft, ob noch eine 6-Stunden Session läuft
   Future<void> _checkSession() async {
     final prefs = await SharedPreferences.getInstance();
-    
-    // THE FIX: Korrekter Abruf als int (Unix Timestamp)
     final int? expiryUnix = prefs.getInt('rqr_session_expires');
 
     if (expiryUnix != null) {
@@ -67,7 +64,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         });
         _startTimer();
       } else {
-        // Session ist abgelaufen
         await RollingQRService.endSession();
         setState(() {
           _sessionExpiry = null;
@@ -86,7 +82,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       if (_sessionExpiry != null) {
         final diff = _sessionExpiry!.difference(DateTime.now());
         if (diff.isNegative) {
-          _checkSession(); // Timer beenden und UI resetten
+          _checkSession();
         } else {
           if (mounted) {
             setState(() {
@@ -98,29 +94,28 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     });
   }
 
-  // Startet eine brandneue 6-Stunden Session
   Future<void> _startNewSession() async {
     final user = await UserProfile.load();
     final meetupId = user.homeMeetupId.isNotEmpty ? user.homeMeetupId : 'unknown-meetup';
     final compactId = meetupId.toLowerCase().replaceAll(' ', '-');
 
     showDialog(
-      context: context, 
+      context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator(color: cOrange))
+      builder: (_) => const Center(child: CircularProgressIndicator(color: cOrange)),
     );
 
     try {
       await RollingQRService.getOrCreateSession(
-          meetupId: compactId, 
-          meetupName: meetupId, 
-          meetupCountry: '', 
-          blockHeight: 0
+        meetupId: compactId,
+        meetupName: meetupId,
+        meetupCountry: '',
+        blockHeight: 0,
       );
-      
+
       if (mounted) {
-        Navigator.pop(context); // Lade-Dialog schließen
-        _checkSession(); // Timer und UI updaten
+        Navigator.pop(context);
+        _checkSession();
 
         Navigator.push(
           context,
@@ -129,13 +124,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context); // Lade-Dialog schließen
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Fehler: $e"), backgroundColor: Colors.red));
       }
     }
   }
 
-  // Bricht die Session manuell ab (z.B. Meetup früher beendet)
   Future<void> _endSessionEarly() async {
     await RollingQRService.endSession();
     _countdownTimer?.cancel();
@@ -170,21 +164,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ]),
             const SizedBox(height: 20),
             // legacy Wrap compat — keep chip builder for session area below
-            Wrap(spacing: 8, runSpacing: 8, children: [if (false) _buildStatusChip(
-                        icon: _promotionSource == 'trust_score' ? Icons.trending_up : Icons.star,
-                        label: _promotionSource == 'trust_score' 
-                            ? 'Via Trust Score'
-                            : _promotionSource == 'seed_admin'
-                                ? 'Seed Admin'
-                                : 'Organisator',
-                        color: _promotionSource == 'trust_score' ? Colors.green : cOrange,
-                      ),
-                    ],
-                  ),
-                ],
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (false) _buildStatusChip(
+                icon: _promotionSource == 'trust_score' ? Icons.trending_up : Icons.star,
+                label: _promotionSource == 'trust_score'
+                    ? 'Via Trust Score'
+                    : _promotionSource == 'seed_admin'
+                        ? 'Seed Admin'
+                        : 'Organisator',
+                color: _promotionSource == 'trust_score' ? Colors.green : cOrange,
               ),
-            ),
-            
+            ]),
+
             const SizedBox(height: 32),
 
             // --- UNIFIED SESSION CONTROLLER ---
@@ -220,7 +211,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           foregroundColor: Colors.white,
                         ),
                         onPressed: () {
-                          // THE FIX: Direkter Sprung zum QR Code!
                           Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => const RollingQRScreen()),
@@ -243,12 +233,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
                               TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Beenden", style: TextStyle(color: Colors.red))),
                             ],
-                          )
+                          ),
                         );
                         if (confirm == true) _endSessionEarly();
                       },
                       child: const Text("Meetup vorzeitig beenden", style: TextStyle(color: Colors.redAccent)),
-                    )
+                    ),
                   ],
                 ),
               ),
@@ -271,17 +261,17 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                         TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Abbrechen", style: TextStyle(color: Colors.grey))),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black),
-                          onPressed: () => Navigator.pop(context, true), 
-                          child: const Text("Starten")
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text("Starten"),
                         ),
                       ],
-                    )
+                    ),
                   );
                   if (confirm == true) _startNewSession();
                 },
               ),
             ],
-            
+
             // Web of Trust Dashboard (für ALLE Admins)
             const SizedBox(height: 32),
             const Divider(color: Colors.white10),
@@ -310,12 +300,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             // Admin-Verwaltung (nur Super-Admin — Legacy)
             if (_isSuperAdmin) ...[
               const SizedBox(height: 16),
-              // Legacy-Button entfernt: "Organisatoren delegieren" ist jetzt
-              // im WoT Dashboard unter "BÜRGEN" integriert. Das WoT Dashboard
-              // steht ALLEN Admins zur Verfügung (nicht nur dem Super-Admin).
             ],
             const SizedBox(height: 32),
-            
+
             // Info Box
             Container(
               padding: const EdgeInsets.all(20),
@@ -366,7 +353,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       ),
     );
   }
-  
+
   Widget _buildAdminTile({
     required BuildContext context,
     required IconData icon,

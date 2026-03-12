@@ -111,6 +111,177 @@ class CommunityPortalScreen extends StatelessWidget {
   }
 
   // =============================================
+  // SECTION TITLE
+  // =============================================
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: cTextTertiary,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.4,
+        ),
+      ),
+    );
+  }
+
+  // =============================================
+  // SCHNELLZUGRIFF
+  // =============================================
+  Widget _buildQuickActions(BuildContext context) {
+    final actions = [
+      _QuickAction(Icons.person_outline, 'Profil', '$_portalBase/profile'),
+      _QuickAction(Icons.event_outlined, 'Meetups', '$_portalBase/meetups'),
+      _QuickAction(Icons.military_tech_outlined, 'Badges', '$_portalBase/badges'),
+      _QuickAction(Icons.hub_outlined, 'Netzwerk', '$_portalBase/network'),
+    ];
+
+    return SizedBox(
+      height: 80,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: actions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, i) {
+          final a = actions[i];
+          return GestureDetector(
+            onTap: () => _openUrl(context, a.url),
+            child: Container(
+              width: 72,
+              decoration: BoxDecoration(
+                color: cCard,
+                borderRadius: BorderRadius.circular(kTileRadius),
+                border: Border.all(color: cTileBorder, width: 0.5),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(a.icon, color: cOrange, size: 22),
+                  const SizedBox(height: 6),
+                  Text(a.label, style: const TextStyle(color: cTextSecondary, fontSize: 10, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // =============================================
+  // ENTDECKEN GRID
+  // =============================================
+  Widget _buildDiscoverGrid(BuildContext context) {
+    final items = [
+      _DiscoverItem(Icons.map_outlined, 'Meetup-Karte', 'Finde Treffen in deiner Nähe', cOrange, '$_webBase/map'),
+      _DiscoverItem(Icons.bar_chart_outlined, 'Statistiken', 'Community Zahlen & Fakten', cCyan, '$_webBase/stats'),
+      _DiscoverItem(Icons.school_outlined, 'Lernen', 'Bitcoin Grundlagen', cPurple, '$_webBase/learn'),
+      _DiscoverItem(Icons.store_outlined, 'Shop', 'Merchandise & mehr', cOrange, '$_webBase/shop'),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.6,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final item = items[i];
+        return GestureDetector(
+          onTap: () => _openUrl(context, item.url),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cCard,
+              borderRadius: BorderRadius.circular(kTileRadius),
+              border: Border.all(color: item.color.withOpacity(0.2), width: 0.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(item.icon, color: item.color, size: 20),
+                const Spacer(),
+                Text(item.title, style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(item.subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // =============================================
+  // VEREIN SECTION
+  // =============================================
+  Widget _buildVereinSection(BuildContext context) {
+    final links = [
+      _LinkItem('Über uns', '$_webBase/about'),
+      _LinkItem('Mitglied werden', '$_webBase/membership'),
+      _LinkItem('Satzung', '$_webBase/statute'),
+      _LinkItem('Impressum', '$_webBase/imprint'),
+    ];
+    return _buildLinkList(context, links);
+  }
+
+  // =============================================
+  // MEDIA SECTION
+  // =============================================
+  Widget _buildMediaSection(BuildContext context) {
+    final links = [
+      _LinkItem('Podcast', '$_webBase/podcast'),
+      _LinkItem('YouTube', 'https://youtube.com/@einundzwanzig'),
+      _LinkItem('Nostr', 'https://njump.me/npub1w0rthyjyp2f5gful0gm2500pwyxfrx93a85289xdz0sd6hyef33s6cjnt'),
+      _LinkItem('Telegram', 'https://t.me/einundzwanzig'),
+    ];
+    return _buildLinkList(context, links);
+  }
+
+  Widget _buildLinkList(BuildContext context, List<_LinkItem> links) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cCard,
+        borderRadius: BorderRadius.circular(kTileRadius),
+        border: Border.all(color: cTileBorder, width: 0.5),
+      ),
+      child: Column(
+        children: links.asMap().entries.map((entry) {
+          final i = entry.key;
+          final link = entry.value;
+          return Column(
+            children: [
+              InkWell(
+                onTap: () => _openUrl(context, link.url),
+                borderRadius: BorderRadius.circular(kTileRadius),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  child: Row(
+                    children: [
+                      Text(link.label, style: const TextStyle(color: cText, fontSize: 13)),
+                      const Spacer(),
+                      const Icon(Icons.open_in_new_rounded, color: cTextTertiary, size: 14),
+                    ],
+                  ),
+                ),
+              ),
+              if (i < links.length - 1)
+                const Divider(height: 0, color: cBorder, thickness: 0.5, indent: 16, endIndent: 16),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // =============================================
   // FOOTER
   // =============================================
   Widget _buildFooter(BuildContext context) {
@@ -146,7 +317,7 @@ class CommunityPortalScreen extends StatelessWidget {
 }
 
 // =============================================
-// DATA MODEL
+// DATA MODELS
 // =============================================
 class _DiscoverItem {
   final IconData icon;
@@ -156,4 +327,19 @@ class _DiscoverItem {
   final String url;
 
   _DiscoverItem(this.icon, this.title, this.subtitle, this.color, this.url);
+}
+
+class _QuickAction {
+  final IconData icon;
+  final String label;
+  final String url;
+
+  _QuickAction(this.icon, this.label, this.url);
+}
+
+class _LinkItem {
+  final String label;
+  final String url;
+
+  _LinkItem(this.label, this.url);
 }
