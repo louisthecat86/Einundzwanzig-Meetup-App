@@ -43,6 +43,7 @@ import 'meetup_details.dart';
 import 'reputation_qr.dart';
 import 'relay_settings_screen.dart';
 import 'calendar_screen.dart';
+import 'wot_dashboard.dart';
 import '../services/backup_service.dart';
 import '../services/promotion_claim_service.dart';
 import '../services/secure_key_store.dart';
@@ -58,12 +59,13 @@ import '../services/device_integrity_service.dart';
 // ============================================================
 class _TileDef {
   final String id;
-  final String label; // Für Reorder-Sheet
+  final String label;
   final int span; // 1=drittel, 2=zwei-drittel, 3=voll
   final Widget Function() builder;
   final bool Function() visible;
+  final bool removable; // false = Pflicht-Kachel, kann nicht ausgeblendet werden
 
-  _TileDef({required this.id, required this.label, required this.span, required this.builder, bool Function()? visible})
+  _TileDef({required this.id, required this.label, required this.span, required this.builder, bool Function()? visible, this.removable = true})
     : visible = visible ?? (() => true);
 }
 
@@ -96,9 +98,14 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String? _profilePicUrl;
   String? _localProfilePic;
 
-  // Tile Order
+  // Tile Order & Visibility
   List<String> _tileOrder = [];
-  static const _defaultOrder = ['trust_score', 'countdown', 'home_meetup', 'reputation', 'community', 'events', 'shoutout', 'podcast', 'organisator'];
+  Set<String> _hiddenTiles = {};
+  // Pflicht-Kacheln (nicht löschbar)
+  static const _requiredTiles = {'trust_score', 'countdown', 'home_meetup', 'reputation'};
+  // Standard-Reihenfolge (alle optionalen Tiles sind sichtbar by default, wot_dashboard versteckt)
+  static const _defaultOrder = ['trust_score', 'countdown', 'home_meetup', 'reputation', 'community', 'events', 'shoutout', 'podcast', 'organisator', 'wot_dashboard'];
+  static const _defaultHidden = {'wot_dashboard'};
 
   late List<_TileDef> _tileDefs;
 
@@ -113,34 +120,41 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _initTileDefs() {
     _tileDefs = [
-      _TileDef(id: 'trust_score', label: 'Trust Score', span: 2, builder: _buildTrustScoreTile),
-      _TileDef(id: 'countdown', label: 'Nächstes Meetup', span: 1, builder: _buildCountdownTile),
-      _TileDef(id: 'home_meetup', label: 'Home Meetup', span: 3, builder: _buildHomeMeetupTile),
-      _TileDef(id: 'reputation', label: 'Reputation', span: 1, builder: _buildReputationTile),
-      _TileDef(id: 'community', label: 'Community', span: 2, builder: _buildCommunityTile),
-      _TileDef(id: 'events', label: 'Events', span: 1, builder: _buildEventsTile),
-      _TileDef(id: 'shoutout', label: 'Shoutout', span: 1, builder: _buildShoutoutTile),
-      _TileDef(id: 'podcast', label: 'Podcast', span: 1, builder: _buildPodcastTile),
-      _TileDef(id: 'organisator', label: 'Organisator', span: 3, builder: _buildOrganisatorTile, visible: () => _user.isAdmin),
+      // ── Pflicht-Kacheln (removable: false) ──
+      _TileDef(id: 'trust_score',  label: 'Trust Score',      span: 2, removable: false, builder: _buildTrustScoreTile),
+      _TileDef(id: 'countdown',    label: 'Nächstes Meetup',  span: 1, removable: false, builder: _buildCountdownTile),
+      _TileDef(id: 'home_meetup',  label: 'Home Meetup',      span: 3, removable: false, builder: _buildHomeMeetupTile),
+      _TileDef(id: 'reputation',   label: 'Reputation',       span: 1, removable: false, builder: _buildReputationTile),
+      // ── Optionale Kacheln (removable: true) ──
+      _TileDef(id: 'community',    label: 'Community',        span: 2, builder: _buildCommunityTile),
+      _TileDef(id: 'events',       label: 'Events',           span: 1, builder: _buildEventsTile),
+      _TileDef(id: 'shoutout',     label: 'Shoutout',         span: 1, builder: _buildShoutoutTile),
+      _TileDef(id: 'podcast',      label: 'Podcast',          span: 1, builder: _buildPodcastTile),
+      _TileDef(id: 'organisator',  label: 'Organisator',      span: 3, builder: _buildOrganisatorTile, visible: () => _user.isAdmin),
+      // ── Admin-optionale Kacheln ──
+      _TileDef(id: 'wot_dashboard', label: 'WoT Dashboard',  span: 3, builder: _buildWotDashboardTile, visible: () => _user.isAdmin),
     ];
   }
 
   Future<void> _loadTileOrder() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList('tile_order');
+    final savedHidden = prefs.getStringList('tile_hidden')?.toSet() ?? Set.from(_defaultHidden);
+
     if (saved != null && saved.isNotEmpty) {
       // Merge: gespeicherte Reihenfolge + neue Tiles die noch nicht drin sind
       final known = saved.where((id) => _defaultOrder.contains(id)).toList();
       for (final id in _defaultOrder) { if (!known.contains(id)) known.add(id); }
-      setState(() => _tileOrder = known);
+      setState(() { _tileOrder = known; _hiddenTiles = savedHidden; });
     } else {
-      setState(() => _tileOrder = List.from(_defaultOrder));
+      setState(() { _tileOrder = List.from(_defaultOrder); _hiddenTiles = Set.from(_defaultHidden); });
     }
   }
 
   Future<void> _saveTileOrder() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('tile_order', _tileOrder);
+    await prefs.setStringList('tile_hidden', _hiddenTiles.toList());
   }
 
   @override
@@ -255,7 +269,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<Widget> _buildOrderedTiles() {
     final visibleTiles = _tileOrder
       .map((id) => _tileDefs.where((t) => t.id == id).firstOrNull)
-      .where((t) => t != null && t.visible())
+      .where((t) => t != null && t.visible() && !_hiddenTiles.contains(t!.id))
       .cast<_TileDef>()
       .toList();
 
@@ -392,11 +406,12 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     showModalBottomSheet(
       context: context, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _ReorderSheet(
+      builder: (_) => _CustomizeSheet(
         order: List.from(_tileOrder),
-        tileDefs: _tileDefs,
-        onSave: (newOrder) {
-          setState(() => _tileOrder = newOrder);
+        hidden: Set.from(_hiddenTiles),
+        tileDefs: _tileDefs.where((t) => t.visible()).toList(),
+        onSave: (newOrder, newHidden) {
+          setState(() { _tileOrder = newOrder; _hiddenTiles = newHidden; });
           _saveTileOrder();
         },
       ),
@@ -462,6 +477,21 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 22), const SizedBox(height: 10), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
   Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 22), const SizedBox(height: 10), const Text('Podcast', style: TextStyle(color: cText, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
   Widget _buildOrganisatorTile() => _tile(accentColor: _justPromoted ? Colors.green : cPurple, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? Colors.green : cPurple, size: 24), const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(_justPromoted ? 'Neu via Trust Score!' : _user.promotionSource == 'trust_score' ? 'Via Trust Score' : 'Tags erstellen', style: const TextStyle(color: cTextTertiary, fontSize: 11))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 20)]));
+
+  Widget _buildWotDashboardTile() => _tile(
+    accentColor: cCyan, opacity: 0.07,
+    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WotDashboardScreen())),
+    child: Row(children: [
+      const Icon(Icons.hub_rounded, color: cCyan, size: 24),
+      const SizedBox(width: 14),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('WoT Dashboard', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        const Text('Netzwerk & Vouching', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+      ])),
+      const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 20),
+    ]),
+  );
 
   Widget _buildActiveSessionTile() => AnimatedBuilder(animation: _pulseController, builder: (_, __) => GestureDetector(
     onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const RollingQRScreen())); _checkActiveSession(); },
@@ -579,80 +609,228 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 // ============================================================
 // REORDER SHEET — Drag-and-Drop für Tile-Reihenfolge
 // ============================================================
-class _ReorderSheet extends StatefulWidget {
+// ============================================================
+// CUSTOMIZE SHEET — v2.0
+// Drei Sektionen: Fixiert | Aktiv (reorder + hide) | Verfügbar (add)
+// ============================================================
+class _CustomizeSheet extends StatefulWidget {
   final List<String> order;
+  final Set<String> hidden;
   final List<_TileDef> tileDefs;
-  final void Function(List<String>) onSave;
-  const _ReorderSheet({required this.order, required this.tileDefs, required this.onSave});
+  final void Function(List<String> order, Set<String> hidden) onSave;
+
+  const _CustomizeSheet({required this.order, required this.hidden, required this.tileDefs, required this.onSave});
+
   @override
-  State<_ReorderSheet> createState() => _ReorderSheetState();
+  State<_CustomizeSheet> createState() => _CustomizeSheetState();
 }
 
-class _ReorderSheetState extends State<_ReorderSheet> {
+class _CustomizeSheetState extends State<_CustomizeSheet> {
   late List<String> _order;
-  @override
-  void initState() { super.initState(); _order = List.from(widget.order); }
+  late Set<String> _hidden;
 
-  String _labelFor(String id) => widget.tileDefs.where((t) => t.id == id).firstOrNull?.label ?? id;
+  static const _requiredTiles = {'trust_score', 'countdown', 'home_meetup', 'reputation'};
+
+  @override
+  void initState() {
+    super.initState();
+    _order = List.from(widget.order);
+    _hidden = Set.from(widget.hidden);
+  }
+
+  _TileDef? _defFor(String id) => widget.tileDefs.where((t) => t.id == id).firstOrNull;
+  String _labelFor(String id) => _defFor(id)?.label ?? id;
   IconData _iconFor(String id) {
     switch (id) {
-      case 'trust_score': return Icons.workspace_premium_rounded;
-      case 'countdown': return Icons.event_available_rounded;
+      case 'trust_score': return Icons.shield_rounded;
+      case 'countdown': return Icons.timer_rounded;
       case 'home_meetup': return Icons.home_rounded;
-      case 'reputation': return Icons.star_rounded;
+      case 'reputation': return Icons.workspace_premium_rounded;
       case 'community': return Icons.hub_rounded;
       case 'events': return Icons.event_rounded;
       case 'shoutout': return Icons.campaign_rounded;
       case 'podcast': return Icons.podcasts_rounded;
       case 'organisator': return Icons.admin_panel_settings_rounded;
+      case 'wot_dashboard': return Icons.account_tree_rounded;
       default: return Icons.widgets_rounded;
     }
   }
 
+  Color _colorFor(String id) {
+    switch (id) {
+      case 'trust_score': return Colors.amber;
+      case 'countdown': return const Color(0xFF00B4CF);
+      case 'home_meetup': return const Color(0xFFF7931A);
+      case 'reputation': return Colors.amber;
+      case 'community': return const Color(0xFF00B4CF);
+      case 'events': return const Color(0xFF8090A0);
+      case 'shoutout': return const Color(0xFFF7931A);
+      case 'podcast': return const Color(0xFFA915FF);
+      case 'organisator': return const Color(0xFFA915FF);
+      case 'wot_dashboard': return const Color(0xFF00B4CF);
+      default: return const Color(0xFF9A9AA0);
+    }
+  }
+
+  void _hide(String id) => setState(() => _hidden.add(id));
+  void _show(String id) => setState(() => _hidden.remove(id));
+
   @override
   Widget build(BuildContext context) {
+    // Aktive optionale Tiles (in _order, NOT hidden, removable)
+    final activeTiles = _order.where((id) {
+      final d = _defFor(id);
+      return d != null && d.removable && !_hidden.contains(id);
+    }).toList();
+
+    // Fixierte Tiles (required)
+    final fixedTiles = _order.where((id) {
+      final d = _defFor(id);
+      return d != null && !d.removable;
+    }).toList();
+
+    // Verfügbare Tiles (hidden or not in order but available via tileDefs)
+    final availableTiles = widget.tileDefs
+      .where((d) => d.removable && _hidden.contains(d.id))
+      .map((d) => d.id)
+      .toList();
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Handle
         Container(width: 40, height: 4, decoration: BoxDecoration(color: cTextTertiary, borderRadius: BorderRadius.circular(2))),
         const SizedBox(height: 16),
+        // Header
         Row(children: [
-          const Text('KACHELN ANORDNEN', style: TextStyle(color: cOrange, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          const Text('DASHBOARD ANPASSEN', style: TextStyle(color: cOrange, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           const Spacer(),
-          TextButton(onPressed: () { widget.onSave(_order); Navigator.pop(context); },
-            child: const Text('FERTIG', style: TextStyle(fontWeight: FontWeight.w700))),
+          TextButton(
+            onPressed: () { widget.onSave(_order, _hidden); Navigator.pop(context); },
+            child: const Text('FERTIG', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
         ]),
-        const SizedBox(height: 8),
-        const Text('Halte und ziehe die Kacheln in die gewünschte Reihenfolge.', style: TextStyle(color: cTextTertiary, fontSize: 11)),
-        const SizedBox(height: 12),
+        const SizedBox(height: 4),
+        const Text('Halte & ziehe zum Sortieren. Tippe auf ✕ um eine Kachel auszublenden.', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+        const SizedBox(height: 16),
         Flexible(
-          child: ReorderableListView.builder(
-            shrinkWrap: true,
-            itemCount: _order.length,
-            onReorder: (oldI, newI) {
-              setState(() {
-                if (newI > oldI) newI--;
-                final item = _order.removeAt(oldI);
-                _order.insert(newI, item);
-              });
-            },
-            itemBuilder: (_, i) => Container(
-              key: ValueKey(_order[i]),
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(color: const Color(0xFF1C1C20), borderRadius: BorderRadius.circular(10), border: Border.all(color: cTileBorder, width: 0.5)),
-              child: Row(children: [
-                Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 20),
-                const SizedBox(width: 12),
-                Icon(_iconFor(_order[i]), color: cOrange, size: 18),
-                const SizedBox(width: 10),
-                Text(_labelFor(_order[i]), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600)),
-              ]),
-            ),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+              // ── FIXIERTE KACHELN ──
+              _sectionHeader(Icons.lock_rounded, 'FIXIERT', 'Können nicht entfernt werden'),
+              const SizedBox(height: 8),
+              ...fixedTiles.map((id) => _fixedRow(id)),
+              const SizedBox(height: 20),
+
+              // ── AKTIVE KACHELN ──
+              _sectionHeader(Icons.drag_indicator_rounded, 'AKTIV', 'Halten & ziehen zum Sortieren'),
+              const SizedBox(height: 8),
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: activeTiles.length,
+                onReorder: (oldI, newI) {
+                  setState(() {
+                    if (newI > oldI) newI--;
+                    // Reorder in _order list (only among removable visible tiles)
+                    final oldOrderIdx = _order.indexOf(activeTiles[oldI]);
+                    final newOrderIdx = _order.indexOf(activeTiles[newI]);
+                    final item = _order.removeAt(oldOrderIdx);
+                    _order.insert(newOrderIdx, item);
+                  });
+                },
+                itemBuilder: (_, i) => _activeRow(activeTiles[i], ValueKey(activeTiles[i])),
+              ),
+
+              if (availableTiles.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                // ── VERFÜGBAR ──
+                _sectionHeader(Icons.add_circle_outline_rounded, 'VERFÜGBAR', 'Tippe auf + zum Hinzufügen'),
+                const SizedBox(height: 8),
+                ...availableTiles.map((id) => _availableRow(id)),
+              ],
+
+              const SizedBox(height: 8),
+            ]),
           ),
         ),
       ]),
     );
   }
+
+  Widget _sectionHeader(IconData icon, String title, String subtitle) => Row(children: [
+    Icon(icon, color: cOrange, size: 14),
+    const SizedBox(width: 6),
+    Text(title, style: const TextStyle(color: cOrange, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+    const SizedBox(width: 8),
+    Text(subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 10)),
+  ]);
+
+  Widget _fixedRow(String id) => Container(
+    key: ValueKey('fixed_$id'),
+    margin: const EdgeInsets.only(bottom: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1A1A1E),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: cTileBorder, width: 0.5),
+    ),
+    child: Row(children: [
+      Icon(_iconFor(id), color: _colorFor(id), size: 16),
+      const SizedBox(width: 10),
+      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
+      const Icon(Icons.lock_outline_rounded, color: cTextTertiary, size: 15),
+    ]),
+  );
+
+  Widget _activeRow(String id, Key key) => Container(
+    key: key,
+    margin: const EdgeInsets.only(bottom: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1C1C20),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: cTileBorder, width: 0.5),
+    ),
+    child: Row(children: [
+      const Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 20),
+      const SizedBox(width: 8),
+      Icon(_iconFor(id), color: _colorFor(id), size: 16),
+      const SizedBox(width: 10),
+      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
+      GestureDetector(
+        onTap: () => _hide(id),
+        child: Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(color: cRed.withOpacity(0.12), borderRadius: BorderRadius.circular(7)),
+          child: const Icon(Icons.close_rounded, color: cRed, size: 15),
+        ),
+      ),
+    ]),
+  );
+
+  Widget _availableRow(String id) => Container(
+    margin: const EdgeInsets.only(bottom: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+    decoration: BoxDecoration(
+      color: const Color(0xFF14141A),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: cBorder, width: 0.5),
+    ),
+    child: Row(children: [
+      Icon(_iconFor(id), color: _colorFor(id).withOpacity(0.6), size: 16),
+      const SizedBox(width: 10),
+      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cTextSecondary, fontSize: 13, fontWeight: FontWeight.w500))),
+      GestureDetector(
+        onTap: () => _show(id),
+        child: Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(color: cGreen.withOpacity(0.12), borderRadius: BorderRadius.circular(7)),
+          child: const Icon(Icons.add_rounded, color: cGreen, size: 16),
+        ),
+      ),
+    ]),
+  );
 }
