@@ -347,118 +347,104 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // LOGO BAR
   // ============================================================
   Widget _buildLogoBar() => Row(children: [
-    SvgPicture.asset('assets/images/einundzwanzig_logo.svg', height: 18),
+    SvgPicture.asset('assets/images/einundzwanzig_logo.svg', height: 16),
     const Spacer(),
-    // Nostr-Button
+    // Nostr — subtiler Text-Button mit optionalem Dot
     GestureDetector(
       onTap: _openNostr,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: const Color(0xFF3B1D6E),
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.5), width: 1),
-            ),
-            child: const Icon(Icons.bolt_rounded, color: Color(0xFF8B5CF6), size: 18),
-          ),
-          if (_nostrHasNew)
-            Positioned(
-              top: -2, right: -2,
-              child: Container(
-                width: 10, height: 10,
-                decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle),
-              ),
-            ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextTertiary, size: 15),
+          const SizedBox(width: 3),
+          Text('nostr', style: TextStyle(
+            color: _nostrHasNew ? cNostr : cTextTertiary,
+            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+          if (_nostrHasNew) ...[
+            const SizedBox(width: 4),
+            Container(width: 5, height: 5, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)),
+          ],
+        ]),
       ),
     ),
-    const SizedBox(width: 4),
-    _headerIcon(Icons.help_outline_rounded, _showHelpSheet),
-    const SizedBox(width: 4),
     _headerIcon(Icons.settings_rounded, _showSettings),
   ]);
 
-  Widget _headerIcon(IconData icon, VoidCallback onTap) => GestureDetector(onTap: onTap,
-    child: Container(width: 36, height: 36,
-      decoration: BoxDecoration(color: const Color(0xFF1C1C20), shape: BoxShape.circle, border: Border.all(color: cTileBorder, width: 0.5)),
-      child: Icon(icon, color: cTextSecondary, size: 18)));
+  Widget _headerIcon(IconData icon, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.all(8),
+      child: Icon(icon, color: cTextTertiary, size: 18)));
 
   // ============================================================
   // PROFILE HEADER — Avatar + Name + Level
   // ============================================================
   Widget _buildProfileHeader() {
-    final hasAvatar = _localProfilePic != null || _profilePicUrl != null;
-
     return Row(children: [
-      // Avatar
+      // Avatar — simpler Kreis, kein Gradient
       GestureDetector(
         onTap: _user.hasNostrKey && _profilePicUrl != null ? null : _pickLocalProfilePicture,
         child: Container(
-          width: 46, height: 46,
+          width: 40, height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(colors: [_levelColor, _levelColor.withOpacity(0.4)]),
-            border: Border.all(color: _levelColor.withOpacity(0.3), width: 1.5),
+            color: cCard,
+            border: Border.all(color: cTileBorder, width: 1),
           ),
           child: ClipOval(
             child: _localProfilePic != null
-              ? Image.file(File(_localProfilePic!), fit: BoxFit.cover, width: 46, height: 46, errorBuilder: (_, __, ___) => _avatarFallback())
+              ? Image.file(File(_localProfilePic!), fit: BoxFit.cover, width: 40, height: 40, errorBuilder: (_, __, ___) => _avatarFallback())
               : _profilePicUrl != null
-                ? Image.network(_profilePicUrl!, fit: BoxFit.cover, width: 46, height: 46, errorBuilder: (_, __, ___) => _avatarFallback())
+                ? Image.network(_profilePicUrl!, fit: BoxFit.cover, width: 40, height: 40, errorBuilder: (_, __, ___) => _avatarFallback())
                 : _avatarFallback(),
           ),
         ),
       ),
-      const SizedBox(width: 14),
-      // Name + Level
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(_user.nickname, style: const TextStyle(color: cText, fontSize: 18, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 2),
-        Row(children: [
-          if (_trustScore != null) ...[
-            Icon(_levelIcon, color: _levelColor, size: 14),
-            const SizedBox(width: 4),
-            Text(_trustScore!.level, style: TextStyle(color: _levelColor, fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(width: 8),
-          ],
-          Text('${myBadges.length} Badges', style: const TextStyle(color: cTextTertiary, fontSize: 12)),
-        ]),
+      const SizedBox(width: 12),
+      // Name + Level — alles auf einer Zeile
+      Expanded(child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        Text(_user.nickname, style: const TextStyle(color: cText, fontSize: 16, fontWeight: FontWeight.w700)),
+        if (_trustScore != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(color: cTileBorder, borderRadius: BorderRadius.circular(4)),
+            child: Text(_trustScore!.level, style: TextStyle(color: _levelColor, fontSize: 10, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ])),
-      // Wenn kein Nostr-Bild: Kamera-Button
-      if (!hasAvatar)
-        GestureDetector(
-          onTap: _pickLocalProfilePicture,
-          child: Container(width: 32, height: 32,
-            decoration: BoxDecoration(color: cOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.add_a_photo_rounded, color: cOrange, size: 16)),
-        ),
+      // Badges — dezent rechts
+      Text('${myBadges.length}', style: const TextStyle(color: cTextTertiary, fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(width: 2),
+      const Icon(Icons.military_tech_rounded, color: cTextTertiary, size: 14),
     ]);
   }
 
   Widget _avatarFallback() => Container(
-    color: _levelColor.withOpacity(0.15),
+    color: cCard,
     child: Center(child: Text(
       _user.nickname.isNotEmpty ? _user.nickname[0].toUpperCase() : '?',
-      style: TextStyle(color: _levelColor, fontSize: 20, fontWeight: FontWeight.w800))));
+      style: const TextStyle(color: cTextSecondary, fontSize: 18, fontWeight: FontWeight.w700))));
 
   // ============================================================
   // TILE BUILDER — Dezenterer Mirror-Gradient
   // ============================================================
+  // Flat tile — kein Gradient, kein farbiger Hintergrund
+  // accentColor + opacity bleiben als Parameter (Rückwärtskompatibilität), werden aber ignoriert.
   Widget _tile({required Widget child, required Color accentColor, VoidCallback? onTap, double opacity = 0.06}) {
     return GestureDetector(
       onTap: onTap,
       onLongPress: _showReorderSheet,
-      child: Container(padding: const EdgeInsets.all(18),
+      child: Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
+          color: cCard,
           borderRadius: BorderRadius.circular(kTileRadius),
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [accentColor.withOpacity(opacity), accentColor.withOpacity(opacity * 0.15), const Color(0xFF141416)],
-            stops: const [0.0, 0.35, 1.0]),
-          border: Border.all(color: cTileBorder, width: 0.8)),
-        child: child));
+          border: Border.all(color: cTileBorder, width: 0.5),
+        ),
+        child: child,
+      ),
+    );
   }
 
   // ============================================================
@@ -485,11 +471,20 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ============================================================
   Widget _buildTrustScoreTile() {
     final score = _trustScore;
-    return _tile(accentColor: _levelColor, opacity: 0.08, onTap: _showScoreInfoSheet,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Row(children: [Icon(_levelIcon, color: _levelColor, size: 18), const SizedBox(width: 8),
-          Text(score?.level ?? 'NEU', style: TextStyle(color: _levelColor, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5))]),
-        const SizedBox(height: 14),
+    return GestureDetector(
+      onTap: _showScoreInfoSheet,
+      onLongPress: _showReorderSheet,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cCard,
+          borderRadius: BorderRadius.circular(kTileRadius),
+          border: Border.all(color: cTileBorder, width: 0.5),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Row(children: [Icon(_levelIcon, color: _levelColor, size: 14), const SizedBox(width: 6),
+            Text(score?.level ?? 'NEU', style: TextStyle(color: _levelColor, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8))]),
+          const SizedBox(height: 12),
         Text((score?.totalScore ?? 0.0).toStringAsFixed(1), style: TextStyle(color: cText, fontSize: 38, fontWeight: FontWeight.w900, fontFamily: fontMono, height: 1)),
         const SizedBox(height: 4),
         const Text('Trust Score', style: TextStyle(color: cText, fontSize: 12)),
@@ -497,7 +492,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: score.promotionProgress, backgroundColor: Colors.white.withOpacity(0.06), valueColor: AlwaysStoppedAnimation(_levelColor.withOpacity(0.6)), minHeight: 4))],
         if (score != null && score.meetsPromotionThreshold) ...[const SizedBox(height: 10),
           Row(children: [Icon(Icons.verified_rounded, color: Colors.green.shade400, size: 14), const SizedBox(width: 4), Text('Organisator', style: TextStyle(color: Colors.green.shade400, fontSize: 11, fontWeight: FontWeight.w600))])],
-      ]));
+        ])));
   }
 
   Widget _buildCountdownTile() {
@@ -639,40 +634,38 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _miniAct(IconData i, VoidCallback onTap) => GestureDetector(onTap: onTap, child: Container(width: 32, height: 32, decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(8)), child: Icon(i, color: cTextSecondary, size: 16)));
-  Widget _buildReputationTile() => _tile(accentColor: Colors.amber, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReputationQRScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 24), const SizedBox(height: 14), const Text('Reputation', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)), const SizedBox(height: 3), Text(myBadges.isNotEmpty ? 'QR teilen & prüfen' : 'Scannen & prüfen', style: const TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildCommunityTile() => _tile(accentColor: cCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPortalScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.hub_rounded, color: cCyan, size: 24), const SizedBox(height: 14), const Text('Community', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Portal & Netzwerk', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildEventsTile() => _tile(accentColor: const Color(0xFF8090A0), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: Color(0xFF8090A0), size: 22), const SizedBox(height: 10), const Text('Events', style: TextStyle(color: cText, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 22), const SizedBox(height: 10), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 22), const SizedBox(height: 10), const Text('Podcast', style: TextStyle(color: cText, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildOrganisatorTile() => _tile(accentColor: _justPromoted ? Colors.green : cPurple, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? Colors.green : cPurple, size: 24), const SizedBox(width: 14), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(_justPromoted ? 'Neu via Trust Score!' : _user.promotionSource == 'trust_score' ? 'Via Trust Score' : 'Tags erstellen', style: const TextStyle(color: cTextTertiary, fontSize: 11))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 20)]));
+  Widget _miniAct(IconData i, VoidCallback onTap) => GestureDetector(onTap: onTap, child: Container(width: 32, height: 32, decoration: BoxDecoration(color: cSurface, borderRadius: BorderRadius.circular(6), border: Border.all(color: cTileBorder, width: 0.5)), child: Icon(i, color: cTextTertiary, size: 15)));
+  Widget _buildReputationTile() => _tile(accentColor: Colors.amber, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReputationQRScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20), const SizedBox(height: 12), const Text('Reputation', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(myBadges.isNotEmpty ? 'QR teilen' : 'Prüfen', style: const TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildCommunityTile() => _tile(accentColor: cCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPortalScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.hub_rounded, color: cCyan, size: 20), const SizedBox(height: 12), const Text('Community', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Portal', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildEventsTile() => _tile(accentColor: cTextTertiary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: cTextSecondary, size: 20), const SizedBox(height: 12), const Text('Events', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 20), const SizedBox(height: 12), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 20), const SizedBox(height: 12), const Text('Podcast', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
+  Widget _buildOrganisatorTile() => _tile(accentColor: cOrange, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? cGreen : cOrange, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(_justPromoted ? 'Neu via Trust Score' : 'Admin-Panel', style: const TextStyle(color: cTextTertiary, fontSize: 10))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16)]));
 
   Widget _buildWotDashboardTile() => _tile(
-    accentColor: cCyan, opacity: 0.07,
+    accentColor: cOrange,
     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WotDashboardScreen())),
     child: Row(children: [
-      const Icon(Icons.hub_rounded, color: cCyan, size: 24),
-      const SizedBox(width: 14),
+      const Icon(Icons.account_tree_rounded, color: cTextSecondary, size: 20),
+      const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('WoT Dashboard', style: TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)),
+        const Text('WoT', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(height: 2),
-        const Text('Netzwerk & Vouching', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+        const Text('Web of Trust', style: TextStyle(color: cTextTertiary, fontSize: 10)),
       ])),
-      const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 20),
+      const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16),
     ]),
   );
 
   Widget _buildActiveSessionTile() => AnimatedBuilder(animation: _pulseController, builder: (_, __) => GestureDetector(
     onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const RollingQRScreen())); _checkActiveSession(); },
-    child: Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(borderRadius: BorderRadius.circular(kTileRadius),
-      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.green.withOpacity(0.08), Colors.green.withOpacity(0.03), const Color(0xFF141416)], stops: const [0.0, 0.35, 1.0]),
-      border: Border.all(color: Colors.green.withOpacity(0.2), width: 0.8)),
+    child: Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(kTileRadius), border: Border.all(color: cGreen.withOpacity(0.25), width: 0.5)),
     child: Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.green.withOpacity(0.5 + _pulseController.value * 0.5), boxShadow: [BoxShadow(color: Colors.green.withOpacity(0.3 * _pulseController.value), blurRadius: 8)])),
       const SizedBox(width: 14), Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), borderRadius: BorderRadius.circular(4)), child: Text('LIVE', style: TextStyle(color: Colors.green.shade300, fontSize: 9, fontWeight: FontWeight.w800))),
       const SizedBox(width: 10), Expanded(child: Text(_activeSession!.meetupName.isNotEmpty ? _activeSession!.meetupName : 'Meetup aktiv', style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
       const SizedBox(width: 8), Text(_sessionTimeLeft, style: TextStyle(color: cTextTertiary, fontSize: 11, fontFamily: fontMono)), const SizedBox(width: 8), Icon(Icons.arrow_forward_ios_rounded, color: Colors.green.withOpacity(0.4), size: 14)]))));
 
-  Widget _buildDeviceWarning() => Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(borderRadius: BorderRadius.circular(kTileRadius), color: Colors.orange.withOpacity(0.06), border: Border.all(color: Colors.orange.withOpacity(0.2), width: 0.8)),
+  Widget _buildDeviceWarning() => Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(kTileRadius), border: Border.all(color: cOrange.withOpacity(0.3), width: 0.5)),
     child: Row(children: [const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18), const SizedBox(width: 10), Expanded(child: Text(DeviceIntegrityService.warningMessage, style: TextStyle(color: Colors.orange.shade200, fontSize: 11))),
       GestureDetector(onTap: () => setState(() => _dismissedIntegrityWarning = true), child: Icon(Icons.close_rounded, color: Colors.orange.shade300, size: 16))]));
 
@@ -873,7 +866,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
         const SizedBox(height: 16),
         // Header
         Row(children: [
-          const Text('DASHBOARD ANPASSEN', style: TextStyle(color: cOrange, fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+          const Text('ANPASSEN', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
           const Spacer(),
           TextButton(
             onPressed: () { widget.onSave(_order, _hidden); Navigator.pop(context); },
@@ -881,7 +874,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
           ),
         ]),
         const SizedBox(height: 4),
-        const Text('Halte & ziehe zum Sortieren. Tippe auf ✕ um eine Kachel auszublenden.', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+        const Text('Halten & ziehen zum Sortieren  ·  ✕ ausblenden  ·  + hinzufügen', style: TextStyle(color: cTextTertiary, fontSize: 10)),
         const SizedBox(height: 16),
         Flexible(
           child: SingleChildScrollView(
@@ -930,9 +923,7 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   }
 
   Widget _sectionHeader(IconData icon, String title, String subtitle) => Row(children: [
-    Icon(icon, color: cOrange, size: 14),
-    const SizedBox(width: 6),
-    Text(title, style: const TextStyle(color: cOrange, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+    Text(title, style: const TextStyle(color: cTextSecondary, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.0)),
     const SizedBox(width: 8),
     Text(subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 10)),
   ]);
@@ -940,41 +931,32 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
   Widget _fixedRow(String id) => Container(
     key: ValueKey('fixed_$id'),
     margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1A1A1E),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: cTileBorder, width: 0.5),
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: cTileBorder, width: 0.5)),
     child: Row(children: [
-      Icon(_iconFor(id), color: _colorFor(id), size: 16),
+      Icon(_iconFor(id), color: cTextTertiary, size: 15),
       const SizedBox(width: 10),
-      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
-      const Icon(Icons.lock_outline_rounded, color: cTextTertiary, size: 15),
+      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cTextSecondary, fontSize: 13, fontWeight: FontWeight.w600))),
+      const Icon(Icons.lock_outline_rounded, color: cTextTertiary, size: 13),
     ]),
   );
 
   Widget _activeRow(String id, Key key) => Container(
     key: key,
     margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1C1C20),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: cTileBorder, width: 0.5),
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+    decoration: BoxDecoration(color: cCard, borderRadius: BorderRadius.circular(8), border: Border.all(color: cTileBorder, width: 0.5)),
     child: Row(children: [
-      const Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 20),
+      const Icon(Icons.drag_indicator_rounded, color: cTextTertiary, size: 16),
       const SizedBox(width: 8),
-      Icon(_iconFor(id), color: _colorFor(id), size: 16),
+      Icon(_iconFor(id), color: cTextSecondary, size: 15),
       const SizedBox(width: 10),
       Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
       GestureDetector(
         onTap: () => _hide(id),
-        child: Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(color: cRed.withOpacity(0.12), borderRadius: BorderRadius.circular(7)),
-          child: const Icon(Icons.close_rounded, color: cRed, size: 15),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: const Icon(Icons.close_rounded, color: cTextTertiary, size: 14),
         ),
       ),
     ]),
@@ -982,22 +964,17 @@ class _CustomizeSheetState extends State<_CustomizeSheet> {
 
   Widget _availableRow(String id) => Container(
     margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-    decoration: BoxDecoration(
-      color: const Color(0xFF14141A),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: cBorder, width: 0.5),
-    ),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    decoration: BoxDecoration(color: cSurface, borderRadius: BorderRadius.circular(8), border: Border.all(color: cBorder, width: 0.5)),
     child: Row(children: [
-      Icon(_iconFor(id), color: _colorFor(id).withOpacity(0.6), size: 16),
+      Icon(_iconFor(id), color: cTextTertiary, size: 15),
       const SizedBox(width: 10),
-      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cTextSecondary, fontSize: 13, fontWeight: FontWeight.w500))),
+      Expanded(child: Text(_labelFor(id), style: const TextStyle(color: cTextTertiary, fontSize: 13, fontWeight: FontWeight.w500))),
       GestureDetector(
         onTap: () => _show(id),
-        child: Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(color: cGreen.withOpacity(0.12), borderRadius: BorderRadius.circular(7)),
-          child: const Icon(Icons.add_rounded, color: cGreen, size: 16),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: const Icon(Icons.add_rounded, color: cOrange, size: 15),
         ),
       ),
     ]),
