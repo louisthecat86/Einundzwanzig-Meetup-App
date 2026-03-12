@@ -593,24 +593,24 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           else if (_nextHomeMeetup != null) Builder(builder: (_) {
             final days = _nextHomeMeetup!.startTime.difference(DateTime.now()).inDays;
             return Row(children: [
-              const Icon(Icons.event_available_rounded, color: cTextTertiary, size: 12),
-              const SizedBox(width: 6),
+              const Icon(Icons.event_available_rounded, color: cTextTertiary, size: 15),
+              const SizedBox(width: 7),
               Text(
                 days == 0 ? 'Heute!' : days == 1 ? 'Morgen' : 'in ${days} Tagen',
                 style: TextStyle(
                   color: days == 0 ? cOrange : days <= 3 ? cOrange.withOpacity(0.8) : cTextSecondary,
-                  fontSize: 12, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 4),
+                  fontSize: 14, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 5),
               Expanded(child: Text(
-                '· ${_nextHomeMeetup!.startTime.day}.${_nextHomeMeetup!.startTime.month}.',
-                style: const TextStyle(color: cTextTertiary, fontSize: 11))),
+                '· ${_nextHomeMeetup!.startTime.day}.${_nextHomeMeetup!.startTime.month}.${_nextHomeMeetup!.startTime.year}',
+                style: const TextStyle(color: cTextTertiary, fontSize: 13))),
             ]);
           })
           else if (_user.homeMeetupId.isNotEmpty)
             const Row(children: [
-              Icon(Icons.event_busy_rounded, color: cTextTertiary, size: 12),
-              SizedBox(width: 6),
-              Text('Kein Termin geplant', style: TextStyle(color: cTextTertiary, fontSize: 11)),
+              Icon(Icons.event_busy_rounded, color: cTextTertiary, size: 15),
+              SizedBox(width: 7),
+              Text('Kein Termin geplant', style: TextStyle(color: cTextTertiary, fontSize: 13)),
             ]),
 
           const SizedBox(height: 14),
@@ -646,24 +646,24 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _miniAct(IconData i, VoidCallback onTap) => GestureDetector(onTap: onTap, child: Container(width: 32, height: 32, decoration: BoxDecoration(color: cSurface, borderRadius: BorderRadius.circular(6), border: Border.all(color: cTileBorder, width: 0.5)), child: Icon(i, color: cTextTertiary, size: 15)));
-  Widget _buildReputationTile() => _tile(accentColor: Colors.amber, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReputationQRScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 20), const SizedBox(height: 12), const Text('Reputation', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(myBadges.isNotEmpty ? 'QR teilen' : 'Prüfen', style: const TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildCommunityTile() => _tile(accentColor: cCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPortalScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.hub_rounded, color: cCyan, size: 20), const SizedBox(height: 12), const Text('Community', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Portal', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildEventsTile() => _tile(accentColor: cTextTertiary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: cTextSecondary, size: 20), const SizedBox(height: 12), const Text('Events', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 20), const SizedBox(height: 12), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 20), const SizedBox(height: 12), const Text('Podcast', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 10))]));
-  Widget _buildNostrTile() => _tile(accentColor: cNostr, opacity: 0.07, onTap: _openNostr, child: Stack(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextSecondary, size: 20), const SizedBox(height: 12), const Text('Nostr', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), const Text('Community', style: TextStyle(color: cTextTertiary, fontSize: 10))]), if (_nostrHasNew) Positioned(top: 0, right: 0, child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)))]));
-  Widget _buildOrganisatorTile() => _tile(accentColor: cOrange, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? cGreen : cOrange, size: 20), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 2), Text(_justPromoted ? 'Neu via Trust Score' : 'Admin-Panel', style: const TextStyle(color: cTextTertiary, fontSize: 10))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16)]));
+  Widget _buildReputationTile() => _tile(accentColor: Colors.amber, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReputationQRScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 22), const SizedBox(height: 12), const Text('Reputation', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), Text(myBadges.isNotEmpty ? 'QR teilen' : 'Prüfen', style: const TextStyle(color: cTextTertiary, fontSize: 12))]));
+  Widget _buildCommunityTile() => _tile(accentColor: cCyan, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommunityPortalScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.hub_rounded, color: cCyan, size: 22), const SizedBox(height: 12), const Text('Community', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Portal', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
+  Widget _buildEventsTile() => _tile(accentColor: cTextTertiary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.event_rounded, color: cTextSecondary, size: 22), const SizedBox(height: 12), const Text('Events', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Kalender', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
+  Widget _buildShoutoutTile() => _tile(accentColor: cOrange, opacity: 0.07, onTap: () => _openUrl('https://shoutout.einundzwanzig.space'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.campaign_rounded, color: cOrange, size: 22), const SizedBox(height: 12), const Text('Shoutout', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Senden', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
+  Widget _buildPodcastTile() => _tile(accentColor: cPurple, opacity: 0.07, onTap: () => _openUrl('https://einundzwanzig.space/podcast/'), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.podcasts_rounded, color: cPurple, size: 22), const SizedBox(height: 12), const Text('Podcast', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Anhören', style: TextStyle(color: cTextTertiary, fontSize: 12))]));
+  Widget _buildNostrTile() => _tile(accentColor: cNostr, opacity: 0.07, onTap: _openNostr, child: Stack(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.bolt_rounded, color: _nostrHasNew ? cNostr : cTextSecondary, size: 22), const SizedBox(height: 12), const Text('Nostr', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), const Text('Community', style: TextStyle(color: cTextTertiary, fontSize: 12))]), if (_nostrHasNew) Positioned(top: 0, right: 0, child: Container(width: 7, height: 7, decoration: const BoxDecoration(color: cOrange, shape: BoxShape.circle)))]));
+  Widget _buildOrganisatorTile() => _tile(accentColor: cOrange, onTap: () async { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPanelScreen())); _checkActiveSession(); }, child: Row(children: [Icon(Icons.admin_panel_settings_rounded, color: _justPromoted ? cGreen : cOrange, size: 22), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Organisator', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)), const SizedBox(height: 3), Text(_justPromoted ? 'Neu via Trust Score' : 'Admin-Panel', style: const TextStyle(color: cTextTertiary, fontSize: 12))])), const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16)]));
 
   Widget _buildWotDashboardTile() => _tile(
     accentColor: cOrange,
     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WotDashboardScreen())),
     child: Row(children: [
-      const Icon(Icons.account_tree_rounded, color: cTextSecondary, size: 20),
+      const Icon(Icons.account_tree_rounded, color: cTextSecondary, size: 22),
       const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('WoT', style: TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 2),
-        const Text('Web of Trust', style: TextStyle(color: cTextTertiary, fontSize: 10)),
+        const Text('WoT', style: TextStyle(color: cText, fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 3),
+        const Text('Web of Trust', style: TextStyle(color: cTextTertiary, fontSize: 12)),
       ])),
       const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16),
     ]),
