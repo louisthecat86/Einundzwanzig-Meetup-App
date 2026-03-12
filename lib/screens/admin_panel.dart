@@ -152,52 +152,25 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       backgroundColor: cDark,
       appBar: AppBar(title: const Text("ORGANISATOR")),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: cCard,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.verified, size: 40, color: Colors.green),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    "ORGANISATOR TOOLS",
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Erstelle NFC Tags und Rolling QR-Codes für dein Meetup. Teilnehmer scannen diese, um Badges zu sammeln.",
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_adminNpub.isNotEmpty)
-                        _buildStatusChip(
-                          icon: Icons.key,
-                          label: NostrService.shortenNpub(_adminNpub, chars: 6),
-                          color: cPurple,
-                        ),
-                      _buildStatusChip(
+            // Kompakter Status-Header
+            Row(children: [
+              const Icon(Icons.verified_rounded, color: cOrange, size: 16),
+              const SizedBox(width: 8),
+              Expanded(child: Text(
+                _promotionSource == 'trust_score' ? 'Via Trust Score' : 'Organisator',
+                style: const TextStyle(color: cTextSecondary, fontSize: 12),
+              )),
+              if (_adminNpub.isNotEmpty)
+                Text(NostrService.shortenNpub(_adminNpub, chars: 8),
+                  style: const TextStyle(color: cTextTertiary, fontSize: 11, fontFamily: 'monospace')),
+            ]),
+            const SizedBox(height: 20),
+            // legacy Wrap compat — keep chip builder for session area below
+            Wrap(spacing: 8, runSpacing: 8, children: [if (false) _buildStatusChip(
                         icon: _promotionSource == 'trust_score' ? Icons.trending_up : Icons.star,
                         label: _promotionSource == 'trust_score' 
                             ? 'Via Trust Score'
@@ -215,35 +188,29 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             const SizedBox(height: 32),
 
             // --- UNIFIED SESSION CONTROLLER ---
-            Text(
-              "MEETUP SESSION",
-              style: TextStyle(color: cOrange, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-            ),
+            const Text('MEETUP SESSION', style: TextStyle(color: cTextTertiary, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
             const SizedBox(height: 12),
 
             if (isSessionActive) ...[
-              // ACTIVE SESSION UI
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.green.withOpacity(0.5), width: 1.5),
+                  color: cCard,
+                  borderRadius: BorderRadius.circular(kTileRadius),
+                  border: Border.all(color: cGreen.withOpacity(0.3), width: 0.5),
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "SESSION LÄUFT",
-                      style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
+                    Row(children: [
+                      Container(width: 8, height: 8, decoration: const BoxDecoration(color: cGreen, shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      const Text('SESSION LÄUFT', style: TextStyle(color: cGreen, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                      const Spacer(),
+                      Text(_timeLeft, style: TextStyle(color: cText, fontSize: 12, fontFamily: fontMono, fontWeight: FontWeight.w600)),
+                    ]),
                     const SizedBox(height: 4),
-                    Text(
-                      "Endet in $_timeLeft",
-                      style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 16),
-                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
@@ -408,37 +375,30 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: cCard,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cBorder, width: 1),
-          ),
-          child: Row(children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: color.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 32),
-            ),
-            const SizedBox(width: 16),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.4)),
-              ],
-            )),
-            const Icon(Icons.arrow_forward_ios, color: cTextTertiary, size: 18),
-          ]),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: cCard,
+          borderRadius: BorderRadius.circular(kTileRadius),
+          border: Border.all(color: cTileBorder, width: 0.5),
         ),
+        child: Row(children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 14),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: cTextTertiary, fontSize: 11, height: 1.3)),
+            ],
+          )),
+          const Icon(Icons.chevron_right_rounded, color: cTextTertiary, size: 16),
+        ]),
       ),
     );
   }

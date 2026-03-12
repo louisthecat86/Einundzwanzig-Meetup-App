@@ -100,7 +100,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
                 ? const SizedBox(
                     width: 20, height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2, color: cCyan))
-                : const Icon(Icons.sync, color: cCyan),
+                : const Icon(Icons.sync_rounded, color: cTextSecondary),
             tooltip: 'Netzwerk synchronisieren',
             onPressed: _isRefreshing ? null : _refresh,
           ),
@@ -110,6 +110,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
           indicatorColor: cOrange,
           labelColor: cOrange,
           unselectedLabelColor: cTextTertiary,
+          dividerColor: cTileBorder,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, letterSpacing: 0.5),
           tabs: [
             Tab(icon: const Icon(Icons.hub, size: 20), text: 'NETZWERK'),
@@ -131,10 +132,10 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       floatingActionButton: _tabController.index == 1
           ? FloatingActionButton.extended(
               onPressed: _showAddVouchDialog,
-              backgroundColor: cPurple,
-              icon: const Icon(Icons.shield, color: Colors.white),
+              backgroundColor: cOrange,
+              icon: const Icon(Icons.shield_rounded, color: Colors.black),
               label: const Text('RITTERSCHLAG',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700,
+                  style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700,
                       letterSpacing: 0.5)),
             )
           : null,
@@ -232,7 +233,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: healthColor.withOpacity(0.3)),
       ),
       child: Column(
@@ -244,7 +245,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: healthColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(kTileRadius),
                 ),
                 child: Icon(Icons.hub, color: healthColor, size: 28),
               ),
@@ -302,7 +303,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(kTileRadius),
         ),
         child: Column(
           children: [
@@ -322,7 +323,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: cBorder),
       ),
       child: Row(
@@ -399,7 +400,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: statusColor.withOpacity(0.4)),
       ),
       child: Column(
@@ -459,7 +460,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(
           color: suspended ? cRed.withOpacity(0.3) : (isMe ? cOrange.withOpacity(0.3) : cBorder),
         ),
@@ -703,7 +704,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
@@ -738,18 +739,18 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: cCyan.withOpacity(0.15)),
+        borderRadius: BorderRadius.circular(kTileRadius),
+        border: Border.all(color: cTileBorder, width: 0.5),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: cCyan.withOpacity(0.1),
+              color: cCard,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Icon(Icons.verified, color: cCyan, size: 16),
+            child: Icon(Icons.verified, color: cTextSecondary, size: 15),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -813,7 +814,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: borderColor.withOpacity(isSuspended || hasWarnings ? 0.5 : 1.0)),
       ),
       child: ListTile(
@@ -822,7 +823,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: (isSuspended ? cRed : cPurple).withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(kTileRadius),
           ),
           child: Icon(
             isSuspended ? Icons.block : (hasWarnings ? Icons.warning_amber : Icons.verified_user),
@@ -951,7 +952,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: cCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(
           color: admin.isSuspended
               ? cRed.withOpacity(0.4)
@@ -1430,7 +1431,7 @@ class _WotDashboardScreenState extends State<WotDashboardScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kTileRadius),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
@@ -1528,7 +1529,7 @@ class _NpubScannerScreenState extends State<_NpubScannerScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.8),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(kTileRadius),
                 border: Border.all(color: cPurple),
               ),
               child: const Text(

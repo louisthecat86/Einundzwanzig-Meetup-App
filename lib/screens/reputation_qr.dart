@@ -284,9 +284,8 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
       appBar: AppBar(
         title: const Text("REPUTATION"),
         actions: [
-          // Scanner-Button — IMMER verfügbar
           IconButton(
-            icon: const Icon(Icons.qr_code_scanner, color: cCyan),
+            icon: const Icon(Icons.qr_code_scanner, color: cTextSecondary),
             tooltip: 'Reputation prüfen',
             onPressed: () => Navigator.push(
               context,
@@ -306,12 +305,6 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
                   // Warnung wenn keine Identität
                   if (!_hasIdentity)
                     _buildWarningBanner(),
-
-                  // Trust Score Header
-                  if (_trustScore != null)
-                    _buildTrustHeader(),
-
-                  const SizedBox(height: 20),
 
                   // QR Code (mit RepaintBoundary für Screenshot)
                   RepaintBoundary(
@@ -382,8 +375,8 @@ class _ReputationQRScreenState extends State<ReputationQRScreen> {
               icon: const Icon(Icons.qr_code_scanner),
               label: const Text("QR-CODE SCANNEN"),
               style: ElevatedButton.styleFrom(
-                backgroundColor: cCyan.withOpacity(0.15),
-                foregroundColor: cCyan,
+                backgroundColor: cOrange.withOpacity(0.12),
+                foregroundColor: cOrange,
               ),
             ),
           ),

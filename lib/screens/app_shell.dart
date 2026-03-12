@@ -8,7 +8,7 @@ import 'badge_wallet.dart';
 import 'calendar_screen.dart';
 import 'profile_edit.dart';
 import 'meetup_verification.dart';
-import 'reputation_qr_screen.dart';
+import 'reputation_qr.dart';
 import '../models/meetup.dart';
 
 class AppShell extends StatefulWidget {

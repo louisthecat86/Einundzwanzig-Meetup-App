@@ -11,116 +11,92 @@ class MeetupSessionWizard extends StatelessWidget {
     return Scaffold(
       backgroundColor: cDark,
       appBar: AppBar(
-        title: const Text("MEETUP ABLAUF"),
-        centerTitle: true,
+        title: const Text('MEETUP STARTEN'),
+        backgroundColor: cDark,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: cTextSecondary),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Fortschritts-Anzeige
-            Row(
-              children: [
-                _buildStep(context, 1, "NFC", true),
-                Expanded(child: Container(height: 2, color: cOrange.withOpacity(0.5))),
-                _buildStep(context, 2, "QR", false),
-              ],
-            ),
-            const SizedBox(height: 40),
 
-            const Icon(Icons.nfc, size: 60, color: cOrange),
-            const SizedBox(height: 20),
-            Text(
-              "SCHRITT 1: NFC TAG BESCHREIBEN",
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              "Möchtest du physische NFC-Tags (NTAG215) für dieses Meetup auslegen? Der kryptographische Beweis (Blockzeit & Signatur) wird darauf fixiert.",
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5, color: Colors.grey.shade400),
-            ),
-            
+            // Schritt-Indikator
+            Row(children: [
+              _step(1, 'NFC', true),
+              Expanded(child: Container(height: 0.5, color: cTileBorder)),
+              _step(2, 'QR', false),
+            ]),
+            const SizedBox(height: 32),
+
+            // Icon
+            const Icon(Icons.nfc_rounded, size: 40, color: cOrange),
+            const SizedBox(height: 16),
+
+            // Titel
+            const Text('SCHRITT 1: NFC TAG',
+              style: TextStyle(color: cText, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+            const SizedBox(height: 10),
+
+            // Beschreibung
+            const Text(
+              'Möchtest du physische NFC-Tags (NTAG215) für dieses Meetup auslegen? '
+              'Der kryptographische Beweis (Blockzeit & Signatur) wird darauf fixiert.',
+              style: TextStyle(color: cTextSecondary, fontSize: 13, height: 1.6)),
+
             const Spacer(),
 
-            // Actions
+            // NFC schreiben Button
             SizedBox(
               width: double.infinity,
-              height: 56,
+              height: 50,
               child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: cOrange, foregroundColor: Colors.black),
-                onPressed: () {
-                  // NFC Writer öffnen
-                  // Nach erfolgreichem Schreiben springt der NFCWriter
-                  // automatisch zum RollingQR (mit pushAndRemoveUntil).
-                  // Der Wizard wird dabei vom Stack entfernt.
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NFCWriterScreen()),
-                  );
-                },
-                icon: const Icon(Icons.tap_and_play),
-                label: const Text("NFC TAG BESCHREIBEN"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: cOrange, foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(kTileRadius))),
+                onPressed: () => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const NFCWriterScreen())),
+                icon: const Icon(Icons.nfc_rounded, size: 18),
+                label: const Text('NFC TAG BESCHREIBEN',
+                  style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.5)),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+
+            // Überspringen
             SizedBox(
               width: double.infinity,
-              height: 56,
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.grey, width: 1.5),
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () {
-                  // Direkt zum Rolling QR — Stack aufräumen!
-                  // pushAndRemoveUntil: Entfernt Wizard + AdminPanel
-                  // → Zurück-Button im RollingQR führt zum Dashboard
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => const RollingQRScreen()),
-                    (route) => route.isFirst, // Nur Dashboard behalten
-                  );
-                },
-                child: const Text("ÜBERSPRINGEN / NUR QR NUTZEN"),
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const RollingQRScreen()),
+                  (route) => route.isFirst),
+                child: const Text('ÜBERSPRINGEN — NUR QR NUTZEN',
+                  style: TextStyle(color: cTextTertiary, fontSize: 12, fontWeight: FontWeight.w600)),
               ),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStep(BuildContext context, int number, String label, bool isActive) {
-    return Column(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isActive ? cOrange : cDark,
-            shape: BoxShape.circle,
-            border: Border.all(color: isActive ? cOrange : Colors.grey, width: 2),
-          ),
-          child: Text(
-            number.toString(),
-            style: TextStyle(
-              color: isActive ? Colors.black : Colors.grey,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: isActive ? cOrange : Colors.grey,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        )
-      ],
-    );
+  Widget _step(int number, String label, bool isActive) {
+    return Column(children: [
+      Container(
+        width: 28, height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isActive ? cOrange : cCard,
+          shape: BoxShape.circle,
+          border: Border.all(color: isActive ? cOrange : cTileBorder, width: 0.5)),
+        child: Text('$number', style: TextStyle(
+          color: isActive ? Colors.black : cTextTertiary,
+          fontSize: 12, fontWeight: FontWeight.w800))),
+      const SizedBox(height: 4),
+      Text(label, style: TextStyle(
+        color: isActive ? cOrange : cTextTertiary,
+        fontSize: 10, fontWeight: FontWeight.w700)),
+    ]);
   }
 }
