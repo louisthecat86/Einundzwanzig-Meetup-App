@@ -178,11 +178,16 @@ class RollingQRService {
       return existing;
     }
 
-    // Wenn keine valide BlockHeight übergeben wurde (Fallback-Case), hole sie
+    // Immer aktuelle Blockhöhe von Mempool.space holen
     int finalBlockHeight = blockHeight;
     if (finalBlockHeight <= 0) {
       finalBlockHeight = await MempoolService.getBlockHeight();
-      if (finalBlockHeight == 0) finalBlockHeight = 850000; // Fallback
+      // Einmaliger Retry falls Netz kurz nicht verfügbar
+      if (finalBlockHeight == 0) {
+        await Future.delayed(const Duration(seconds: 2));
+        finalBlockHeight = await MempoolService.getBlockHeight();
+      }
+      // Kein 850000-Hardcode-Fallback — bleibt 0 wenn offline
     }
 
     // Neue Session erstellen

@@ -293,9 +293,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     final String meetupId = normalized['meetup_id'] ?? DateTime.now().toString();
 
     // Block Height
-    int currentBlockHeight = normalized['block_height'] ?? 0;
+    // Immer aktuelle Blockhöhe von Mempool.space holen (frischer Scan-Zeitstempel)
+    int currentBlockHeight = 0;
+    try { currentBlockHeight = await MempoolService.getBlockHeight(); } catch (_) {}
+    // Einmaliger Retry
     if (currentBlockHeight == 0) {
-      try { currentBlockHeight = await MempoolService.getBlockHeight(); } catch (_) {}
+      try {
+        await Future.delayed(const Duration(seconds: 1));
+        currentBlockHeight = await MempoolService.getBlockHeight();
+      } catch (_) {}
+    }
+    // Fallback: Blockhöhe aus Tag nehmen wenn Mempool offline
+    if (currentBlockHeight == 0) {
+      currentBlockHeight = (normalized['block_height'] as int?) ?? 0;
     }
 
     // Duplikat-Check (ein Badge pro Meetup pro Tag)
