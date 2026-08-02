@@ -396,16 +396,16 @@ class PromotionClaimService {
               }
             } else if (type == 'EOSE') {
               if (!completer.isCompleted) {
-                completer.complete(claims.isNotEmpty ? claims : null);
+                completer.complete(claims);
               }
             }
           } catch (_) {}
         },
         onError: (_) {
-          if (!completer.isCompleted) completer.complete(null);
+          if (!completer.isCompleted) completer.complete(<_RawClaim>[]);
         },
         onDone: () {
-          if (!completer.isCompleted) completer.complete(claims.isNotEmpty ? claims : null);
+          if (!completer.isCompleted) completer.complete(claims);
         },
       );
 
