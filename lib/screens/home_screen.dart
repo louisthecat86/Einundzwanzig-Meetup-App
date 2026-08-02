@@ -296,9 +296,9 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
       // Merge: gespeicherte Reihenfolge + neue Tiles die noch nicht drin sind
       final known = saved.where((id) => _defaultOrder.contains(id)).toList();
       for (final id in _defaultOrder) { if (!known.contains(id)) known.add(id); }
-      setState(() { _tileOrder = known; _hiddenTiles = savedHidden; });
+      if (mounted) setState(() { _tileOrder = known; _hiddenTiles = savedHidden; });
     } else {
-      setState(() { _tileOrder = List.from(_defaultOrder); _hiddenTiles = Set.from(_defaultHidden); });
+      if (mounted) setState(() { _tileOrder = List.from(_defaultOrder); _hiddenTiles = Set.from(_defaultHidden); });
     }
   }
 
@@ -550,11 +550,11 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
     } catch (_) {}
   }
 
-  void _checkActiveSession() async { final s = await RollingQRService.loadSession(); if (s != null && !s.isExpired) { setState(() => _activeSession = s); _startSessionTimer(); } else { _sessionTimer?.cancel(); if (mounted) setState(() => _activeSession = null); } }
+  void _checkActiveSession() async { final s = await RollingQRService.loadSession(); if (s != null && !s.isExpired) { if (mounted) setState(() => _activeSession = s); _startSessionTimer(); } else { _sessionTimer?.cancel(); if (mounted) setState(() => _activeSession = null); } }
   void _startSessionTimer() { _sessionTimer?.cancel(); _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) { if (_activeSession == null || _activeSession!.isExpired) { _sessionTimer?.cancel(); if (mounted) setState(() => _activeSession = null); return; } if (mounted) setState(() { final r = _activeSession!.remainingTime; _sessionTimeLeft = '${r.inHours}h ${(r.inMinutes % 60).toString().padLeft(2, '0')}m'; }); }); }
   void _syncOrganicAdminsInBackground() async { try { await PromotionClaimService.syncOrganicAdmins(); } catch (_) {} }
   void _checkDeviceIntegrity() async { try { final r = await DeviceIntegrityService.check(); if (r.isCompromised && mounted) setState(() => _deviceCompromised = true); } catch (_) {} }
-  Future<void> _loadBadges() async { final badges = await MeetupBadge.loadBadges(); await BadgeClaimService.ensureBadgesClaimed(badges); setState(() { myBadges.clear(); myBadges.addAll(badges); }); if (badges.isNotEmpty) ReputationPublisher.publishInBackground(badges); }
+  Future<void> _loadBadges() async { final badges = await MeetupBadge.loadBadges(); await BadgeClaimService.ensureBadgesClaimed(badges); if (mounted) setState(() { myBadges.clear(); myBadges.addAll(badges); }); if (badges.isNotEmpty) ReputationPublisher.publishInBackground(badges); }
   Future<void> _loadUser({bool skipOrgCheck = false}) async { final u = await UserProfile.load(); Meetup? hm;
     // Meetup-Liste EINMAL laden und cachen — die Favoriten-Karten loesen
     // darueber Land/Wappen/Info-Screen fuer JEDE ihrer Staedte auf.
@@ -564,7 +564,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
       hm = m.where((x) => x.city == u.homeMeetupId).firstOrNull;
     }
     if (mounted) setState(() { _user = u; _homeMeetup = hm; }); if (!skipOrgCheck) _checkPortalOrganizer(); _refreshPortalConnected(); }
-  Future<void> _calculateTrustScore() async { if (myBadges.isEmpty) { setState(() => _trustScore = TrustScoreService.calculateScore(badges: [], firstBadgeDate: null)); return; } final s = List<MeetupBadge>.from(myBadges)..sort((a, b) => a.date.compareTo(b.date)); setState(() => _trustScore = TrustScoreService.calculateScore(badges: myBadges, firstBadgeDate: s.first.date, coAttestorMap: null)); }
+  Future<void> _calculateTrustScore() async { if (myBadges.isEmpty) { if (mounted) setState(() => _trustScore = TrustScoreService.calculateScore(badges: [], firstBadgeDate: null)); return; } final s = List<MeetupBadge>.from(myBadges)..sort((a, b) => a.date.compareTo(b.date)); if (mounted) setState(() => _trustScore = TrustScoreService.calculateScore(badges: myBadges, firstBadgeDate: s.first.date, coAttestorMap: null)); }
   /// PORTAL-ORGANISATOR = APP-ADMIN (robust, mit sicherem Entzug):
   /// - Portal-Login (Nostr) + my-meetups nicht leer  -> Admin VERGEBEN
   ///   und automatisch einen signierten Organizer-Claim an Nostr
@@ -628,10 +628,12 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
 
       if (meetups.isNotEmpty && !_user.adminViaPortal) {
         // VERGEBEN: nur das Portal-Flag setzen (Vouch/Seed unberührt).
-        setState(() {
-          _user.adminViaPortal = true;
-          _user.isAdminVerified = _user.isAdmin;
-        });
+        if (mounted) {
+          setState(() {
+            _user.adminViaPortal = true;
+            _user.isAdminVerified = _user.isAdmin;
+          });
+        }
         await _user.save();
         // Organizer-Claim an Nostr publizieren (best effort): macht den
         // Status für Dritte sichtbar; kein manuelles Register nötig.
@@ -648,10 +650,12 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
       } else if (meetups.isEmpty && _user.adminViaPortal) {
         // ENTZIEHEN: nur das Portal-Flag löschen. Bleibt der Nutzer über
         // WoT-Bürgschaft/Seed berechtigt, behält er isAdmin (abgeleitet).
-        setState(() {
-          _user.adminViaPortal = false;
-          _user.isAdminVerified = _user.isAdmin;
-        });
+        if (mounted) {
+          setState(() {
+            _user.adminViaPortal = false;
+            _user.isAdminVerified = _user.isAdmin;
+          });
+        }
         await _user.save();
         // WICHTIG: alten Admin-Cache-Eintrag für den eigenen npub räumen,
         // sonst würde der Registry-Cache ihn weiter als Admin ausweisen
