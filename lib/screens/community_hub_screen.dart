@@ -138,7 +138,7 @@ class CommunityHubScreen extends StatelessWidget {
         _openUrl(url);
       },
       child: Container(
-        height: 106,
+        height: 120,
         decoration: BoxDecoration(
           color: cCard,
           borderRadius: BorderRadius.circular(kTileRadius),
@@ -218,7 +218,7 @@ class CommunityHubScreen extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 96,
+        height: 112,
         decoration: BoxDecoration(
           color: cCard,
           borderRadius: BorderRadius.circular(kTileRadius),
