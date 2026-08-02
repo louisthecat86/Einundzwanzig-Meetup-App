@@ -47,6 +47,8 @@
 	<true/>
 	<key>NFCReaderUsageDescription</key>
 	<string>Diese App nutzt NFC, um Meetup-Badges zu sammeln und Identitäten zu verifizieren.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Der Standort wird verwendet, um Bitcoin-Meetups in deiner Nähe zu finden und die Entfernung zu deinem Home-Meetup anzuzeigen.</string>
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>
 		<string>TAG</string>
