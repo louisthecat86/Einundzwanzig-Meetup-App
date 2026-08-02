@@ -809,7 +809,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
     final rows = _buildTileRows(excludeHomeMeetup: true);
     if (rows.isEmpty) return const SizedBox.shrink();
 
-    const double minRowHeight = 92; // darunter wird gescrollt
+    const double minRowHeight = 118; // darunter wird gescrollt
     return LayoutBuilder(builder: (context, c) {
       final gaps = (rows.length - 1) * kTileGap;
       final avail = c.maxHeight - gaps;
