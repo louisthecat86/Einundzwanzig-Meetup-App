@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -34,7 +35,11 @@ void main() async {
   DiagnosticsService.logEnvironment();
 
   // Hintergrund-Callback fürs Widget-Aktualisieren registrieren
-  HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
+  // (nur Android — home_widget braucht auf iOS eine App-Group-ID, die wir
+  // nicht setzen, da es dort keine Widget-Extension gibt)
+  if (Platform.isAndroid) {
+    HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
+  }
 
   // Gespeicherte Sprache laden, bevor die App startet
   await LocaleController.load();

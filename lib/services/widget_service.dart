@@ -7,6 +7,7 @@
 //  Startseite aufgerufen.
 // ============================================
 
+import 'dart:io';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'mempool.dart';
@@ -29,7 +30,9 @@ class WidgetService {
   }
 
   /// Aktualisiert die Bitcoin-/Mempool-Kennzahlen im Widget.
+  /// Nur Android — es gibt kein iOS-Homescreen-Widget (keine App-Group-ID).
   static Future<void> updateBitcoin(BitcoinDashboardData d) async {
+    if (!Platform.isAndroid) return;
     try {
       await HomeWidget.saveWidgetData<String>(
           'block', d.blockHeight > 0 ? _fmtInt(d.blockHeight) : '––');
@@ -59,6 +62,7 @@ class WidgetService {
   /// Aktualisiert das nächste Meetup im Widget.
   /// [city] leer -> Widget zeigt "Kein Home-Meetup".
   static Future<void> updateMeetup({required String city, required String countdown}) async {
+    if (!Platform.isAndroid) return;
     try {
       await HomeWidget.saveWidgetData<String>('meetupCity', city);
       await HomeWidget.saveWidgetData<String>('meetupCountdown', countdown);
@@ -96,6 +100,7 @@ class WidgetService {
   /// Prüft den neuesten Artikel und markiert das Widget mit "NEU", wenn er
   /// noch nicht gesehen wurde. Schreibt Titel + Neu-Status ins Widget.
   static Future<void> refreshNews() async {
+    if (!Platform.isAndroid) return;
     try {
       final articles = await NewsService.fetchArticles(limit: 1);
       if (articles.isEmpty) return;
@@ -119,6 +124,7 @@ class WidgetService {
   /// Markiert den neuesten Artikel als gesehen -> "NEU"-Markierung im Widget
   /// verschwindet. Beim Öffnen der News-Sektion aufrufen.
   static Future<void> markNewsSeen() async {
+    if (!Platform.isAndroid) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final latest = prefs.getString(_kLatestNewsId) ?? '';
