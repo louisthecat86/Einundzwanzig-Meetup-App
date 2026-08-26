@@ -21,8 +21,8 @@
 ///   - Zwei Wege zum selben Ziel bedeuten doppelten Testaufwand bei jedem
 ///     Umbau am Badge-Format.
 ///
-/// Beim Wiedereinschalten pruefen: NFC-Berechtigungen im Android-Manifest
-/// und in der Info.plist, und ob das Badge-Payload noch auf ein NTAG215
-/// passt — Event-Badges tragen inzwischen einen Event-Verweis von rund
-/// 110 Zeichen.
+/// Beim Wiedereinschalten pruefen: NFC-Berechtigungen im Android-Manifest,
+/// `Runner.entitlements` (NDEF/TAG) und `NFCReaderUsageDescription` in
+/// der Info.plist, und ob das Badge-Payload noch auf ein NTAG215 passt —
+/// Event-Badges tragen inzwischen einen Event-Verweis von rund 110 Zeichen.
 const bool kNfcEnabled = false;

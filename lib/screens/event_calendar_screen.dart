@@ -16,10 +16,9 @@ import '../services/calendar_event_service.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/blossom_upload_service.dart';
-import 'package:provider/provider.dart';
-
 import '../services/event_badge_auth_service.dart';
 import '../services/guide_service.dart';
+import '../mixins/guide_service_host.dart';
 import '../tours/event_badge_tour.dart';
 import '../services/nostr_service.dart';
 import '../services/event_badge_session_service.dart';
@@ -1224,7 +1223,8 @@ class EventEditorScreen extends StatefulWidget {
   State<EventEditorScreen> createState() => _EventEditorScreenState();
 }
 
-class _EventEditorScreenState extends State<EventEditorScreen> {
+class _EventEditorScreenState extends State<EventEditorScreen>
+    with GuideServiceHost {
   final _titleCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -1265,7 +1265,7 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
     // Nur der Badge-Teil haengt an der Berechtigung: Wer den Schalter nicht
     // bedienen kann, bekommt die drei Schritte dazu gar nicht erst zu
     // sehen. Deshalb wird erst hier gestartet, wenn die Pruefung durch ist.
-    final guide = context.read<GuideService>();
+    final guide = this.guide;
     if (await guide.wasTourCompleted(GuideTour.events)) return;
     if (!mounted) return;
 
@@ -1284,8 +1284,7 @@ class _EventEditorScreenState extends State<EventEditorScreen> {
   void dispose() {
     // Editor zu, Tour raus: Sonst suchte das Overlay Ziele in einem Blatt,
     // das nicht mehr existiert.
-    final guide = context.read<GuideService>();
-    if (guide.activeTour == GuideTour.events) guide.finishTour();
+    finishGuideTourIfActive(GuideTour.events);
 
     _titleCtrl.dispose();
     _locationCtrl.dispose();

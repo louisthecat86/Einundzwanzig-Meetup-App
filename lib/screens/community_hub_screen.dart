@@ -15,10 +15,10 @@ import '../theme.dart';
 import '../services/signing_service.dart';
 import '../services/satoshiduell_service.dart';
 import 'plebrap_player_screen.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/guide_service.dart';
+import '../mixins/guide_service_host.dart';
 import '../tours/more_tours.dart';
 import '../services/portal_api_service.dart';
 import 'package:add_2_calendar/add_2_calendar.dart' as cal;
@@ -44,7 +44,8 @@ class CommunityHubScreen extends StatefulWidget {
   State<CommunityHubScreen> createState() => _CommunityHubScreenState();
 }
 
-class _CommunityHubScreenState extends State<CommunityHubScreen> {
+class _CommunityHubScreenState extends State<CommunityHubScreen>
+    with GuideServiceHost {
   @override
   void initState() {
     super.initState();
@@ -54,7 +55,7 @@ class _CommunityHubScreenState extends State<CommunityHubScreen> {
   Future<void> _startTour() async {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
-    final guide = context.read<GuideService>();
+    final guide = this.guide;
     if (await guide.wasTourCompleted(GuideTour.portal)) return;
     if (!mounted) return;
     await guide.startTour(GuideTour.portal, CommunityTour.steps());
@@ -62,8 +63,7 @@ class _CommunityHubScreenState extends State<CommunityHubScreen> {
 
   @override
   void dispose() {
-    final guide = context.read<GuideService>();
-    if (guide.activeTour == GuideTour.portal) guide.finishTour();
+    finishGuideTourIfActive(GuideTour.portal);
     super.dispose();
   }
 
@@ -349,7 +349,8 @@ class PortalAreaScreen extends StatefulWidget {
   State<PortalAreaScreen> createState() => _PortalAreaScreenState();
 }
 
-class _PortalAreaScreenState extends State<PortalAreaScreen> {
+class _PortalAreaScreenState extends State<PortalAreaScreen>
+    with GuideServiceHost {
   @override
   void initState() {
     super.initState();
@@ -359,7 +360,7 @@ class _PortalAreaScreenState extends State<PortalAreaScreen> {
   Future<void> _startTour() async {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
-    final guide = context.read<GuideService>();
+    final guide = this.guide;
     if (await guide.wasTourCompleted(GuideTour.portalArea)) return;
     if (!mounted) return;
     await guide.startTour(GuideTour.portalArea, PortalAreaTour.steps());
@@ -367,8 +368,7 @@ class _PortalAreaScreenState extends State<PortalAreaScreen> {
 
   @override
   void dispose() {
-    final guide = context.read<GuideService>();
-    if (guide.activeTour == GuideTour.portalArea) guide.finishTour();
+    finishGuideTourIfActive(GuideTour.portalArea);
     super.dispose();
   }
 

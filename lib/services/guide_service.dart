@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -270,9 +272,24 @@ class GuideService extends ChangeNotifier {
   }
 
   Future<void> finishTour() async {
-    if (_activeTour != null) {
-      await _markCompleted(_activeTour!);
+    final tour = _activeTour;
+    if (tour != null) {
+      await _markCompleted(tour);
     }
+    _clearActiveTour();
+  }
+
+  /// Synchrones Beenden — fuer [State.dispose]. SharedPreferences-Schreiben
+  /// laeuft im Hintergrund; UI-Zustand wird sofort zurueckgesetzt.
+  void finishTourNow() {
+    final tour = _activeTour;
+    if (tour != null) {
+      unawaited(_markCompleted(tour));
+    }
+    _clearActiveTour();
+  }
+
+  void _clearActiveTour() {
     _isActive = false;
     _isPaused = false;
     _steps = [];

@@ -8,9 +8,9 @@
 import 'package:flutter/material.dart';
 import '../widgets/npub_chip.dart';
 import '../services/meetup_calendar_service.dart';
-import 'package:provider/provider.dart';
 
 import '../services/guide_service.dart';
+import '../mixins/guide_service_host.dart';
 import '../theme.dart';
 import '../tours/more_tours.dart';
 import '../l10n/app_localizations.dart';
@@ -23,7 +23,8 @@ class PortalMeetupsScreen extends StatefulWidget {
   State<PortalMeetupsScreen> createState() => _PortalMeetupsScreenState();
 }
 
-class _PortalMeetupsScreenState extends State<PortalMeetupsScreen> {
+class _PortalMeetupsScreenState extends State<PortalMeetupsScreen>
+    with GuideServiceHost {
   bool _checking = true;       // initiale Token-Prüfung
   bool _connected = false;
   bool _loggingIn = false;
@@ -40,7 +41,7 @@ class _PortalMeetupsScreenState extends State<PortalMeetupsScreen> {
   Future<void> _startTour() async {
     await Future.delayed(const Duration(milliseconds: 700));
     if (!mounted) return;
-    final guide = context.read<GuideService>();
+    final guide = this.guide;
     if (await guide.wasTourCompleted(GuideTour.myMeetups)) return;
     if (!mounted) return;
     await guide.startTour(GuideTour.myMeetups, MyMeetupsTour.steps());
@@ -48,8 +49,7 @@ class _PortalMeetupsScreenState extends State<PortalMeetupsScreen> {
 
   @override
   void dispose() {
-    final guide = context.read<GuideService>();
-    if (guide.activeTour == GuideTour.myMeetups) guide.finishTour();
+    finishGuideTourIfActive(GuideTour.myMeetups);
     super.dispose();
   }
 

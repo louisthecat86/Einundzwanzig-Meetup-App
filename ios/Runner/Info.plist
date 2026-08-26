@@ -24,8 +24,6 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NFCReaderUsageDescription</key>
-	<string>Diese App nutzt NFC, um Meetup-Badges zu sammeln und Identitäten zu verifizieren.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Diese App kann Meetup-Termine in deinen Kalender eintragen.</string>
 	<key>NSCalendarsUsageDescription</key>

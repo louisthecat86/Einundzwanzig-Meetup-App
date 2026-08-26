@@ -8,10 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme.dart';
-import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/guide_service.dart';
+import '../mixins/guide_service_host.dart';
 import '../tours/more_tours.dart';
 import '../models/badge.dart';
 import 'badge_world_map_screen.dart';
@@ -222,7 +222,8 @@ class BadgeWalletScreen extends StatefulWidget {
   State<BadgeWalletScreen> createState() => _BadgeWalletScreenState();
 }
 
-class _BadgeWalletScreenState extends State<BadgeWalletScreen> {
+class _BadgeWalletScreenState extends State<BadgeWalletScreen>
+    with GuideServiceHost {
   @override
   void initState() {
     super.initState();
@@ -235,7 +236,7 @@ class _BadgeWalletScreenState extends State<BadgeWalletScreen> {
   Future<void> _startTour() async {
     await Future.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
-    final guide = context.read<GuideService>();
+    final guide = this.guide;
     if (await guide.wasTourCompleted(GuideTour.wallet)) return;
     if (!mounted) return;
     await guide.startTour(GuideTour.wallet, WalletTour.steps());
@@ -261,8 +262,7 @@ class _BadgeWalletScreenState extends State<BadgeWalletScreen> {
   void dispose() {
     // Bildschirm zu, Tour raus — sonst suchte das Overlay Ziele, die es
     // nicht mehr gibt.
-    final guide = context.read<GuideService>();
-    if (guide.activeTour == GuideTour.wallet) guide.finishTour();
+    finishGuideTourIfActive(GuideTour.wallet);
 
     _searchCtrl.dispose();
     super.dispose();
