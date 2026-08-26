@@ -1,10 +1,19 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/meetup.dart';
+import 'package:nostr/nostr.dart';
+
 import 'app_logger.dart';
 
 class MeetupService {
-  static const String _url = "https://portal.einundzwanzig.space/api/meetups";
+  /// Die schlanke Liste fuer die App.
+  ///
+  /// Frueher /api/meetups — der Karten-Endpunkt mit allen Feldern. Diese
+  /// Fassung liefert nur, was Liste und Karte brauchen, und ist spuerbar
+  /// schneller. Feldnamen sind dieselben, deshalb aendert sich am Einlesen
+  /// nichts.
+  static const String _url =
+      "https://portal.einundzwanzig.space/api/mobile/meetups";
 
   /// Erste brauchbare Zahl aus mehreren moeglichen Feldnamen.
   /// Das Portal liefert Koordinaten je nach Endpunkt als
@@ -73,6 +82,69 @@ class MeetupService {
 
   /// Stadt eines gespeicherten Favoriten — fuer Terminsuche und Wappen.
   static String cityFor(String stored) => resolveFavorite(stored)?.city ?? stored;
+
+  /// Ist dieser Pubkey der im Portal hinterlegte Schluessel eines Meetups?
+  ///
+  /// Das Portal fuehrt je Meetup ein `nostr`-Feld — den Schluessel der Gruppe
+  /// beziehungsweise ihres Betreuers. Wer dort eingetragen ist, betreut ein
+  /// Meetup; genau das wollte die Admin-Registry wissen und konnte es bisher
+  /// nicht beantworten.
+  ///
+  /// Der Grund, warum es das braucht: Die Registry kennt in der Anfangsphase
+  /// NUR die vom Super-Admin veroeffentlichte Liste. Ein Organisator, der
+  /// sein Meetup im Portal betreut, war fuer jedes fremde Geraet ein
+  /// Unbekannter — und der Weg ueber gesammelte Badges scheitert daran, dass
+  /// dafuer schon bekannte Aussteller noetig waeren.
+  ///
+  /// Nimmt hex ODER npub, weil beide Schreibweisen im Umlauf sind.
+  /// Laedt die Liste bei Bedarf nach.
+  ///
+  /// Beim Scannen kann sie noch fehlen — dann waere die Antwort "unbekannt",
+  /// obwohl nur die Daten fehlten. Genau diese Verwechslung von "nicht
+  /// gefunden" und "nicht nachgesehen" hat uns hier schon zweimal Zeit
+  /// gekostet.
+  /// Meetup zu einem Anzeigenamen, wie er auf dem Badge steht.
+  ///
+  /// Vergleicht Name UND Stadt, weil Badges mal das eine und mal das andere
+  /// tragen ("Einundzwanzig Aschaffenburg" gegen "Aschaffenburg").
+  static Meetup? byName(String name) {
+    final n = name.trim().toLowerCase();
+    if (n.isEmpty || _cache.isEmpty) return null;
+    for (final m in _cache) {
+      if (m.name.trim().toLowerCase() == n) return m;
+    }
+    for (final m in _cache) {
+      if (m.city.trim().toLowerCase() == n) return m;
+    }
+    return null;
+  }
+
+  static Future<Meetup?> organizerMeetupFor(String pubkeyHexOrNpub) async {
+    if (pubkeyHexOrNpub.isEmpty) return null;
+    if (_cache.isEmpty) {
+      try {
+        await fetchMeetups();
+      } catch (_) {
+        return null;
+      }
+    }
+    if (_cache.isEmpty) return null;
+
+    // Auf npub bringen: Das Portal speichert npub, der Scanner hat hex.
+    String npub = pubkeyHexOrNpub;
+    if (!npub.startsWith('npub')) {
+      try {
+        npub = Nip19.encodePubkey(pubkeyHexOrNpub);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    for (final m in _cache) {
+      if (m.nostrNpub.isNotEmpty && m.nostrNpub.trim() == npub) return m;
+    }
+    return null;
+  }
 
   static Future<List<Meetup>> fetchMeetups() async {
     try {

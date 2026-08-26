@@ -2271,7 +2271,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get mvUnknownSigner =>
-      '✗ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.';
+      'Kein Eintrag gefunden\nWeder in der Organisatoren-Liste noch bei den Leadern dieses Meetups ist dieser Schlüssel hinterlegt. Das Badge selbst ist gültig — die Signatur stimmt und ist an dieses Badge gebunden.';
 
   @override
   String get mvAdminCheckFailed =>
@@ -6143,4 +6143,9 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get evBadgeNoLocationSet =>
       'Für diesen Termin ist kein Ort auf der Karte hinterlegt — dadurch lässt sich hier kein Badge ausgeben oder abholen.';
+
+  @override
+  String mvPortalOrganizer(String meetup) {
+    return '✓ Organisator von $meetup\nIm Einundzwanzig-Portal als Leader dieses Meetups eingetragen.';
+  }
 }

@@ -1013,7 +1013,7 @@
       }
     }
   },
-  "mvUnknownSigner": "✗ UNKNOWN SIGNER!\nThis pubkey is not in the admin registry.",
+  "mvUnknownSigner": "No entry found\nThis key is listed neither in the organiser registry nor among this meetup's leaders. The badge itself is valid — the signature checks out and is bound to this badge.",
   "mvAdminCheckFailed": "! Cannot verify — the organiser registry was unreachable. The badge itself is valid; the signature checks out.",
   "mvLegacyBadge": "! Legacy badge (v1) — signer not verifiable",
   "mvBadgeBound": "🔗 Badge bound",
@@ -2644,5 +2644,13 @@
     }
   },
   "evBadgeNeedLocation": "A badge needs the event's location on the map — that is what proves who is on site.",
-  "evBadgeNoLocationSet": "This event has no location on the map — so no badge can be issued or collected here."
+  "evBadgeNoLocationSet": "This event has no location on the map — so no badge can be issued or collected here.",
+  "mvPortalOrganizer": "✓ Organiser of {meetup}\nListed in the Einundzwanzig portal as a leader of this meetup.",
+  "@mvPortalOrganizer": {
+    "placeholders": {
+      "meetup": {
+        "type": "String"
+      }
+    }
+  }
 }

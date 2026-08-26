@@ -2256,7 +2256,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mvUnknownSigner =>
-      '✗ UNKNOWN SIGNER!\nThis pubkey is not in the admin registry.';
+      'No entry found\nThis key is listed neither in the organiser registry nor among this meetup\'s leaders. The badge itself is valid — the signature checks out and is bound to this badge.';
 
   @override
   String get mvAdminCheckFailed =>
@@ -6099,4 +6099,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get evBadgeNoLocationSet =>
       'This event has no location on the map — so no badge can be issued or collected here.';
+
+  @override
+  String mvPortalOrganizer(String meetup) {
+    return '✓ Organiser of $meetup\nListed in the Einundzwanzig portal as a leader of this meetup.';
+  }
 }

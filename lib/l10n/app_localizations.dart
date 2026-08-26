@@ -4225,7 +4225,7 @@ abstract class AppLocalizations {
   /// No description provided for @mvUnknownSigner.
   ///
   /// In de, this message translates to:
-  /// **'✗ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.'**
+  /// **'Kein Eintrag gefunden\nWeder in der Organisatoren-Liste noch bei den Leadern dieses Meetups ist dieser Schlüssel hinterlegt. Das Badge selbst ist gültig — die Signatur stimmt und ist an dieses Badge gebunden.'**
   String get mvUnknownSigner;
 
   /// No description provided for @mvAdminCheckFailed.
@@ -11085,6 +11085,12 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Für diesen Termin ist kein Ort auf der Karte hinterlegt — dadurch lässt sich hier kein Badge ausgeben oder abholen.'**
   String get evBadgeNoLocationSet;
+
+  /// No description provided for @mvPortalOrganizer.
+  ///
+  /// In de, this message translates to:
+  /// **'✓ Organisator von {meetup}\nIm Einundzwanzig-Portal als Leader dieses Meetups eingetragen.'**
+  String mvPortalOrganizer(String meetup);
 }
 
 class _AppLocalizationsDelegate

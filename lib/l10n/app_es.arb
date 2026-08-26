@@ -1013,7 +1013,7 @@
       }
     }
   },
-  "mvUnknownSigner": "✗ ¡FIRMANTE DESCONOCIDO!\nEsta pubkey no está en el registro de admins.",
+  "mvUnknownSigner": "Sin registro\nEsta clave no figura ni en el registro de organizadores ni entre los líderes de este meetup. La insignia es válida: la firma es correcta y está vinculada a ella.",
   "mvAdminCheckFailed": "! No verificable: el registro de organizadores no estaba accesible. La insignia es válida; la firma es correcta.",
   "mvLegacyBadge": "! Insignia antigua (v1) — firmante no verificable",
   "mvBadgeBound": "🔗 Insignia vinculada",
@@ -2644,5 +2644,13 @@
     }
   },
   "evBadgeNeedLocation": "Una insignia necesita la ubicación del evento en el mapa: con ella se comprueba quién está allí.",
-  "evBadgeNoLocationSet": "Este evento no tiene ubicación en el mapa, así que aquí no se puede emitir ni recoger ninguna insignia."
+  "evBadgeNoLocationSet": "Este evento no tiene ubicación en el mapa, así que aquí no se puede emitir ni recoger ninguna insignia.",
+  "mvPortalOrganizer": "✓ Organizador de {meetup}\nRegistrado en el portal de Einundzwanzig como líder de este meetup.",
+  "@mvPortalOrganizer": {
+    "placeholders": {
+      "meetup": {
+        "type": "String"
+      }
+    }
+  }
 }

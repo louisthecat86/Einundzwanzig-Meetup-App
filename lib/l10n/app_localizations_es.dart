@@ -2271,7 +2271,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get mvUnknownSigner =>
-      '✗ ¡FIRMANTE DESCONOCIDO!\nEsta pubkey no está en el registro de admins.';
+      'Sin registro\nEsta clave no figura ni en el registro de organizadores ni entre los líderes de este meetup. La insignia es válida: la firma es correcta y está vinculada a ella.';
 
   @override
   String get mvAdminCheckFailed =>
@@ -6133,4 +6133,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get evBadgeNoLocationSet =>
       'Este evento no tiene ubicación en el mapa, así que aquí no se puede emitir ni recoger ninguna insignia.';
+
+  @override
+  String mvPortalOrganizer(String meetup) {
+    return '✓ Organizador de $meetup\nRegistrado en el portal de Einundzwanzig como líder de este meetup.';
+  }
 }

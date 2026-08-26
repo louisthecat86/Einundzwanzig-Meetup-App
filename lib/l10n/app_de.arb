@@ -1035,7 +1035,7 @@
       }
     }
   },
-  "mvUnknownSigner": "✗ UNBEKANNTER SIGNER!\nDieser Pubkey ist nicht in der Admin-Registry.",
+  "mvUnknownSigner": "Kein Eintrag gefunden\nWeder in der Organisatoren-Liste noch bei den Leadern dieses Meetups ist dieser Schlüssel hinterlegt. Das Badge selbst ist gültig — die Signatur stimmt und ist an dieses Badge gebunden.",
   "mvAdminCheckFailed": "! Nicht prüfbar — die Organisatoren-Liste war gerade nicht erreichbar. Das Badge selbst ist gültig; die Signatur stimmt.",
   "mvLegacyBadge": "! Legacy-Badge (v1) — Signer nicht prüfbar",
   "mvBadgeBound": "🔗 Badge gebunden",
@@ -2666,5 +2666,13 @@
     }
   },
   "evBadgeNeedLocation": "Für ein Badge braucht der Termin einen Ort auf der Karte — daran wird geprüft, wer vor Ort ist.",
-  "evBadgeNoLocationSet": "Für diesen Termin ist kein Ort auf der Karte hinterlegt — dadurch lässt sich hier kein Badge ausgeben oder abholen."
+  "evBadgeNoLocationSet": "Für diesen Termin ist kein Ort auf der Karte hinterlegt — dadurch lässt sich hier kein Badge ausgeben oder abholen.",
+  "mvPortalOrganizer": "✓ Organisator von {meetup}\nIm Einundzwanzig-Portal als Leader dieses Meetups eingetragen.",
+  "@mvPortalOrganizer": {
+    "placeholders": {
+      "meetup": {
+        "type": "String"
+      }
+    }
+  }
 }

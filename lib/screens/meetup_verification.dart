@@ -36,6 +36,7 @@ import '../services/coattendance_service.dart';
 import '../services/event_badge_chain_service.dart';
 import '../services/meetup_location_service.dart';
 import '../services/meetup_service.dart';
+import '../services/portal_leader_service.dart';
 import '../models/badge.dart';
 import '../models/meetup.dart';
 import '../services/badge_security.dart';
@@ -556,7 +557,67 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
               // als ein Fremder.
               adminCheckInfo = tr.mvAdminCheckFailed;
             } else {
-              adminCheckInfo = tr.mvUnknownSigner;
+              // ZWEITE Quelle: die Leader-Liste des Portals.
+              //
+              // Geprueft wird gegen die npubs GENAU DIESES Meetups. Eine
+              // flache Pruefung ueber alle waere ein Scheunentor: Wer im
+              // Portal ein Meetup anlegt, wird dessen Leader, und anlegen
+              // darf jeder. Ueber alle geprueft koennte sich also jeder
+              // selbst den Haken holen und danach Badges fuer FREMDE Meetups
+              // ausgeben.
+              final ownMeetup = MeetupService.resolveFavorite(meetupName) ??
+                  MeetupService.byName(meetupName);
+              if (ownMeetup != null) {
+                final id = int.tryParse(ownMeetup.id);
+                if (id != null) {
+                  // Das Portal fuehrt npubs, der Scanner hat hex.
+                  String signerNpub = '';
+                  try {
+                    signerNpub = NostrService.hexToNpub(adminPubkey);
+                  } catch (_) {}
+
+                  final leads = signerNpub.isEmpty
+                      ? null
+                      : await PortalLeaderService.isLeaderOf(id, signerNpub);
+                  if (leads == true) {
+                    isKnownAdmin = true;
+                    adminCheckInfo = tr.mvPortalOrganizer(
+                        ownMeetup.name.isNotEmpty
+                            ? ownMeetup.name
+                            : ownMeetup.city);
+                  } else if (leads == null) {
+                    // Keine Auskunft — nicht dasselbe wie ein Nein.
+                    adminCheckInfo = tr.mvAdminCheckFailed;
+                  }
+                }
+              }
+
+              if (adminCheckInfo.isEmpty && !isKnownAdmin) {
+              // DRITTE Quelle: das nostr-Feld am Meetup.
+              //
+              // Nur noch Rueckfall. Ben hat ausdruecklich darauf
+              // hingewiesen, dass es die schwaechere Quelle ist: Es ist nur
+              // gefuellt, wenn sich jemand per Nostr angemeldet hat — frueher
+              // lief die Anmeldung ueber Lightning, daher die vielen Luecken.
+              //
+              // Die Registry kennt in der Anfangsphase nur die Liste des
+              // Super-Admins. Wer sein Meetup im Portal betreut, steht dort
+              // aber mit seinem Schluessel — und ist damit genauso belegt
+              // wie ein Eintrag in der Registry, nur ueber einen anderen Weg.
+              // Ohne diese Pruefung meldete die App echte Organisatoren als
+              // Unbekannte, was gleich mehrere Tester zu Recht irritiert hat.
+              final portalMeetup =
+                  await MeetupService.organizerMeetupFor(adminPubkey);
+              if (portalMeetup != null) {
+                isKnownAdmin = true;
+                adminCheckInfo = tr.mvPortalOrganizer(
+                    portalMeetup.name.isNotEmpty
+                        ? portalMeetup.name
+                        : portalMeetup.city);
+              } else {
+                adminCheckInfo = tr.mvUnknownSigner;
+              }
+              }
             }
           } catch (e) {
             // Offline: Cache-Miss → Warnung anzeigen
