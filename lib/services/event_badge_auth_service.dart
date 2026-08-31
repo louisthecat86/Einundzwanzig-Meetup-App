@@ -17,6 +17,7 @@
 // ============================================
 
 import 'app_logger.dart';
+import '../models/user.dart';
 import 'admin_registry.dart';
 import 'portal_api_service.dart';
 import 'signing_service.dart';
@@ -55,12 +56,46 @@ class EventBadgeAuthService {
 
     try {
       final meetups = await PortalApiService.getMyMeetups();
-      if (meetups.any((m) => m.isLeader)) {
-        AppLogger.debug(_tag, 'Berechtigt ueber Portal-Leader.');
+      // Es genuegt, ueberhaupt einem Meetup im Portal zuzugehoeren.
+      //
+      // Vorher stand hier `m.isLeader` — und das war zu eng gedacht. Eine
+      // VERANSTALTUNG haengt an keinem Meetup: Sie hat einen eigenen Ort,
+      // einen eigenen Tag und eigene Helfer. Die Frage ist also nicht "leitet
+      // er dieses Meetup", sondern "ist er ueberhaupt Organisator".
+      //
+      // Genau diesen Widerspruch hat ein Tester gemeldet: Die
+      // Organisator-Kachel erschien (die prueft auf Zugehoerigkeit), der
+      // Badge-Schalter blieb gesperrt (der prueft frueher auf Leitung). Zwei
+      // Antworten auf dieselbe Frage.
+      if (meetups.isNotEmpty) {
+        AppLogger.debug(_tag,
+            'Berechtigt ueber Portal (${meetups.length} Meetup(s), '
+            'davon ${meetups.where((m) => m.isLeader).length} als Leader).');
         return EventBadgeRight.portalLeader;
       }
     } catch (e) {
       AppLogger.debug(_tag, 'Portal nicht abfragbar: $e');
+    }
+
+    // DRITTER Weg: der bereits festgestellte Status des Nutzers.
+    //
+    // Organisator wird man ueber das Portal ODER den Trust Score. Der zweite
+    // Weg fehlte hier — wer genug Meetups besucht hat und deshalb die
+    // Organisator-Kachel sieht, stand vor einem gesperrten Schalter.
+    //
+    // Bewusst als LETZTE Pruefung: Die beiden davor fragen bei der Quelle
+    // nach, diese liest nur, was die App zuletzt festgestellt hat. Das ist
+    // die schwaechere Auskunft — aber besser, als jemanden auszusperren, den
+    // die App selbst als Organisator fuehrt.
+    try {
+      final user = await UserProfile.load();
+      if (user.isAdmin) {
+        AppLogger.debug(_tag,
+            'Berechtigt ueber gespeicherten Status (${user.promotionSource}).');
+        return EventBadgeRight.adminRegistry;
+      }
+    } catch (e) {
+      AppLogger.debug(_tag, 'Nutzerprofil nicht lesbar: $e');
     }
 
     AppLogger.debug(_tag, 'Keine Berechtigung gefunden.');

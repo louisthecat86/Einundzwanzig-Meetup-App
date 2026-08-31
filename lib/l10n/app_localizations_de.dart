@@ -6148,4 +6148,25 @@ class AppLocalizationsDe extends AppLocalizations {
   String mvPortalOrganizer(String meetup) {
     return '✓ Organisator von $meetup\nIm Einundzwanzig-Portal als Leader dieses Meetups eingetragen.';
   }
+
+  @override
+  String get evCancelAction => 'Termin absagen';
+
+  @override
+  String get evCancelTitle => 'Termin absagen?';
+
+  @override
+  String evCancelBody(String title) {
+    return '„$title“ verschwindet aus allen Kalendern. Nostr kennt kein echtes Löschen — der Termin wird als abgesagt markiert und zusätzlich zur Entfernung gebeten. Rückgängig geht das nicht; du müsstest ihn neu anlegen.';
+  }
+
+  @override
+  String get evCancelConfirm => 'Absagen';
+
+  @override
+  String get evCancelDone => 'Termin abgesagt.';
+
+  @override
+  String get evCancelFailed =>
+      'Absage nicht angekommen — kein Relay hat sie angenommen.';
 }

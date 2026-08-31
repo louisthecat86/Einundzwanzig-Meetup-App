@@ -2652,5 +2652,18 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evCancelAction": "Cancelar la fecha",
+  "evCancelTitle": "¿Cancelar la fecha?",
+  "evCancelBody": "«{title}» desaparecerá de todos los calendarios. Nostr no permite borrar de verdad: se marca como cancelada y además se pide su eliminación. No se puede deshacer.",
+  "@evCancelBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "evCancelConfirm": "Cancelar",
+  "evCancelDone": "Fecha cancelada.",
+  "evCancelFailed": "La cancelación no llegó: ningún relé la aceptó."
 }

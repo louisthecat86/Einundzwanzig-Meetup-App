@@ -36,6 +36,15 @@ class NostrCalendarEvent {
   final int kind;
   final bool fromApp; // true, wenn via dieser App erstellt (client-Tag)
 
+  /// Status nach NIP-52: leer, `planned` oder `cancelled`.
+  ///
+  /// Abgesagte Termine bleiben im Netz stehen — Nostr kennt kein Loeschen,
+  /// nur Ersetzen. Sie tragen dieses Merkmal und werden nicht mehr
+  /// angezeigt.
+  final String status;
+
+  bool get isCancelled => status == 'cancelled';
+
   // =============================================
   // EVENT-BADGE (Zusatz-Tags, NIP-52 erlaubt beliebige weitere Tags —
   // fremde Clients ignorieren sie einfach)
@@ -96,6 +105,7 @@ class NostrCalendarEvent {
     required this.allDay,
     required this.kind,
     this.fromApp = false,
+    this.status = '',
     this.badgeEnabled = false,
     this.badgeImageUrl = '',
     this.lat = 0,
@@ -176,6 +186,7 @@ class NostrCalendarEvent {
         allDay: allDay,
         kind: kind,
         fromApp: fromApp,
+        status: tagVal('status'),
         badgeEnabled: badgeEnabled,
         badgeImageUrl: badgeImageUrl,
         lat: lat,
@@ -263,7 +274,8 @@ class CalendarEventService {
             if (msg.length >= 3 && msg[0] == 'EVENT') {
               final ev = NostrCalendarEvent.fromEvent(msg[2] as Map<String, dynamic>);
               // Ersetzbare Events: Die neueste Fassung gewinnt.
-              if (ev != null && (newest == null || ev.start.isAfter(newest!.start))) {
+              if (ev != null && !ev.isCancelled &&
+                  (newest == null || ev.start.isAfter(newest!.start))) {
                 newest = ev;
               }
             } else if (msg.isNotEmpty && msg[0] == 'EOSE') {
@@ -323,7 +335,10 @@ class CalendarEventService {
             final type = message[0] as String;
             if (type == 'EVENT' && message.length >= 3) {
               final ev = NostrCalendarEvent.fromEvent(message[2] as Map<String, dynamic>);
-              if (ev != null) results.add(ev);
+              // Abgesagte Termine gar nicht erst aufnehmen. Sie bleiben im
+              // Netz stehen — Nostr kennt kein Loeschen —, gehoeren aber in
+              // keinen Kalender.
+              if (ev != null && !ev.isCancelled) results.add(ev);
             } else if (type == 'EOSE') {
               if (!completer.isCompleted) completer.complete(results);
             }
@@ -413,6 +428,88 @@ class CalendarEventService {
       return 0;
     }
   }
+
+  /// Sagt einen Termin ab.
+  ///
+  /// ============================================
+  /// WARUM "ABSAGEN" UND NICHT "LOESCHEN"
+  /// ============================================
+  ///
+  /// Nostr kennt kein Loeschen. Ein Ereignis, das einmal auf Relays liegt,
+  /// laesst sich nicht zurueckholen — man kann nur BITTEN, es zu entfernen
+  /// (NIP-09, kind 5), und jedes Relay entscheidet selbst, ob es der Bitte
+  /// folgt. Manche tun es, manche nicht, Archive praktisch nie.
+  ///
+  /// Deshalb zwei Wege gleichzeitig:
+  ///
+  ///   1. Der Termin wird ERSETZT — gleiche Kennung, gleiche Art, aber mit
+  ///      `["status","cancelled"]`. Das ist der verlaessliche Teil: Ersetzbare
+  ///      Ereignisse werden von jedem Relay ueberschrieben, und jeder Client,
+  ///      der NIP-52 kennt, sieht die Absage.
+  ///
+  ///   2. Zusaetzlich geht eine Loeschbitte raus. Wo sie befolgt wird,
+  ///      verschwindet der Termin ganz.
+  ///
+  /// Ein reines kind 5 waere zu wenig gewesen: Bei einem Relay, das es
+  /// ignoriert, staende der Termin unveraendert weiter da — und der
+  /// Veranstalter waere in dem Glauben, abgesagt zu haben.
+  ///
+  /// Nur der Ersteller kann absagen: Ein ersetzbares Ereignis gehoert zu
+  /// seinem Schluessel, eine fremde Ersetzung entstuende gar nicht erst.
+  static Future<bool> cancelEvent(NostrCalendarEvent event) async {
+    try {
+      final me = await SigningService.pubkeyHex();
+      if (me == null || me != event.pubkey) {
+        AppLogger.warn(_tag, 'Absage abgelehnt: nicht der Ersteller.');
+        return false;
+      }
+
+      // --- 1. Ersetzen, mit Status "cancelled" ---
+      final tags = <List<String>>[
+        ['d', event.dTag],
+        ['title', event.title],
+        ['start', event.allDay
+            ? _ymd(event.start)
+            : (event.start.millisecondsSinceEpoch ~/ 1000).toString()],
+        ['status', 'cancelled'],
+        ['client', 'einundzwanzig-meetup-app'],
+      ];
+      final replaced = await SigningService.signEvent(
+        kind: event.kind,
+        tags: tags,
+        content: event.description,
+      );
+      final n = await _publish(replaced);
+
+      // --- 2. Loeschbitte hinterher ---
+      try {
+        final del = await SigningService.signEvent(
+          kind: 5,
+          tags: [
+            ['e', event.id],
+            ['a', event.address],
+            ['k', event.kind.toString()],
+          ],
+          content: 'Termin abgesagt',
+        );
+        await _publish(del);
+      } catch (e) {
+        // Die Bitte ist die Kuer. Schlaegt sie fehl, steht der Termin
+        // trotzdem als abgesagt da.
+        AppLogger.debug(_tag, 'Loeschbitte fehlgeschlagen: $e');
+      }
+
+      AppLogger.info(_tag,
+          'Termin "${event.title}" abgesagt — $n Relay(s) haben die Ersetzung angenommen.');
+      return n > 0;
+    } catch (e) {
+      AppLogger.warn(_tag, 'Absage fehlgeschlagen', e);
+      return false;
+    }
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   static Future<int> _publish(SignedEvent event) async {
     final active = await RelayConfig.getActiveRelays();

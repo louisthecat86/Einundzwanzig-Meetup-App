@@ -11091,6 +11091,42 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'✓ Organisator von {meetup}\nIm Einundzwanzig-Portal als Leader dieses Meetups eingetragen.'**
   String mvPortalOrganizer(String meetup);
+
+  /// No description provided for @evCancelAction.
+  ///
+  /// In de, this message translates to:
+  /// **'Termin absagen'**
+  String get evCancelAction;
+
+  /// No description provided for @evCancelTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Termin absagen?'**
+  String get evCancelTitle;
+
+  /// No description provided for @evCancelBody.
+  ///
+  /// In de, this message translates to:
+  /// **'„{title}“ verschwindet aus allen Kalendern. Nostr kennt kein echtes Löschen — der Termin wird als abgesagt markiert und zusätzlich zur Entfernung gebeten. Rückgängig geht das nicht; du müsstest ihn neu anlegen.'**
+  String evCancelBody(String title);
+
+  /// No description provided for @evCancelConfirm.
+  ///
+  /// In de, this message translates to:
+  /// **'Absagen'**
+  String get evCancelConfirm;
+
+  /// No description provided for @evCancelDone.
+  ///
+  /// In de, this message translates to:
+  /// **'Termin abgesagt.'**
+  String get evCancelDone;
+
+  /// No description provided for @evCancelFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Absage nicht angekommen — kein Relay hat sie angenommen.'**
+  String get evCancelFailed;
 }
 
 class _AppLocalizationsDelegate

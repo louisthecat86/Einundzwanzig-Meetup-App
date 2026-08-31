@@ -6104,4 +6104,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String mvPortalOrganizer(String meetup) {
     return '✓ Organiser of $meetup\nListed in the Einundzwanzig portal as a leader of this meetup.';
   }
+
+  @override
+  String get evCancelAction => 'Cancel this event';
+
+  @override
+  String get evCancelTitle => 'Cancel this event?';
+
+  @override
+  String evCancelBody(String title) {
+    return '“$title” disappears from every calendar. Nostr has no real delete — the event is marked cancelled and a removal request is sent as well. This cannot be undone; you would have to create it again.';
+  }
+
+  @override
+  String get evCancelConfirm => 'Cancel it';
+
+  @override
+  String get evCancelDone => 'Event cancelled.';
+
+  @override
+  String get evCancelFailed =>
+      'Cancellation not delivered — no relay accepted it.';
 }

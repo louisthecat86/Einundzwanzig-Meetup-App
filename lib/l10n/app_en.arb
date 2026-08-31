@@ -2652,5 +2652,18 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evCancelAction": "Cancel this event",
+  "evCancelTitle": "Cancel this event?",
+  "evCancelBody": "“{title}” disappears from every calendar. Nostr has no real delete — the event is marked cancelled and a removal request is sent as well. This cannot be undone; you would have to create it again.",
+  "@evCancelBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "evCancelConfirm": "Cancel it",
+  "evCancelDone": "Event cancelled.",
+  "evCancelFailed": "Cancellation not delivered — no relay accepted it."
 }

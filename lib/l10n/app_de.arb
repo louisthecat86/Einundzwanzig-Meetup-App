@@ -2674,5 +2674,18 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evCancelAction": "Termin absagen",
+  "evCancelTitle": "Termin absagen?",
+  "evCancelBody": "„{title}“ verschwindet aus allen Kalendern. Nostr kennt kein echtes Löschen — der Termin wird als abgesagt markiert und zusätzlich zur Entfernung gebeten. Rückgängig geht das nicht; du müsstest ihn neu anlegen.",
+  "@evCancelBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "evCancelConfirm": "Absagen",
+  "evCancelDone": "Termin abgesagt.",
+  "evCancelFailed": "Absage nicht angekommen — kein Relay hat sie angenommen."
 }

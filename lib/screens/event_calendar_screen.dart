@@ -16,9 +16,10 @@ import '../services/calendar_event_service.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../services/blossom_upload_service.dart';
+import 'package:provider/provider.dart';
+
 import '../services/event_badge_auth_service.dart';
 import '../services/guide_service.dart';
-import '../mixins/guide_service_host.dart';
 import '../tours/event_badge_tour.dart';
 import '../services/nostr_service.dart';
 import '../services/event_badge_session_service.dart';
@@ -355,6 +356,53 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
       messenger.showSnackBar(SnackBar(
           content: Text(t.rsvpFailed(err)), backgroundColor: cRed));
     }
+  }
+
+  /// Fragt nach und sagt den Termin dann ab.
+  Future<void> _confirmCancelEvent(
+      AppLocalizations t, NostrCalendarEvent event) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cCard,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: cTileBorder, width: 0.5)),
+        title: Text(t.evCancelTitle,
+            style: const TextStyle(
+                color: cText, fontSize: 17, fontWeight: FontWeight.w700)),
+        content: Text(t.evCancelBody(event.title),
+            style: const TextStyle(
+                color: cTextSecondary, fontSize: 14, height: 1.45)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(t.actionCancel,
+                style: const TextStyle(color: cTextSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: cRed),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(t.evCancelConfirm,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final done = await CalendarEventService.cancelEvent(event);
+    if (!mounted) return;
+
+    navigator.pop();
+    messenger.showSnackBar(SnackBar(
+      content: Text(done ? t.evCancelDone : t.evCancelFailed),
+      backgroundColor: done ? Colors.green.shade700 : cRed,
+    ));
+    if (done) _load();
   }
 
   /// Oeffnet den Chat zu einem Termin.
@@ -1108,6 +1156,30 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
               const SizedBox(height: 16),
               _badgeNotice(t, e),
             ],
+            // Absagen — nur fuer den Ersteller.
+            //
+            // Ein Termin gehoert zum Schluessel, der ihn signiert hat; eine
+            // fremde Absage entstuende gar nicht erst. Deshalb reicht die
+            // Pruefung hier, sie ist keine Sicherheitsgrenze, sondern
+            // verhindert nur einen Knopf, der nichts bewirken wuerde.
+            if (e.nostr != null && _myPubkey != null &&
+                e.nostr!.pubkey == _myPubkey) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _confirmCancelEvent(t, e.nostr!),
+                  icon: const Icon(Icons.event_busy_rounded,
+                      color: cRed, size: 18),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: cRed.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                  ),
+                  label: Text(t.evCancelAction,
+                      style: const TextStyle(color: cRed, fontSize: 13)),
+                ),
+              ),
+            ],
             // Zu- oder Absagen. Nur bei Nostr-Terminen, weil die Antwort
             // als NIP-52-Ereignis an der Termin-Adresse haengt — Portal-
             // Meetups haben keine.
@@ -1223,8 +1295,7 @@ class EventEditorScreen extends StatefulWidget {
   State<EventEditorScreen> createState() => _EventEditorScreenState();
 }
 
-class _EventEditorScreenState extends State<EventEditorScreen>
-    with GuideServiceHost {
+class _EventEditorScreenState extends State<EventEditorScreen> {
   final _titleCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
@@ -1265,7 +1336,7 @@ class _EventEditorScreenState extends State<EventEditorScreen>
     // Nur der Badge-Teil haengt an der Berechtigung: Wer den Schalter nicht
     // bedienen kann, bekommt die drei Schritte dazu gar nicht erst zu
     // sehen. Deshalb wird erst hier gestartet, wenn die Pruefung durch ist.
-    final guide = this.guide;
+    final guide = context.read<GuideService>();
     if (await guide.wasTourCompleted(GuideTour.events)) return;
     if (!mounted) return;
 
@@ -1284,7 +1355,8 @@ class _EventEditorScreenState extends State<EventEditorScreen>
   void dispose() {
     // Editor zu, Tour raus: Sonst suchte das Overlay Ziele in einem Blatt,
     // das nicht mehr existiert.
-    finishGuideTourIfActive(GuideTour.events);
+    final guide = context.read<GuideService>();
+    if (guide.activeTour == GuideTour.events) guide.finishTour();
 
     _titleCtrl.dispose();
     _locationCtrl.dispose();

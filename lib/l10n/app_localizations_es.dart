@@ -6138,4 +6138,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String mvPortalOrganizer(String meetup) {
     return '✓ Organizador de $meetup\nRegistrado en el portal de Einundzwanzig como líder de este meetup.';
   }
+
+  @override
+  String get evCancelAction => 'Cancelar la fecha';
+
+  @override
+  String get evCancelTitle => '¿Cancelar la fecha?';
+
+  @override
+  String evCancelBody(String title) {
+    return '«$title» desaparecerá de todos los calendarios. Nostr no permite borrar de verdad: se marca como cancelada y además se pide su eliminación. No se puede deshacer.';
+  }
+
+  @override
+  String get evCancelConfirm => 'Cancelar';
+
+  @override
+  String get evCancelDone => 'Fecha cancelada.';
+
+  @override
+  String get evCancelFailed =>
+      'La cancelación no llegó: ningún relé la aceptó.';
 }
