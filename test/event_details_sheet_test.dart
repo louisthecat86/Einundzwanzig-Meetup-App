@@ -4,6 +4,43 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('kurze Details bleiben kompakt und schließen nur das Sheet', (
+    tester,
+  ) async {
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              pageContext = context;
+              return const Text('Kalender');
+            },
+          ),
+        ),
+      ),
+    );
+    var closed = false;
+    final dismissed = showEventDetailsSheet(
+      context: pageContext,
+      builder: (_) => const Text('Kurzer Termin'),
+    ).then((_) => closed = true);
+    await tester.pumpAndSettle();
+    expect(closed, isFalse);
+    expect(tester.getSize(find.byType(BottomSheet)).height, lessThan(200));
+    expect(find.text('Kurzer Termin').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Schließen'));
+    await tester.pumpAndSettle();
+    await dismissed;
+    expect(closed, isTrue);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Kalender'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [const Size(402, 874), const Size(320, 568)]) {
     testWidgets(
       'lange Meetup-Details bleiben scrollbar und schließbar: $size',
@@ -30,18 +67,13 @@ void main() {
               body: Builder(
                 builder: (context) {
                   return TextButton(
-                    onPressed: () => showModalBottomSheet<void>(
+                    onPressed: () => showEventDetailsSheet(
                       context: context,
-                      isScrollControlled: true,
-                      useSafeArea: true,
-                      constraints: BoxConstraints(maxHeight: size.height * 0.9),
-                      builder: (_) => EventDetailsSheet(
-                        child: Column(
-                          children: [
-                            Text('Lange Meetup-Beschreibung. ' * 150),
-                            const Text('Zum Kalender'),
-                          ],
-                        ),
+                      builder: (_) => Column(
+                        children: [
+                          Text('Lange Meetup-Beschreibung. ' * 150),
+                          const Text('Zum Kalender'),
+                        ],
                       ),
                     ),
                     child: const Text('Details öffnen'),
@@ -59,11 +91,15 @@ void main() {
         expect(closeRect.top, greaterThanOrEqualTo(62));
         expect(closeRect.bottom, lessThan(size.height - 34));
         expect(close.hitTestable(), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(BottomSheet)).height,
+          lessThan(size.height - 62),
+        );
         expect(tester.takeException(), isNull);
 
         final scrollable = tester.state<ScrollableState>(
           find.descendant(
-            of: find.byType(EventDetailsSheet),
+            of: find.byType(BottomSheet),
             matching: find.byType(Scrollable),
           ),
         );
@@ -73,9 +109,28 @@ void main() {
         expect(tester.getRect(close), closeRect);
         expect(tester.takeException(), isNull);
 
+        // Auch ein bereits geöffnetes Sheet muss auf Drehung reagieren.
+        tester.view.physicalSize = Size(size.height, size.width);
+        tester.view.padding = const FakeViewPadding(
+          left: 62,
+          right: 62,
+          bottom: 21,
+        );
+        await tester.pumpAndSettle();
+        final landscapeClose = tester.getRect(close);
+        expect(landscapeClose.top, greaterThanOrEqualTo(0));
+        expect(landscapeClose.right, lessThanOrEqualTo(size.height - 62));
+        expect(landscapeClose.bottom, lessThan(size.width - 21));
+        expect(close.hitTestable(), findsOneWidget);
+        scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        expect(find.text('Zum Kalender').hitTestable(), findsOneWidget);
+        expect(tester.getRect(close), landscapeClose);
+        expect(tester.takeException(), isNull);
+
         await tester.tap(close);
         await tester.pumpAndSettle();
-        expect(find.byType(EventDetailsSheet), findsNothing);
+        expect(find.byType(BottomSheet), findsNothing);
         expect(find.text('Details öffnen'), findsOneWidget);
       },
     );

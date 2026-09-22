@@ -3,9 +3,33 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../theme.dart';
 
-/// Die Schließen-Aktion bleibt auch bei langen Beschreibungen erreichbar.
-class EventDetailsSheet extends StatelessWidget {
-  const EventDetailsSheet({super.key, required this.child});
+/// Öffnet Meetup-Details mit begrenzter Höhe und festem Schließen-Button.
+/// Der Builder liefert nur den Inhalt; Route und Layout bleiben hier gebündelt.
+Future<void> showEventDetailsSheet({
+  required BuildContext context,
+  required WidgetBuilder builder,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: cCard,
+    isScrollControlled: true,
+    useSafeArea: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sheetContext) => LayoutBuilder(
+      // Nach Abzug des oberen Sicherheitsabstands berechnen. LayoutBuilder
+      // passt die Grenze auch beim Drehen eines bereits offenen Sheets an.
+      builder: (context, constraints) => ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.9),
+        child: _EventDetailsSheet(child: builder(sheetContext)),
+      ),
+    ),
+  );
+}
+
+class _EventDetailsSheet extends StatelessWidget {
+  const _EventDetailsSheet({required this.child});
 
   final Widget child;
 

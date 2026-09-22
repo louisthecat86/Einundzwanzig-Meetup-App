@@ -475,11 +475,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     String two(int n) => n.toString().padLeft(2, '0');
     final d = event.startTime;
     final when = '${two(d.day)}.${two(d.month)}.${d.year} · ${two(d.hour)}:${two(d.minute)}';
-    showModalBottomSheet(
-      context: context, backgroundColor: cCard, isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    showEventDetailsSheet(
+      context: context,
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         final r = id == null ? null : _rsvp[id];
         final st = (r?['status'] ?? '').toString();
@@ -513,9 +510,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       child: CircularProgressIndicator(color: cGreen, strokeWidth: 2))
                   : Icon(ic, color: active ? cGreen : cTextSecondary, size: 16),
               const SizedBox(width: 7),
-              Text(label, style: TextStyle(
+              Flexible(child: Text(label, textAlign: TextAlign.center, style: TextStyle(
                 color: active ? cGreen : (sheetBusyStatus.isNotEmpty ? cTextTertiary : cText),
-                fontSize: 13.5, fontWeight: FontWeight.w700)),
+                fontSize: 13.5, fontWeight: FontWeight.w700))),
             ]))));
         Widget action(String label, IconData ic, VoidCallback onTap) => Expanded(
           child: GestureDetector(onTap: onTap, child: Container(
@@ -523,17 +520,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
             decoration: BoxDecoration(color: cSurface, borderRadius: BorderRadius.circular(11), border: Border.all(color: cTileBorder, width: 0.5)),
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
               Icon(ic, color: cTextSecondary, size: 15), const SizedBox(width: 7),
-              Text(label, style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600)),
+              Flexible(child: Text(label, textAlign: TextAlign.center, style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600))),
             ]))));
-        return EventDetailsSheet(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Row(children: [
               _crest(event), const SizedBox(width: 12),
               Expanded(child: Text(event.title, style: const TextStyle(color: cText, fontSize: 18, fontWeight: FontWeight.w800))),
             ]),
             const SizedBox(height: 14),
             Row(children: [const Icon(Icons.event_rounded, color: cTextTertiary, size: 15), const SizedBox(width: 8),
-              Text(when, style: const TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w600))]),
+              Expanded(child: Text(when, style: const TextStyle(color: cText, fontSize: 14, fontWeight: FontWeight.w600)))]),
             if (event.location.isNotEmpty) ...[const SizedBox(height: 7),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Icon(Icons.place_rounded, color: cTextTertiary, size: 15), const SizedBox(width: 8),
@@ -575,8 +571,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ));
               }),
             ]),
-          ]),
-        );
+        ]);
       }),
     );
   }
