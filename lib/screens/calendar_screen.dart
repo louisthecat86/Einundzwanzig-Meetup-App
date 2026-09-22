@@ -11,6 +11,7 @@ import '../models/calendar_event.dart';
 import '../models/meetup.dart';
 import '../theme.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/event_details_sheet.dart';
 
 class CalendarScreen extends StatefulWidget {
   // Wir erlauben einen optionalen Suchbegriff beim Start (z.B. vom Dashboard kommend)
@@ -476,6 +477,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final when = '${two(d.day)}.${two(d.month)}.${d.year} · ${two(d.hour)}:${two(d.minute)}';
     showModalBottomSheet(
       context: context, backgroundColor: cCard, isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         final r = id == null ? null : _rsvp[id];
@@ -493,6 +496,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           if (id == null || sheetBusyStatus.isNotEmpty) return; // Doppelklick-Schutz
           setSheet(() => sheetBusyStatus = status);
           await _doRsvp(id, status: status);
+          if (!ctx.mounted) return;
           setSheet(() => sheetBusyStatus = '');
         }
         Widget btn(String label, IconData ic, bool active, String forStatus, VoidCallback onTap) => Expanded(
@@ -521,11 +525,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               Icon(ic, color: cTextSecondary, size: 15), const SizedBox(width: 7),
               Text(label, style: const TextStyle(color: cText, fontSize: 13, fontWeight: FontWeight.w600)),
             ]))));
-        return SafeArea(child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        return EventDetailsSheet(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Center(child: Container(width: 44, height: 4, decoration: BoxDecoration(color: cTileBorder, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
             Row(children: [
               _crest(event), const SizedBox(width: 12),
               Expanded(child: Text(event.title, style: const TextStyle(color: cText, fontSize: 18, fontWeight: FontWeight.w800))),
@@ -575,7 +576,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
               }),
             ]),
           ]),
-        ));
+        );
       }),
     );
   }
