@@ -2719,5 +2719,13 @@
   "evIssuersDuplicate": "Steht schon auf der Liste.",
   "evIssuersSave": "Speichern",
   "evIssuersSaved": "Helfer gespeichert.",
-  "evIssuersFailed": "Nicht gespeichert — kein Relay hat die Änderung angenommen."
+  "evIssuersFailed": "Nicht gespeichert — kein Relay hat die Änderung angenommen.",
+  "verifyAlreadyEvent": "Du hast das Badge für „{name}“ schon. Ein Event zählt einmal — egal, an wie vielen Tagen du dabei bist.",
+  "@verifyAlreadyEvent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

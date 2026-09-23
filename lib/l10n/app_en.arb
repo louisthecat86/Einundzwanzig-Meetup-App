@@ -2697,5 +2697,13 @@
   "evIssuersDuplicate": "Already on the list.",
   "evIssuersSave": "Save",
   "evIssuersSaved": "Helpers saved.",
-  "evIssuersFailed": "Not saved — no relay accepted the change."
+  "evIssuersFailed": "Not saved — no relay accepted the change.",
+  "verifyAlreadyEvent": "You already have the badge for “{name}”. An event counts once, however many days you attend.",
+  "@verifyAlreadyEvent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

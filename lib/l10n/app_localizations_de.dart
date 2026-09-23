@@ -6228,4 +6228,9 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get evIssuersFailed =>
       'Nicht gespeichert — kein Relay hat die Änderung angenommen.';
+
+  @override
+  String verifyAlreadyEvent(String name) {
+    return 'Du hast das Badge für „$name“ schon. Ein Event zählt einmal — egal, an wie vielen Tagen du dabei bist.';
+  }
 }

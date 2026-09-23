@@ -11217,6 +11217,12 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Nicht gespeichert — kein Relay hat die Änderung angenommen.'**
   String get evIssuersFailed;
+
+  /// No description provided for @verifyAlreadyEvent.
+  ///
+  /// In de, this message translates to:
+  /// **'Du hast das Badge für „{name}“ schon. Ein Event zählt einmal — egal, an wie vielen Tagen du dabei bist.'**
+  String verifyAlreadyEvent(String name);
 }
 
 class _AppLocalizationsDelegate

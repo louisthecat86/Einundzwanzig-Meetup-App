@@ -56,6 +56,11 @@ class MeetupVerificationScreen extends StatefulWidget {
   State<MeetupVerificationScreen> createState() => _MeetupVerificationScreenState();
 }
 
+/// Kennung eines Event-Badges: je EVENT, ohne Datum.
+///
+/// Oeffentlich, weil Wallet und Netzwerk dieselbe Form kennen muessen.
+String eventBadgeKey(String eventAddress) => 'evt|$eventAddress';
+
 class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> with SingleTickerProviderStateMixin {
   bool _tagProcessing = false; // Sperre gegen Mehrfach-Erkennung desselben Tags
 
@@ -382,12 +387,33 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
     // echte, signierte Badge — genau der Fall, wenn zwei Organisatoren sich
     // auf demselben Meetup gegenseitig bestaetigen (Kempten, Aug. 2026).
     final collectible = storedNow.where((b) => !b.isOrganizer);
-    final bool alreadyCollected = collectible.any((b) =>
-        (b.meetupEventId.isNotEmpty && b.meetupEventId == prospectiveEventId) ||
-        (b.meetupName == fullName &&
-            b.date.year == DateTime.now().year &&
-            b.date.month == DateTime.now().month &&
-            b.date.day == DateTime.now().day));
+
+    // VERANSTALTUNGEN: ein Badge je EVENT, nicht je Tag.
+    //
+    // Ein Event ueber drei Tage ist EINE Teilnahme, egal an welchem Tag man
+    // kommt. Frueher galt hier dieselbe Regel wie bei Meetups — ein Badge je
+    // Tag —, und aus der Zitadelle wurden drei Badges: dreifach im Trust
+    // Score, dreifach in der Wallet, fuer denselben Besuch.
+    //
+    // Erkannt wird das Event an seiner ADRESSE, nicht am Titel: Ein
+    // umbenanntes Event bliebe sonst ein neues. Aeltere Event-Badges tragen
+    // die Adresse noch nicht in der Kennung; fuer die greift der Titel als
+    // Rueckfall.
+    final scanEventAddress = BadgeSecurity.eventAddressOf(normalized);
+    final bool alreadyCollected;
+    if (scanEventAddress != null) {
+      final eventKey = eventBadgeKey(scanEventAddress);
+      alreadyCollected = collectible.any((b) =>
+          b.meetupEventId == eventKey ||
+          (b.isEvent && b.meetupName == fullName));
+    } else {
+      alreadyCollected = collectible.any((b) =>
+          (b.meetupEventId.isNotEmpty && b.meetupEventId == prospectiveEventId) ||
+          (b.meetupName == fullName &&
+              b.date.year == DateTime.now().year &&
+              b.date.month == DateTime.now().month &&
+              b.date.day == DateTime.now().day));
+    }
     if (alreadyCollected) {
       AppLogger.diag('Scan',
           'Bereits gesammelt: "$fullName" ($prospectiveEventId) — Scan abgelehnt.');
@@ -497,7 +523,13 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       final usableName = nameSlug.isNotEmpty &&
           nameSlug != unknownSlug &&
           nameSlug.replaceAll('-', '').isNotEmpty;
-      final meetupEventId = usableName ? '$nameSlug-$dateStr' : '';
+      // Veranstaltungen tragen die EVENT-ADRESSE statt Name und Tag — damit
+      // ist ein mehrtaegiges Event eine einzige Teilnahme (siehe
+      // Duplikat-Pruefung oben).
+      final evAddr = BadgeSecurity.eventAddressOf(normalized);
+      final meetupEventId = evAddr != null
+          ? eventBadgeKey(evAddr)
+          : (usableName ? '$nameSlug-$dateStr' : '');
       if (!usableName) {
         AppLogger.warn('Scan',
             'Tag ohne verwertbaren Meetup-Namen — keine Kennung vergeben, '
@@ -726,7 +758,11 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
       }
 
     } else {
-      msg = tr.verifyAlreadyToday(fullName);
+      // Bei Events nicht "heute" — das Badge gilt fuer das ganze Event, und
+      // "schon heute gesammelt" wuerde nahelegen, morgen ginge es wieder.
+      msg = scanEventAddress != null
+          ? tr.verifyAlreadyEvent(fullName)
+          : tr.verifyAlreadyToday(fullName);
       _pendingBadge = null;
       _pendingOrgLat = 0;
       _pendingOrgLng = 0;

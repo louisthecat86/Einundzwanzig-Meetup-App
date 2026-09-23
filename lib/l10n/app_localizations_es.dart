@@ -6218,4 +6218,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get evIssuersFailed => 'No guardado: ningún relé aceptó el cambio.';
+
+  @override
+  String verifyAlreadyEvent(String name) {
+    return 'Ya tienes la insignia de «$name». Un evento cuenta una vez, sin importar cuántos días asistas.';
+  }
 }

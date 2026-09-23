@@ -2697,5 +2697,13 @@
   "evIssuersDuplicate": "Ya está en la lista.",
   "evIssuersSave": "Guardar",
   "evIssuersSaved": "Ayudantes guardados.",
-  "evIssuersFailed": "No guardado: ningún relé aceptó el cambio."
+  "evIssuersFailed": "No guardado: ningún relé aceptó el cambio.",
+  "verifyAlreadyEvent": "Ya tienes la insignia de «{name}». Un evento cuenta una vez, sin importar cuántos días asistas.",
+  "@verifyAlreadyEvent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }
