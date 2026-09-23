@@ -18,6 +18,7 @@ import '../services/event_chat_service.dart';
 import '../services/event_rsvp_service.dart';
 import '../theme.dart';
 import 'chat_screen.dart';
+import 'p2p_match_screen.dart';
 
 /// Ein anstehender Meetup-Termin aus den Favoriten.
 class MyMeetupDate {
@@ -286,6 +287,19 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
               child: const Icon(Icons.forum_rounded, color: cNostr, size: 19),
             ),
           ),
+          IconButton(
+            tooltip: 'Bitcoin P2P Matchmaker (Beispiel)',
+            icon: const Icon(Icons.currency_bitcoin, color: cOrange),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => P2pMatchScreen(
+                eventAddress: m.event.portalEventId != null
+                    ? 'portal-event:${m.event.portalEventId}'
+                    : 'meetup:${m.favKey}:${m.event.startTime.toUtc().millisecondsSinceEpoch ~/ 1000}',
+                eventTitle: m.label,
+                eventStart: m.event.startTime,
+              ),
+            )),
+          ),
         ]),
       ),
     );
@@ -367,6 +381,17 @@ class _MyEventsScreenState extends State<MyEventsScreen> {
                   ]),
             ),
             const SizedBox(width: 10),
+            IconButton(
+              tooltip: 'Bitcoin P2P Matchmaker (Beispiel)',
+              icon: const Icon(Icons.currency_bitcoin, color: cOrange),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => P2pMatchScreen(
+                  eventAddress: event.address,
+                  eventTitle: event.title,
+                  eventStart: event.start,
+                ),
+              )),
+            ),
             // Die Sprechblase traegt den Zaehler. Ohne Neues bleibt sie
             // blass — sichtbar genug, um den Weg zu zeigen, ruhig genug, um
             // nicht nach Aufmerksamkeit zu rufen.
