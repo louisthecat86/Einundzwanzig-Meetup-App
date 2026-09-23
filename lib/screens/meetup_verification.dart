@@ -527,9 +527,19 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
       if (verifyResult != null && verifyResult.version >= 2 && adminPubkey.isNotEmpty) {
         if (eventAddress != null) {
+          // Zeitpunkt fuer EHEMALIGE Helfer: JETZT, von der Uhr dessen, der
+          // gerade scannt — nicht der Zeitstempel im Code.
+          //
+          // Der Zeitstempel im Code stammt vom Geraet des Helfers. Ein
+          // entfernter Helfer koennte seine Uhr zurueckstellen und neue
+          // Badges ausgeben, die vor seinem Entfernen zu liegen scheinen. Die
+          // Uhr des Scannenden kann er nicht beeinflussen. Und fuer ehrliche
+          // Helfer macht es keinen Unterschied: Der rollierende Code wird
+          // ohnehin sofort gescannt.
           final chain = await EventBadgeChainService.verify(
             eventAddress: eventAddress,
             signerPubkey: adminPubkey,
+            issuedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
           );
           isKnownAdmin = chain.ok;
           eventBadgeImage = chain.badgeImageUrl;

@@ -2709,5 +2709,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "evIssuersTitle": "Badges verteilen",
+  "evIssuerCreator": "Veranstalter",
+  "evIssuersEdit": "Helfer bearbeiten",
+  "evIssuersEditHint": "Wer hier steht, kann vor Ort Badges ausgeben. Wer entfernt wird, kann ab sofort keine mehr ausgeben — Badges, die er vorher verteilt hat, bleiben gültig.",
+  "evIssuersNone": "Noch keine Helfer — nur du gibst Badges aus.",
+  "evIssuersInvalid": "Das ist kein gültiger npub.",
+  "evIssuersDuplicate": "Steht schon auf der Liste.",
+  "evIssuersSave": "Speichern",
+  "evIssuersSaved": "Helfer gespeichert.",
+  "evIssuersFailed": "Nicht gespeichert — kein Relay hat die Änderung angenommen."
 }

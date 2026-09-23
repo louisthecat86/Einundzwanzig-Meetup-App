@@ -68,15 +68,38 @@ class NostrCalendarEvent {
   /// Beteiligte an.
   final List<String> issuers;
 
+  /// Ehemalige Helfer: pubkey-hex -> Unix-Zeit, bis zu der sie ausgeben
+  /// durften.
+  ///
+  /// Wer aus der Liste genommen wird, verschwindet nicht spurlos, sondern
+  /// landet hier. Grund: Die App prueft JEDES Event-Badge gegen die AKTUELLE
+  /// Fassung des Termins. Ein einfaches Loeschen haette alle Badges, die der
+  /// Helfer je ausgegeben hat, rueckwirkend ungueltig gemacht — auch die der
+  /// Leute, die ordentlich vor Ort waren. Mit dem Zeitpunkt bleibt gueltig,
+  /// was VORHER ausgegeben wurde; was danach kommt, nicht.
+  ///
+  /// Tag: `['p', '<hex>', '', 'former_issuer', '<unix>']`.
+  final Map<String, int> formerIssuers;
+
   /// Darf [pubkeyHex] fuer dieses Event Badges ausstellen?
   ///
   /// Der Ersteller selbst zaehlt immer dazu — er hat das Event signiert und
   /// muss sich nicht zusaetzlich selbst eintragen.
-  bool isIssuer(String pubkeyHex) {
+  /// Darf [pubkeyHex] fuer diesen Termin Badges ausgeben?
+  ///
+  /// [atEpoch] ist der signierte Ausstellungszeitpunkt des Badges. Nur mit
+  /// ihm zaehlen EHEMALIGE Helfer — und nur fuer die Zeit, in der sie es
+  /// noch waren. Ohne Zeitpunkt gelten nur die aktuellen.
+  bool isIssuer(String pubkeyHex, {int? atEpoch}) {
     if (pubkeyHex.isEmpty) return false;
     final k = pubkeyHex.toLowerCase();
-    return k == pubkey.toLowerCase() ||
-        issuers.any((i) => i.toLowerCase() == k);
+    if (k == pubkey.toLowerCase()) return true;
+    if (issuers.any((i) => i.toLowerCase() == k)) return true;
+    if (atEpoch == null) return false;
+    for (final e in formerIssuers.entries) {
+      if (e.key.toLowerCase() == k && atEpoch <= e.value) return true;
+    }
+    return false;
   }
 
   /// Laeuft das Zeitfenster gerade? Badges gibt es nur am Termintag —
@@ -111,6 +134,7 @@ class NostrCalendarEvent {
     this.lat = 0,
     this.lng = 0,
     this.issuers = const [],
+    this.formerIssuers = const {},
   });
 
   /// Tag (ohne Uhrzeit) für die Kalender-Gruppierung.
@@ -173,6 +197,15 @@ class NostrCalendarEvent {
           .map((x) => x[1])
           .where((x) => x.length == 64)
           .toList();
+      final formerIssuers = <String, int>{
+        for (final x in tags)
+          if (x.length >= 5 &&
+              x[0] == 'p' &&
+              x[3] == 'former_issuer' &&
+              x[1].length == 64 &&
+              int.tryParse(x[4]) != null)
+            x[1]: int.parse(x[4]),
+      };
 
       return NostrCalendarEvent(
         id: (e['id'] ?? '').toString(),
@@ -192,6 +225,7 @@ class NostrCalendarEvent {
         lat: lat,
         lng: lng,
         issuers: issuers,
+        formerIssuers: formerIssuers,
       );
     } catch (_) {
       return null;
@@ -375,10 +409,15 @@ class CalendarEventService {
     double lat = 0,
     double lng = 0,
     List<String> issuers = const [],
+    Map<String, int> formerIssuers = const {},
+    // Gesetzt beim BEARBEITEN: Dieselbe Kennung ersetzt den bestehenden
+    // Termin, statt einen zweiten daneben zu legen.
+    String? existingDTag,
   }) async {
     try {
       final random = Random.secure();
-      final dTag = List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+      final dTag = existingDTag ??
+          List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
 
       // Die Badge-Tags sind fuer beide Event-Arten gleich. Sie stehen hier
       // einmal, damit sie nicht in zwei Zweigen auseinanderlaufen koennen.
@@ -391,6 +430,10 @@ class CalendarEventService {
         if (badgeEnabled)
           for (final hex in issuers)
             if (hex.length == 64) ['p', hex, '', 'issuer'],
+        if (badgeEnabled)
+          for (final e in formerIssuers.entries)
+            if (e.key.length == 64)
+              ['p', e.key, '', 'former_issuer', e.value.toString()],
       ];
 
       final List<List<String>> tags;
@@ -426,6 +469,63 @@ class CalendarEventService {
     } catch (e) {
       AppLogger.debug(_tag, 'Event-Publish fehlgeschlagen: $e');
       return 0;
+    }
+  }
+
+  /// Aendert die Helferliste eines Termins.
+  ///
+  /// Nur der Ersteller kann das — ein ersetzbares Ereignis gehoert dem
+  /// Schluessel, der es signiert hat. Alle anderen Angaben bleiben, wie sie
+  /// sind; ersetzt wird nur die Liste.
+  ///
+  /// Wer herausfaellt, wird zum EHEMALIGEN Helfer mit dem jetzigen
+  /// Zeitpunkt. Wer wieder aufgenommen wird, verliert diesen Vermerk.
+  static Future<bool> updateIssuers(
+      NostrCalendarEvent event, List<String> newIssuersHex) async {
+    try {
+      final me = await SigningService.pubkeyHex();
+      if (me == null || me != event.pubkey) {
+        AppLogger.warn(_tag, 'Helfer aendern abgelehnt: nicht der Ersteller.');
+        return false;
+      }
+
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final wanted = newIssuersHex
+          .map((h) => h.toLowerCase())
+          .where((h) => h.length == 64 && h != event.pubkey.toLowerCase())
+          .toSet();
+
+      final former = Map<String, int>.from(event.formerIssuers);
+      for (final old in event.issuers) {
+        final k = old.toLowerCase();
+        if (!wanted.contains(k)) former[k] = now; // faellt heraus
+      }
+      for (final k in wanted) {
+        former.remove(k); // wieder aufgenommen
+      }
+
+      final n = await publishEvent(
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        start: event.start,
+        end: event.end,
+        allDay: event.allDay,
+        badgeEnabled: event.badgeEnabled,
+        badgeImageUrl: event.badgeImageUrl,
+        lat: event.lat,
+        lng: event.lng,
+        issuers: wanted.toList(),
+        formerIssuers: former,
+        existingDTag: event.dTag,
+      );
+      AppLogger.info(_tag,
+          'Helfer fuer "${event.title}" geaendert: ${wanted.length} aktiv, '
+          '${former.length} ehemalig — $n Relay(s) haben angenommen.');
+      return n > 0;
+    } catch (e) {
+      AppLogger.warn(_tag, 'Helfer aendern fehlgeschlagen', e);
+      return false;
     }
   }
 

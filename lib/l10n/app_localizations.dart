@@ -11157,6 +11157,66 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'{fixed} von {total} jetzt veröffentlicht.'**
   String mnRetryResult(int fixed, int total);
+
+  /// No description provided for @evIssuersTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Badges verteilen'**
+  String get evIssuersTitle;
+
+  /// No description provided for @evIssuerCreator.
+  ///
+  /// In de, this message translates to:
+  /// **'Veranstalter'**
+  String get evIssuerCreator;
+
+  /// No description provided for @evIssuersEdit.
+  ///
+  /// In de, this message translates to:
+  /// **'Helfer bearbeiten'**
+  String get evIssuersEdit;
+
+  /// No description provided for @evIssuersEditHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Wer hier steht, kann vor Ort Badges ausgeben. Wer entfernt wird, kann ab sofort keine mehr ausgeben — Badges, die er vorher verteilt hat, bleiben gültig.'**
+  String get evIssuersEditHint;
+
+  /// No description provided for @evIssuersNone.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch keine Helfer — nur du gibst Badges aus.'**
+  String get evIssuersNone;
+
+  /// No description provided for @evIssuersInvalid.
+  ///
+  /// In de, this message translates to:
+  /// **'Das ist kein gültiger npub.'**
+  String get evIssuersInvalid;
+
+  /// No description provided for @evIssuersDuplicate.
+  ///
+  /// In de, this message translates to:
+  /// **'Steht schon auf der Liste.'**
+  String get evIssuersDuplicate;
+
+  /// No description provided for @evIssuersSave.
+  ///
+  /// In de, this message translates to:
+  /// **'Speichern'**
+  String get evIssuersSave;
+
+  /// No description provided for @evIssuersSaved.
+  ///
+  /// In de, this message translates to:
+  /// **'Helfer gespeichert.'**
+  String get evIssuersSaved;
+
+  /// No description provided for @evIssuersFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Nicht gespeichert — kein Relay hat die Änderung angenommen.'**
+  String get evIssuersFailed;
 }
 
 class _AppLocalizationsDelegate

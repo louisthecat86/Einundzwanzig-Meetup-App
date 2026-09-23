@@ -6186,4 +6186,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String mnRetryResult(int fixed, int total) {
     return '$fixed de $total publicadas ahora.';
   }
+
+  @override
+  String get evIssuersTitle => 'Reparten insignias';
+
+  @override
+  String get evIssuerCreator => 'organizador';
+
+  @override
+  String get evIssuersEdit => 'Editar ayudantes';
+
+  @override
+  String get evIssuersEditHint =>
+      'Quien figura aquí puede repartir insignias en el lugar. Quien se elimine ya no podrá emitir nuevas; las que ya repartió siguen siendo válidas.';
+
+  @override
+  String get evIssuersNone =>
+      'Aún no hay ayudantes: solo tú repartes insignias.';
+
+  @override
+  String get evIssuersInvalid => 'No es un npub válido.';
+
+  @override
+  String get evIssuersDuplicate => 'Ya está en la lista.';
+
+  @override
+  String get evIssuersSave => 'Guardar';
+
+  @override
+  String get evIssuersSaved => 'Ayudantes guardados.';
+
+  @override
+  String get evIssuersFailed => 'No guardado: ningún relé aceptó el cambio.';
 }

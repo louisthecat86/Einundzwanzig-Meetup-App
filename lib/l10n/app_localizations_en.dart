@@ -6152,4 +6152,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String mnRetryResult(int fixed, int total) {
     return '$fixed of $total now published.';
   }
+
+  @override
+  String get evIssuersTitle => 'Handing out badges';
+
+  @override
+  String get evIssuerCreator => 'organiser';
+
+  @override
+  String get evIssuersEdit => 'Edit helpers';
+
+  @override
+  String get evIssuersEditHint =>
+      'Everyone listed here can hand out badges on site. Anyone removed can no longer issue new ones — badges they already handed out stay valid.';
+
+  @override
+  String get evIssuersNone => 'No helpers yet — only you hand out badges.';
+
+  @override
+  String get evIssuersInvalid => 'That is not a valid npub.';
+
+  @override
+  String get evIssuersDuplicate => 'Already on the list.';
+
+  @override
+  String get evIssuersSave => 'Save';
+
+  @override
+  String get evIssuersSaved => 'Helpers saved.';
+
+  @override
+  String get evIssuersFailed => 'Not saved — no relay accepted the change.';
 }

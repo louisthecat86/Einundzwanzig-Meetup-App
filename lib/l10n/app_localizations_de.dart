@@ -6196,4 +6196,36 @@ class AppLocalizationsDe extends AppLocalizations {
   String mnRetryResult(int fixed, int total) {
     return '$fixed von $total jetzt veröffentlicht.';
   }
+
+  @override
+  String get evIssuersTitle => 'Badges verteilen';
+
+  @override
+  String get evIssuerCreator => 'Veranstalter';
+
+  @override
+  String get evIssuersEdit => 'Helfer bearbeiten';
+
+  @override
+  String get evIssuersEditHint =>
+      'Wer hier steht, kann vor Ort Badges ausgeben. Wer entfernt wird, kann ab sofort keine mehr ausgeben — Badges, die er vorher verteilt hat, bleiben gültig.';
+
+  @override
+  String get evIssuersNone => 'Noch keine Helfer — nur du gibst Badges aus.';
+
+  @override
+  String get evIssuersInvalid => 'Das ist kein gültiger npub.';
+
+  @override
+  String get evIssuersDuplicate => 'Steht schon auf der Liste.';
+
+  @override
+  String get evIssuersSave => 'Speichern';
+
+  @override
+  String get evIssuersSaved => 'Helfer gespeichert.';
+
+  @override
+  String get evIssuersFailed =>
+      'Nicht gespeichert — kein Relay hat die Änderung angenommen.';
 }

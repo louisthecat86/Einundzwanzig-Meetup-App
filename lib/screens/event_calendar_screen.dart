@@ -8,6 +8,8 @@
 // ============================================
 
 import 'package:flutter/material.dart';
+import 'package:nostr/nostr.dart' show Nip19;
+import '../widgets/npub_chip.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:add_2_calendar/add_2_calendar.dart' as cal;
 import '../theme.dart';
@@ -356,6 +358,253 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
       messenger.showSnackBar(SnackBar(
           content: Text(t.rsvpFailed(err)), backgroundColor: cRed));
     }
+  }
+
+  /// Die Helfer eines Termins, mit Profilnamen.
+  ///
+  /// Der Ersteller steht immer zuerst — er darf ohnehin, und ohne ihn
+  /// saehe es aus, als gaebe es niemanden. Fuer den Ersteller selbst gibt es
+  /// darunter den Weg zum Bearbeiten.
+  Widget _issuerList(AppLocalizations t, NostrCalendarEvent event) {
+    String npubOf(String hex) {
+      try {
+        return Nip19.encodePubkey(hex);
+      } catch (_) {
+        return hex;
+      }
+    }
+
+    final amCreator = _myPubkey != null && _myPubkey == event.pubkey;
+    final people = <(String, bool)>[
+      (event.pubkey, true),
+      for (final h in event.issuers)
+        if (h.toLowerCase() != event.pubkey.toLowerCase()) (h, false),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      decoration: BoxDecoration(
+        color: cSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cTileBorder, width: 0.5),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(t.evIssuersTitle.toUpperCase(),
+            style: const TextStyle(
+                color: cTextTertiary,
+                fontSize: 10.5,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        for (final (hex, isCreator) in people)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              Icon(isCreator ? Icons.star_rounded : Icons.person_rounded,
+                  size: 15, color: isCreator ? cOrange : cTextTertiary),
+              const SizedBox(width: 8),
+              Flexible(
+                child: NpubChip(npubOf(hex),
+                    showIcon: false,
+                    style: const TextStyle(color: cText, fontSize: 13)),
+              ),
+              if (isCreator) ...[
+                const SizedBox(width: 6),
+                Text(t.evIssuerCreator,
+                    style: const TextStyle(
+                        color: cTextTertiary, fontSize: 11)),
+              ],
+            ]),
+          ),
+        if (amCreator) ...[
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => _editIssuers(t, event),
+              icon: const Icon(Icons.edit_rounded, size: 16, color: cOrange),
+              label: Text(t.evIssuersEdit,
+                  style: const TextStyle(
+                      color: cOrange, fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  /// Bearbeiten der Helferliste — nur fuer den Ersteller.
+  Future<void> _editIssuers(
+      AppLocalizations t, NostrCalendarEvent event) async {
+    final list = <String>[
+      for (final h in event.issuers)
+        if (h.toLowerCase() != event.pubkey.toLowerCase()) h.toLowerCase(),
+    ];
+    final input = TextEditingController();
+    String? inputError;
+    var saving = false;
+
+    String npubOf(String hex) {
+      try {
+        return Nip19.encodePubkey(hex);
+      } catch (_) {
+        return hex;
+      }
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cCard,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          void add() {
+            final raw = input.text.trim();
+            String hex;
+            try {
+              hex = raw.startsWith('npub')
+                  ? Nip19.decodePubkey(raw)
+                  : raw.toLowerCase();
+            } catch (_) {
+              setSheet(() => inputError = t.evIssuersInvalid);
+              return;
+            }
+            if (hex.length != 64) {
+              setSheet(() => inputError = t.evIssuersInvalid);
+              return;
+            }
+            if (hex == event.pubkey.toLowerCase() || list.contains(hex)) {
+              setSheet(() => inputError = t.evIssuersDuplicate);
+              return;
+            }
+            setSheet(() {
+              list.add(hex);
+              input.clear();
+              inputError = null;
+            });
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 16, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(t.evIssuersEdit,
+                    style: const TextStyle(
+                        color: cText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                // Die Folge des Entfernens gleich dazusagen — sonst
+                // befuerchtet man, den Leuten ihre Badges wegzunehmen.
+                Text(t.evIssuersEditHint,
+                    style: const TextStyle(
+                        color: cTextTertiary, fontSize: 12, height: 1.45)),
+                const SizedBox(height: 14),
+                if (list.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(t.evIssuersNone,
+                        style: const TextStyle(
+                            color: cTextTertiary, fontSize: 13)),
+                  ),
+                for (final hex in list)
+                  Row(children: [
+                    Expanded(
+                      child: NpubChip(npubOf(hex),
+                          showIcon: false,
+                          style: const TextStyle(
+                              color: cText, fontSize: 13)),
+                    ),
+                    IconButton(
+                      onPressed: saving
+                          ? null
+                          : () => setSheet(() => list.remove(hex)),
+                      icon: const Icon(Icons.close_rounded,
+                          color: cRed, size: 20),
+                    ),
+                  ]),
+                const SizedBox(height: 10),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: TextField(
+                      controller: input,
+                      style: TextStyle(
+                          color: cText, fontSize: 13, fontFamily: fontMono),
+                      decoration: InputDecoration(
+                        hintText: 'npub1…',
+                        hintStyle: const TextStyle(color: cTextTertiary),
+                        errorText: inputError,
+                        isDense: true,
+                        filled: true,
+                        fillColor: cSurface,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none),
+                      ),
+                      onSubmitted: (_) => add(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: saving ? null : add,
+                    style: IconButton.styleFrom(backgroundColor: cOrange),
+                    icon: const Icon(Icons.add_rounded, color: Colors.black),
+                  ),
+                ]),
+                const SizedBox(height: 18),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: cOrange,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setSheet(() => saving = true);
+                          final ok = await CalendarEventService.updateIssuers(
+                              event, list);
+                          if (!ctx.mounted) return;
+                          Navigator.pop(ctx);
+                          messenger.showSnackBar(SnackBar(
+                            content: Text(ok
+                                ? t.evIssuersSaved
+                                : t.evIssuersFailed),
+                            backgroundColor:
+                                ok ? Colors.green.shade700 : cRed,
+                          ));
+                          if (ok) {
+                            // Das Detailblatt zeigt noch die alte Fassung —
+                            // schliessen und neu laden.
+                            navigator.pop();
+                            _load();
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.black))
+                      : Text(t.evIssuersSave,
+                          style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+    input.dispose();
   }
 
   /// Fragt nach und sagt den Termin dann ab.
@@ -1155,6 +1404,12 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
             if (e.hasBadge) ...[
               const SizedBox(height: 16),
               _badgeNotice(t, e),
+              // Wer gibt hier Badges aus? Fuer ALLE sichtbar — wer vor Ort
+              // ein Badge will, soll wissen, bei wem er es bekommt.
+              if (e.nostr != null) ...[
+                const SizedBox(height: 14),
+                _issuerList(t, e.nostr!),
+              ],
             ],
             // Absagen — nur fuer den Ersteller.
             //

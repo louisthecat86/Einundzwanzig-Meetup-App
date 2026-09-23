@@ -2687,5 +2687,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "evIssuersTitle": "Handing out badges",
+  "evIssuerCreator": "organiser",
+  "evIssuersEdit": "Edit helpers",
+  "evIssuersEditHint": "Everyone listed here can hand out badges on site. Anyone removed can no longer issue new ones — badges they already handed out stay valid.",
+  "evIssuersNone": "No helpers yet — only you hand out badges.",
+  "evIssuersInvalid": "That is not a valid npub.",
+  "evIssuersDuplicate": "Already on the list.",
+  "evIssuersSave": "Save",
+  "evIssuersSaved": "Helpers saved.",
+  "evIssuersFailed": "Not saved — no relay accepted the change."
 }

@@ -2687,5 +2687,15 @@
         "type": "int"
       }
     }
-  }
+  },
+  "evIssuersTitle": "Reparten insignias",
+  "evIssuerCreator": "organizador",
+  "evIssuersEdit": "Editar ayudantes",
+  "evIssuersEditHint": "Quien figura aquí puede repartir insignias en el lugar. Quien se elimine ya no podrá emitir nuevas; las que ya repartió siguen siendo válidas.",
+  "evIssuersNone": "Aún no hay ayudantes: solo tú repartes insignias.",
+  "evIssuersInvalid": "No es un npub válido.",
+  "evIssuersDuplicate": "Ya está en la lista.",
+  "evIssuersSave": "Guardar",
+  "evIssuersSaved": "Ayudantes guardados.",
+  "evIssuersFailed": "No guardado: ningún relé aceptó el cambio."
 }

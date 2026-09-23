@@ -76,9 +76,15 @@ class EventBadgeChainService {
 
   /// Prueft, ob [signerPubkey] fuer das Event unter [eventAddress] Badges
   /// ausstellen darf.
+  ///
+  /// [issuedAt] ist der SIGNIERTE Ausstellungszeitpunkt des Badges. Mit ihm
+  /// zaehlen auch ehemalige Helfer — fuer Badges aus der Zeit, in der sie
+  /// es noch waren. Ohne ihn waere jedes Badge eines inzwischen entfernten
+  /// Helfers ungueltig, auch wenn es ordentlich vor Ort ausgegeben wurde.
   static Future<EventChainResult> verify({
     required String eventAddress,
     required String signerPubkey,
+    int? issuedAt,
   }) async {
     final event = await CalendarEventService.fetchByAddress(eventAddress);
     if (event == null) {
@@ -99,7 +105,7 @@ class EventBadgeChainService {
     // Reihenfolge mit Bedacht: Erst die Ausstellerliste, dann der Ersteller.
     // Die Liste steht schon im geladenen Event, die Registry kostet
     // moeglicherweise einen weiteren Abruf.
-    if (!event.isIssuer(signerPubkey)) {
+    if (!event.isIssuer(signerPubkey, atEpoch: issuedAt)) {
       AppLogger.warn(_tag,
           'Signierer ${signerPubkey.substring(0, 8)}… steht nicht in der Ausstellerliste von "${event.title}".');
       return EventChainResult(
