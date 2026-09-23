@@ -49,4 +49,25 @@
         <domain includeSubdomains="true">local</domain>
     </domain-config>
 
+    <!--
+      Ausnahme 3: das Geraet selbst (Loopback).
+
+      Der PlebRap-Player speichert Lieder beim ersten Abspielen auf dem
+      Geraet. Dafuer startet just_audio einen kleinen Server, der NUR auf
+      diesem Geraet laeuft und unter http://127.0.0.1 erreichbar ist — der
+      Player holt die Datei von dort. Ohne diese Ausnahme blockt Android
+      jede dieser Anfragen, und jedes Lied scheitert mit "konnte nicht
+      geladen werden".
+
+      Unbedenklich: 127.0.0.1 und localhost verlassen das Geraet nie. Kein
+      Datenverkehr ins Netz wird dadurch unverschluesselt.
+
+      Einzelne IP-Adressen sind erlaubt, Bereiche nicht (siehe oben) —
+      deshalb steht hier genau diese eine.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+
 </network-security-config>
