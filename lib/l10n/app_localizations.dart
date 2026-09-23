@@ -11265,6 +11265,12 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Kein GPS-Signal. Ortung und Berechtigung sind an, aber das Gerät findet keine Position — meist drinnen. Geh kurz ans Fenster oder nach draußen und versuche es erneut. Auf Geräten ohne Google-Dienste (etwa GrapheneOS) fehlt die WLAN-Ortung, dort braucht GPS freien Himmel.'**
   String get evSessionLocationNoFix;
+
+  /// No description provided for @prCaching.
+  ///
+  /// In de, this message translates to:
+  /// **'Lied wird geladen ({percent} %) — Springen ist möglich, sobald es vollständig da ist. Danach bleibt es gespeichert.'**
+  String prCaching(int percent);
 }
 
 class _AppLocalizationsDelegate

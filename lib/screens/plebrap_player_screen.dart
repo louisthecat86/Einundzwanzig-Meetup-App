@@ -208,6 +208,31 @@ class _PlebrapPlayerScreenState extends State<PlebrapPlayerScreen> {
                             Text(_fmt(total), style: const TextStyle(color: cTextTertiary, fontSize: 11).copyWith(fontFamily: fontMono)),
                           ]),
                         ),
+                        // Solange die Dauer fehlt, laedt das Lied noch in den
+                        // Speicher. Sagen, dass das der Grund fuer den
+                        // gesperrten Balken ist — und wie weit es ist.
+                        if (max <= 0 && song != null)
+                          ValueListenableBuilder<double>(
+                            valueListenable: PlebrapAudio.cacheProgress,
+                            builder: (_, p, _) => Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                              child: Column(children: [
+                                LinearProgressIndicator(
+                                  value: p > 0 ? p : null,
+                                  minHeight: 2,
+                                  color: cOrange,
+                                  backgroundColor: cSurface,
+                                ),
+                                const SizedBox(height: 5),
+                                Text(t.prCaching((p * 100).round()),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        color: cTextTertiary,
+                                        fontSize: 11,
+                                        height: 1.35)),
+                              ]),
+                            ),
+                          ),
                       ]);
                     },
                   ),

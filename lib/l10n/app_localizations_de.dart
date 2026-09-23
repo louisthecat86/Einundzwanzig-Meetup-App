@@ -6259,4 +6259,9 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get evSessionLocationNoFix =>
       'Kein GPS-Signal. Ortung und Berechtigung sind an, aber das Gerät findet keine Position — meist drinnen. Geh kurz ans Fenster oder nach draußen und versuche es erneut. Auf Geräten ohne Google-Dienste (etwa GrapheneOS) fehlt die WLAN-Ortung, dort braucht GPS freien Himmel.';
+
+  @override
+  String prCaching(int percent) {
+    return 'Lied wird geladen ($percent %) — Springen ist möglich, sobald es vollständig da ist. Danach bleibt es gespeichert.';
+  }
 }

@@ -2712,5 +2712,13 @@
   "evSessionLocationOff": "Los servicios de ubicación están desactivados. Actívalos: la app los usa para comprobar que estás en el lugar.",
   "evSessionLocationDenied": "La app no tiene permiso para usar tu ubicación. Permítelo en el próximo intento: sin ella no se puede comprobar que estás allí.",
   "evSessionLocationDeniedForever": "El acceso a la ubicación está bloqueado de forma permanente. Solo puedes volver a permitirlo en los ajustes de la app.",
-  "evSessionLocationNoFix": "Sin señal GPS. La ubicación y el permiso están activos, pero el dispositivo no encuentra posición, normalmente en interiores. Acércate a una ventana o sal un momento y vuelve a intentarlo. Los dispositivos sin servicios de Google (como GrapheneOS) no tienen ubicación por Wi-Fi y necesitan cielo despejado."
+  "evSessionLocationNoFix": "Sin señal GPS. La ubicación y el permiso están activos, pero el dispositivo no encuentra posición, normalmente en interiores. Acércate a una ventana o sal un momento y vuelve a intentarlo. Los dispositivos sin servicios de Google (como GrapheneOS) no tienen ubicación por Wi-Fi y necesitan cielo despejado.",
+  "prCaching": "Cargando canción ({percent} %): podrás saltar cuando esté completa. Después queda guardada.",
+  "@prCaching": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  }
 }

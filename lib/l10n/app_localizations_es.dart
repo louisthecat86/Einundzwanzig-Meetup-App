@@ -6249,4 +6249,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get evSessionLocationNoFix =>
       'Sin señal GPS. La ubicación y el permiso están activos, pero el dispositivo no encuentra posición, normalmente en interiores. Acércate a una ventana o sal un momento y vuelve a intentarlo. Los dispositivos sin servicios de Google (como GrapheneOS) no tienen ubicación por Wi-Fi y necesitan cielo despejado.';
+
+  @override
+  String prCaching(int percent) {
+    return 'Cargando canción ($percent %): podrás saltar cuando esté completa. Después queda guardada.';
+  }
 }

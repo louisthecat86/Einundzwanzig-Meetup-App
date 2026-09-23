@@ -6214,4 +6214,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get evSessionLocationNoFix =>
       'No GPS signal. Location and permission are on, but the device cannot find a position — usually indoors. Step to a window or outside briefly and try again. Devices without Google services (such as GrapheneOS) lack Wi-Fi positioning and need a clear view of the sky.';
+
+  @override
+  String prCaching(int percent) {
+    return 'Loading song ($percent %) — seeking works once it is fully downloaded. It stays saved afterwards.';
+  }
 }
