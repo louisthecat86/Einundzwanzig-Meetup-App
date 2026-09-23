@@ -6173,4 +6173,27 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get mnEventNote =>
       'Veranstaltungen zählen hier nicht als Begegnung. Bei hunderten Besuchern heißt gemeinsame Anwesenheit nicht, dass man sich getroffen hat — das Netzwerk entsteht deshalb nur aus Meetups. Deine Event-Badges bleiben gültig und zählen für den Trust Score.';
+
+  @override
+  String get caPublishFailed =>
+      'Teilnahme konnte nicht veröffentlicht werden — kein Relay hat sie angenommen. Im Vertrauensnetzwerk kannst du es erneut versuchen.';
+
+  @override
+  String mnFailedBanner(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Teilnahmen sind nicht angekommen',
+      one: '1 Teilnahme ist nicht angekommen',
+    );
+    return '$_temp0 — die Verbindungen daraus fehlen im Netzwerk.';
+  }
+
+  @override
+  String get mnRetry => 'Erneut senden';
+
+  @override
+  String mnRetryResult(int fixed, int total) {
+    return '$fixed von $total jetzt veröffentlicht.';
+  }
 }

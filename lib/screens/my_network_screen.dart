@@ -4,6 +4,7 @@ import '../services/haptic_service.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../models/badge.dart';
 import '../theme.dart';
 import '../l10n/app_localizations.dart';
 import '../models/user.dart';
@@ -40,6 +41,61 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
     super.dispose();
   }
 
+  /// Teilnahmen, die zugestimmt, aber nicht veroeffentlicht wurden.
+  int _failedCount = 0;
+  bool _retrying = false;
+
+  /// Sendet alle fehlgeschlagenen Teilnahmen erneut und laedt dann neu.
+  Future<void> _retry() async {
+    final t = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _retrying = true);
+    final badges = await MeetupBadge.loadBadges();
+    final fixed = await CoAttendanceService.retryFailed(badges);
+    if (!mounted) return;
+    setState(() => _retrying = false);
+    messenger.showSnackBar(SnackBar(
+      content: Text(t.mnRetryResult(fixed, _failedCount)),
+      backgroundColor: fixed > 0 ? cGreen : cRed,
+    ));
+    // Neu laden: Die jetzt angekommenen Teilnahmen erweitern das Netzwerk.
+    _load();
+  }
+
+  /// Hinweis mit Knopf, solange Teilnahmen fehlen.
+  ///
+  /// Steht OBEN, noch vor der Einleitung: Fehlt eine eigene Teilnahme,
+  /// fehlen auch alle Verbindungen, die daran haengen — das ist der Grund,
+  /// falls das Netzwerk kleiner aussieht als erwartet.
+  Widget _failedBanner(AppLocalizations t) => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        decoration: BoxDecoration(
+          color: cOrange.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cOrange.withValues(alpha: 0.45), width: 0.5),
+        ),
+        child: Row(children: [
+          const Icon(Icons.cloud_off_rounded, color: cOrange, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(t.mnFailedBanner(_failedCount),
+                style: const TextStyle(color: cText, fontSize: 12.5, height: 1.4)),
+          ),
+          const SizedBox(width: 6),
+          _retrying
+              ? const SizedBox(
+                  width: 18, height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: cOrange))
+              : TextButton(
+                  onPressed: _retry,
+                  child: Text(t.mnRetry,
+                      style: const TextStyle(
+                          color: cOrange, fontWeight: FontWeight.w700)),
+                ),
+        ]),
+      );
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
@@ -49,7 +105,16 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
         return;
       }
       final net = await CoAttendanceService.buildMyNetwork(myNpub: user.nostrNpub);
-      if (mounted) setState(() { _net = net; _loading = false; });
+      // Wie viele eigene Teilnahmen sind zugestimmt, aber nicht angekommen?
+      final badges = await MeetupBadge.loadBadges();
+      final failed = await CoAttendanceService.failedBadges(badges);
+      if (mounted) {
+        setState(() {
+          _net = net;
+          _failedCount = failed.length;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() { _loading = false; _net = null; });
     }
@@ -91,6 +156,9 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // Gerade im LEEREN Netzwerk wichtig: Oft ist es leer, weil die
+        // eigenen Teilnahmen nie angekommen sind.
+        if (_failedCount > 0) _failedBanner(t),
         const SizedBox(height: 60),
         const Icon(Icons.hub_outlined, color: cTextTertiary, size: 56),
         const SizedBox(height: 20),
@@ -136,6 +204,7 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        if (_failedCount > 0) _failedBanner(t),
         Text(t.mnIntro,
             style: const TextStyle(color: cTextSecondary, fontSize: 13, height: 1.5)),
         const SizedBox(height: 12),

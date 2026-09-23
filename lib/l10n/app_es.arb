@@ -2666,5 +2666,26 @@
   "evCancelConfirm": "Cancelar",
   "evCancelDone": "Fecha cancelada.",
   "evCancelFailed": "La cancelación no llegó: ningún relé la aceptó.",
-  "mnEventNote": "Los eventos no cuentan aquí como encuentros. Con cientos de asistentes, coincidir no significa haberse conocido, así que la red se forma solo con meetups. Tus insignias de eventos siguen siendo válidas y cuentan para tu Trust Score."
+  "mnEventNote": "Los eventos no cuentan aquí como encuentros. Con cientos de asistentes, coincidir no significa haberse conocido, así que la red se forma solo con meetups. Tus insignias de eventos siguen siendo válidas y cuentan para tu Trust Score.",
+  "caPublishFailed": "No se pudo publicar la asistencia: ningún relé la aceptó. Puedes reintentarlo desde la red de confianza.",
+  "mnFailedBanner": "{count, plural, =1{1 asistencia no llegó} other{{count} asistencias no llegaron}}: faltan las conexiones que dependen de ellas.",
+  "@mnFailedBanner": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mnRetry": "Reintentar",
+  "mnRetryResult": "{fixed} de {total} publicadas ahora.",
+  "@mnRetryResult": {
+    "placeholders": {
+      "fixed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

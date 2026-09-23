@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import '../models/badge.dart';
 import 'signing_service.dart';
@@ -185,6 +187,66 @@ class CoAttendanceService {
     return '$meetupEventId@$short';
   }
 
+  // ============================================
+  // VEROEFFENTLICHUNGSSTATUS (Issue #57, Punkt 5)
+  // ============================================
+  //
+  // Wer beim Scannen zustimmt, dass seine Teilnahme ins Netzwerk geht, soll
+  // erfahren, ob das geklappt hat — und es wiederholen koennen.
+  //
+  // Vorher: Schlug die Veroeffentlichung fehl, zeigte die App NICHTS. Die
+  // Erfolgsmeldung kam nur bei Erfolg, der Fehlschlag verschwand still, und
+  // es gab keinen Weg, es spaeter nachzuholen. Die Teilnahme fehlte im
+  // Netzwerk fuer immer.
+  //
+  // Gespeichert wird je Badge-Signatur die Zahl der Relays, die angenommen
+  // haben. 0 heisst: zugestimmt, aber nicht angekommen. Nicht gespeichert =
+  // nie zugestimmt — das bleibt eine freie Entscheidung und wird nicht als
+  // Fehler gezaehlt.
+
+  static const String _statusKey = 'coatt_publish_status';
+
+  static Future<Map<String, int>> publishStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_statusKey);
+      if (raw == null) return {};
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return m.map((k, v) => MapEntry(k, v is int ? v : 0));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _saveStatus(String sigId, int relays) async {
+    if (sigId.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final current = await publishStatus();
+      current[sigId] = relays;
+      await prefs.setString(_statusKey, jsonEncode(current));
+    } catch (_) {}
+  }
+
+  /// Badges, deren Veroeffentlichung zugestimmt wurde, aber fehlschlug.
+  static Future<List<MeetupBadge>> failedBadges(List<MeetupBadge> all) async {
+    final status = await publishStatus();
+    return all.where((b) => status[b.sigId] == 0).toList();
+  }
+
+  /// Versucht alle fehlgeschlagenen erneut. Gibt zurueck, wie viele jetzt
+  /// angekommen sind.
+  static Future<int> retryFailed(List<MeetupBadge> all) async {
+    final failed = await failedBadges(all);
+    var fixed = 0;
+    for (final b in failed) {
+      if (await publishAttendance(b) > 0) fixed++;
+    }
+    AppLogger.info(_tag,
+        'Erneut veroeffentlicht: $fixed von ${failed.length} Teilnahmen.');
+    return fixed;
+  }
+
   static Future<int> publishAttendance(MeetupBadge badge) async {
     // Sicherheit: nur echte, organisator-signierte Badges qualifizieren
     if (!badge.isNostrSigned || _isDegenerateEventId(badge.meetupEventId)) {
@@ -214,9 +276,14 @@ class CoAttendanceService {
         content: content,
       );
 
-      return await _publish(signed);
+      final n = await _publish(signed);
+      await _saveStatus(badge.sigId, n);
+      return n;
     } catch (e) {
       AppLogger.warn(_tag, 'Publish-Fehler: $e');
+      // Auch der Fehlschlag wird festgehalten — sonst taucht er in der
+      // Liste der erneut zu sendenden gar nicht erst auf.
+      await _saveStatus(badge.sigId, 0);
       return 0;
     }
   }

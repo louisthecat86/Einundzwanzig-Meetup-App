@@ -2688,5 +2688,26 @@
   "evCancelConfirm": "Absagen",
   "evCancelDone": "Termin abgesagt.",
   "evCancelFailed": "Absage nicht angekommen — kein Relay hat sie angenommen.",
-  "mnEventNote": "Veranstaltungen zählen hier nicht als Begegnung. Bei hunderten Besuchern heißt gemeinsame Anwesenheit nicht, dass man sich getroffen hat — das Netzwerk entsteht deshalb nur aus Meetups. Deine Event-Badges bleiben gültig und zählen für den Trust Score."
+  "mnEventNote": "Veranstaltungen zählen hier nicht als Begegnung. Bei hunderten Besuchern heißt gemeinsame Anwesenheit nicht, dass man sich getroffen hat — das Netzwerk entsteht deshalb nur aus Meetups. Deine Event-Badges bleiben gültig und zählen für den Trust Score.",
+  "caPublishFailed": "Teilnahme konnte nicht veröffentlicht werden — kein Relay hat sie angenommen. Im Vertrauensnetzwerk kannst du es erneut versuchen.",
+  "mnFailedBanner": "{count, plural, =1{1 Teilnahme ist nicht angekommen} other{{count} Teilnahmen sind nicht angekommen}} — die Verbindungen daraus fehlen im Netzwerk.",
+  "@mnFailedBanner": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mnRetry": "Erneut senden",
+  "mnRetryResult": "{fixed} von {total} jetzt veröffentlicht.",
+  "@mnRetryResult": {
+    "placeholders": {
+      "fixed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

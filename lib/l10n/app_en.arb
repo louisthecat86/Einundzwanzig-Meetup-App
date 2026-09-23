@@ -2666,5 +2666,26 @@
   "evCancelConfirm": "Cancel it",
   "evCancelDone": "Event cancelled.",
   "evCancelFailed": "Cancellation not delivered — no relay accepted it.",
-  "mnEventNote": "Events do not count as encounters here. With hundreds of visitors, being there together does not mean you actually met — so the network is built from meetups only. Your event badges remain valid and count towards your trust score."
+  "mnEventNote": "Events do not count as encounters here. With hundreds of visitors, being there together does not mean you actually met — so the network is built from meetups only. Your event badges remain valid and count towards your trust score.",
+  "caPublishFailed": "Attendance could not be published — no relay accepted it. You can retry from the trust network.",
+  "mnFailedBanner": "{count, plural, =1{1 attendance was not delivered} other{{count} attendances were not delivered}} — the connections from them are missing.",
+  "@mnFailedBanner": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mnRetry": "Retry",
+  "mnRetryResult": "{fixed} of {total} now published.",
+  "@mnRetryResult": {
+    "placeholders": {
+      "fixed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  }
 }

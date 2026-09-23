@@ -6163,4 +6163,27 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get mnEventNote =>
       'Los eventos no cuentan aquí como encuentros. Con cientos de asistentes, coincidir no significa haberse conocido, así que la red se forma solo con meetups. Tus insignias de eventos siguen siendo válidas y cuentan para tu Trust Score.';
+
+  @override
+  String get caPublishFailed =>
+      'No se pudo publicar la asistencia: ningún relé la aceptó. Puedes reintentarlo desde la red de confianza.';
+
+  @override
+  String mnFailedBanner(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count asistencias no llegaron',
+      one: '1 asistencia no llegó',
+    );
+    return '$_temp0: faltan las conexiones que dependen de ellas.';
+  }
+
+  @override
+  String get mnRetry => 'Reintentar';
+
+  @override
+  String mnRetryResult(int fixed, int total) {
+    return '$fixed de $total publicadas ahora.';
+  }
 }

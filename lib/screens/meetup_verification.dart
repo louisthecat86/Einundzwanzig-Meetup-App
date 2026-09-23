@@ -1048,15 +1048,20 @@ class _MeetupVerificationScreenState extends State<MeetupVerificationScreen> wit
 
     if (agree == true) {
       final count = await CoAttendanceService.publishAttendance(badge);
-      if (mounted && count > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context).caPublished),
-            backgroundColor: cGreen,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (!mounted) return;
+      // Auch den Fehlschlag MELDEN. Vorher kam nur bei Erfolg eine
+      // Bestaetigung — schlug es fehl, geschah sichtbar nichts, und der
+      // Nutzer hielt die Teilnahme fuer veroeffentlicht.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(count > 0
+              ? AppLocalizations.of(context).caPublished
+              : AppLocalizations.of(context).caPublishFailed),
+          backgroundColor: count > 0 ? cGreen : cRed,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: count > 0 ? 3 : 6),
+        ),
+      );
     }
   }
 

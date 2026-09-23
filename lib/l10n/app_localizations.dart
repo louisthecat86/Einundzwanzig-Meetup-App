@@ -11133,6 +11133,30 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Veranstaltungen zählen hier nicht als Begegnung. Bei hunderten Besuchern heißt gemeinsame Anwesenheit nicht, dass man sich getroffen hat — das Netzwerk entsteht deshalb nur aus Meetups. Deine Event-Badges bleiben gültig und zählen für den Trust Score.'**
   String get mnEventNote;
+
+  /// No description provided for @caPublishFailed.
+  ///
+  /// In de, this message translates to:
+  /// **'Teilnahme konnte nicht veröffentlicht werden — kein Relay hat sie angenommen. Im Vertrauensnetzwerk kannst du es erneut versuchen.'**
+  String get caPublishFailed;
+
+  /// No description provided for @mnFailedBanner.
+  ///
+  /// In de, this message translates to:
+  /// **'{count, plural, =1{1 Teilnahme ist nicht angekommen} other{{count} Teilnahmen sind nicht angekommen}} — die Verbindungen daraus fehlen im Netzwerk.'**
+  String mnFailedBanner(int count);
+
+  /// No description provided for @mnRetry.
+  ///
+  /// In de, this message translates to:
+  /// **'Erneut senden'**
+  String get mnRetry;
+
+  /// No description provided for @mnRetryResult.
+  ///
+  /// In de, this message translates to:
+  /// **'{fixed} von {total} jetzt veröffentlicht.'**
+  String mnRetryResult(int fixed, int total);
 }
 
 class _AppLocalizationsDelegate
