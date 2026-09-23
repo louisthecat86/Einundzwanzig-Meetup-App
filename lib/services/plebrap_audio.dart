@@ -125,6 +125,15 @@ class PlebrapAudio {
       if (i != null) index.value = i;
     });
 
+    // Fuer die Fehlersuche: Kennt der Player die Dauer, und kann er springen?
+    // Bleibt hier "unbekannt" stehen, ist der Balken gesperrt — dann liegt es
+    // an der Quelle, nicht an der Anzeige.
+    player.durationStream.listen((d) {
+      final i = player.currentIndex;
+      AppLogger.diag('PlebRap',
+          '${i != null ? kPlebSongs[i].title : "?"}: Dauer ${d == null ? "unbekannt" : "${d.inSeconds} s"}.');
+    });
+
     // Defekte Titel ueberspringen statt die Wiedergabe zu beenden.
     player.playbackEventStream.listen((_) {}, onError: (Object e, _) async {
       final i = player.currentIndex;
@@ -141,13 +150,41 @@ class PlebrapAudio {
   static PlebSong? get current =>
       index.value != null ? kPlebSongs[index.value!] : null;
 
+  /// Wie die Lieder geladen werden.
+  ///
+  /// ============================================
+  /// WARUM DER ZEITBALKEN NICHT ZOG
+  /// ============================================
+  ///
+  /// Die Lieder kommen ueber das Skript des Website-Baukastens von
+  /// plebrap.de, nicht als schlichte Datei. Solche MP3s haben oft keine
+  /// Sprungtabelle im Kopf. Androids Player kennt dann weder die Gesamtdauer
+  /// noch weiss er, wohin er springen soll — der Balken meldet Dauer null und
+  /// ist gesperrt.
+  ///
+  /// Mit KONSTANTBITRATE-SUCHE schaetzt der Player beides aus Dateigroesse
+  /// und Bitrate. "Always" erzwingt das auch dort, wo er es sonst nur als
+  /// Notloesung naehme. Bei Liedern mit wechselnder Bitrate kann der
+  /// Sprungpunkt um ein paar Sekunden daneben liegen — beim Ziehen durch ein
+  /// Lied faellt das nicht auf.
+  ///
+  /// Auf Apple-Geraeten sorgt das Gegenstueck fuer eine genaue Dauer.
+  static const _sourceOptions = ProgressiveAudioSourceOptions(
+    androidExtractorOptions: AndroidExtractorOptions(
+      constantBitrateSeekingEnabled: true,
+      constantBitrateSeekingAlwaysEnabled: true,
+    ),
+    darwinAssetOptions: DarwinAssetOptions(preferPreciseDurationAndTiming: true),
+  );
+
   /// Legt die ganze Liste beim Player ab — einmal.
   static Future<void> _ensureSource(int startIndex) async {
     if (_sourceSet) return;
     await player.setAudioSource(
       ConcatenatingAudioSource(
         children: [
-          for (final s in kPlebSongs) AudioSource.uri(Uri.parse(s.url)),
+          for (final s in kPlebSongs)
+            ProgressiveAudioSource(Uri.parse(s.url), options: _sourceOptions),
         ],
       ),
       initialIndex: startIndex,

@@ -148,11 +148,21 @@ class _PlebrapPlayerScreenState extends State<PlebrapPlayerScreen> {
                     ])),
                   ]),
                   const SizedBox(height: 10),
-                  StreamBuilder<Duration>(
+                  // Zwei Stroeme: DAUER aussen, POSITION innen.
+                  //
+                  // Vorher wurde die Dauer nur nebenbei gelesen, wenn die
+                  // Position sich aenderte. Bei pausiertem Lied kommt aber
+                  // keine Position — eine inzwischen bekannte Dauer wurde nie
+                  // uebernommen, und der Balken blieb gesperrt. Jetzt zeichnet
+                  // er neu, sobald die Dauer feststeht.
+                  StreamBuilder<Duration?>(
+                    stream: _player.durationStream,
+                    initialData: _player.duration,
+                    builder: (_, durSnap) => StreamBuilder<Duration>(
                     stream: _player.positionStream,
                     builder: (_, snap) {
                       final pos = snap.data ?? Duration.zero;
-                      final total = _player.duration ?? Duration.zero;
+                      final total = durSnap.data ?? Duration.zero;
                       final max = total.inMilliseconds.toDouble();
                       return Column(children: [
                         SliderTheme(
@@ -200,6 +210,7 @@ class _PlebrapPlayerScreenState extends State<PlebrapPlayerScreen> {
                         ),
                       ]);
                     },
+                  ),
                   ),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     IconButton(icon: const Icon(Icons.skip_previous_rounded, color: cText, size: 30),

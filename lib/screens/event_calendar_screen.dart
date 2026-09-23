@@ -238,7 +238,7 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
               const SizedBox(height: 12),
               ValueListenableBuilder<bool>(
                 valueListenable: _startingSession,
-                builder: (_, busy, __) => Column(
+                builder: (_, busy, _) => Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ElevatedButton.icon(
