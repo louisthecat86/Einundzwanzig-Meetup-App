@@ -11223,6 +11223,18 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Du hast das Badge für „{name}“ schon. Ein Event zählt einmal — egal, an wie vielen Tagen du dabei bist.'**
   String verifyAlreadyEvent(String name);
+
+  /// No description provided for @evBadgeLocating.
+  ///
+  /// In de, this message translates to:
+  /// **'Standort wird ermittelt …'**
+  String get evBadgeLocating;
+
+  /// No description provided for @evBadgeLocatingHint.
+  ///
+  /// In de, this message translates to:
+  /// **'Die App prüft, ob du am Veranstaltungsort bist. Das kann einige Sekunden dauern — bitte nicht erneut tippen.'**
+  String get evBadgeLocatingHint;
 }
 
 class _AppLocalizationsDelegate

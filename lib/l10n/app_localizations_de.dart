@@ -6233,4 +6233,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String verifyAlreadyEvent(String name) {
     return 'Du hast das Badge für „$name“ schon. Ein Event zählt einmal — egal, an wie vielen Tagen du dabei bist.';
   }
+
+  @override
+  String get evBadgeLocating => 'Standort wird ermittelt …';
+
+  @override
+  String get evBadgeLocatingHint =>
+      'Die App prüft, ob du am Veranstaltungsort bist. Das kann einige Sekunden dauern — bitte nicht erneut tippen.';
 }

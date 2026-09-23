@@ -134,6 +134,7 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
   @override
   void dispose() {
     _locationCtrl.dispose();
+    _startingSession.dispose();
     super.dispose();
   }
 
@@ -146,7 +147,15 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
   /// Laeuft gerade ein Sessionstart? Sperrt den Knopf — die Ortspruefung
   /// dauert ein paar Sekunden, und zweimal tippen erzeugt sonst zwei
   /// Versuche.
-  bool _startingSession = false;
+  /// Laeuft gerade der Start einer Badge-Session?
+  ///
+  /// Als ValueNotifier und NICHT als einfaches Feld: Der Knopf sitzt im
+  /// Detailblatt, und das haengt in einer EIGENEN Route. Ein setState des
+  /// Kalenders zeichnet es nicht neu. Der Wartezustand war deshalb zwar
+  /// gesetzt, wurde aber nie gemalt — man drueckte, sah nichts und drueckte
+  /// nochmal. Ein ValueListenableBuilder hoert direkt hin, egal in welcher
+  /// Route er steckt.
+  final ValueNotifier<bool> _startingSession = ValueNotifier(false);
 
   /// meetupId einer bereits laufenden Session, sonst null. Damit der Knopf
   /// "QR anzeigen" statt "Session starten" heisst — sonst sieht es aus, als
@@ -226,31 +235,62 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
             // Ohne Ort kein Knopf: Er wuerde nur die Ablehnung ausloesen.
             if (iAmIssuer && !noLocation && (e.nostr?.isBadgeWindowOpen ?? false)) ...[
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _startingSession ? null : () => _startEventSession(e),
-                  icon: _startingSession
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.black))
-                      : const Icon(Icons.qr_code_2_rounded,
-                          color: Colors.black, size: 18),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cOrange,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(kTileRadius)),
-                  ),
-                  label: Text(
-                      _runningSessionId != null &&
-                              e.nostr != null &&
-                              _runningSessionId!.contains(e.nostr!.dTag)
-                          ? t.evBadgeShowSession
-                          : t.evBadgeStartSession,
-                      style: const TextStyle(
-                          color: Colors.black, fontWeight: FontWeight.w800)),
+              ValueListenableBuilder<bool>(
+                valueListenable: _startingSession,
+                builder: (_, busy, __) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: busy ? null : () => _startEventSession(e),
+                      icon: busy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.qr_code_2_rounded,
+                              color: Colors.black, size: 18),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: cOrange,
+                        // Auch im gesperrten Zustand orange bleiben — ein
+                        // grauer Knopf sieht nach "geht nicht" aus, nicht
+                        // nach "arbeitet".
+                        disabledBackgroundColor:
+                            cOrange.withValues(alpha: 0.75),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(kTileRadius)),
+                      ),
+                      label: Text(
+                          busy
+                              ? t.evBadgeLocating
+                              : (_runningSessionId != null &&
+                                      e.nostr != null &&
+                                      _runningSessionId!
+                                          .contains(e.nostr!.dTag)
+                                  ? t.evBadgeShowSession
+                                  : t.evBadgeStartSession),
+                          style: const TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w800)),
+                    ),
+                    // Sagen, WORAUF gewartet wird. Ein drehender Kringel
+                    // allein laesst offen, ob etwas haengt.
+                    if (busy) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(
+                          minHeight: 2,
+                          color: cOrange,
+                          backgroundColor: cTileBorder),
+                      const SizedBox(height: 6),
+                      Text(t.evBadgeLocatingHint,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: cTextTertiary,
+                              fontSize: 11.5,
+                              height: 1.4)),
+                    ],
+                  ],
                 ),
               ),
             ],
@@ -683,12 +723,19 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
     final t = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    setState(() => _startingSession = true);
+    // Doppeltippen abfangen, auch wenn der Knopf schon gesperrt aussieht.
+    if (_startingSession.value) return;
+    _startingSession.value = true;
 
-    final res = await EventBadgeSessionService.start(event);
-
+    // finally: Wirft der Start — etwa weil der Standortdienst abstuerzt —,
+    // bliebe der Knopf sonst fuer immer im Wartezustand.
+    final EventSessionResult res;
+    try {
+      res = await EventBadgeSessionService.start(event);
+    } finally {
+      _startingSession.value = false;
+    }
     if (!mounted) return;
-    setState(() => _startingSession = false);
 
     if (!res.ok) {
       messenger.showSnackBar(SnackBar(

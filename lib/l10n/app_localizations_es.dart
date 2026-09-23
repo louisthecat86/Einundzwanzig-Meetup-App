@@ -6223,4 +6223,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String verifyAlreadyEvent(String name) {
     return 'Ya tienes la insignia de «$name». Un evento cuenta una vez, sin importar cuántos días asistas.';
   }
+
+  @override
+  String get evBadgeLocating => 'Obteniendo ubicación …';
+
+  @override
+  String get evBadgeLocatingHint =>
+      'La app comprueba que estás en el lugar del evento. Puede tardar unos segundos; no hace falta volver a pulsar.';
 }

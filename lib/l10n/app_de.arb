@@ -2727,5 +2727,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evBadgeLocating": "Standort wird ermittelt …",
+  "evBadgeLocatingHint": "Die App prüft, ob du am Veranstaltungsort bist. Das kann einige Sekunden dauern — bitte nicht erneut tippen."
 }

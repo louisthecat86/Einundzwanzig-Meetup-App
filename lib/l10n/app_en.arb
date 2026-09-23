@@ -2705,5 +2705,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evBadgeLocating": "Checking your location …",
+  "evBadgeLocatingHint": "The app is checking that you are at the venue. This can take a few seconds — no need to tap again."
 }

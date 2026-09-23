@@ -6188,4 +6188,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String verifyAlreadyEvent(String name) {
     return 'You already have the badge for “$name”. An event counts once, however many days you attend.';
   }
+
+  @override
+  String get evBadgeLocating => 'Checking your location …';
+
+  @override
+  String get evBadgeLocatingHint =>
+      'The app is checking that you are at the venue. This can take a few seconds — no need to tap again.';
 }

@@ -2705,5 +2705,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "evBadgeLocating": "Obteniendo ubicación …",
+  "evBadgeLocatingHint": "La app comprueba que estás en el lugar del evento. Puede tardar unos segundos; no hace falta volver a pulsar."
 }
