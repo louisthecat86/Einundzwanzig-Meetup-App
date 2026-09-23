@@ -9,6 +9,17 @@
 // Screen — sonst endet die Wiedergabe, sobald der Screen zu ist.
 // ============================================
 
+// LockCachingAudioSource ist bei just_audio als EXPERIMENTELL markiert: Die
+// Schnittstelle darf sich in kuenftigen Versionen aendern. Die Funktion
+// selbst ist ausgereift und die einzige, die das Problem hier loest — der
+// PlebRap-Server liefert weder Teilanfragen noch Dateigroesse, und ohne
+// Zwischenspeicher laesst sich in keinem Lied springen.
+//
+// Die Warnung ist deshalb fuer diese Datei abgeschaltet. BEIM NAECHSTEN
+// UPDATE VON just_audio (derzeit 0.9.46) diese Datei pruefen: Aendert sich
+// die Quelle, bricht es hier und nirgends sonst.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
