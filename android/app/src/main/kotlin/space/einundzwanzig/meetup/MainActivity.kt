@@ -2,8 +2,11 @@ package space.einundzwanzig.meetup
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -25,6 +28,29 @@ import org.json.JSONObject
 // ============================================
 
 class MainActivity : FlutterActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        applyPhoneOrientation(resources.configuration)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyPhoneOrientation(newConfig)
+    }
+
+    private fun applyPhoneOrientation(configuration: Configuration) {
+        // Kleinste Breite bleibt beim Drehen stabil. Ab 600 dp (Tablet bzw.
+        // aufgeklapptes großes Foldable) gilt weiterhin die Systemausrichtung.
+        val orientation = if (configuration.smallestScreenWidthDp in 1..599) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        if (requestedOrientation != orientation) {
+            requestedOrientation = orientation
+        }
+    }
 
     private val channelName = "einundzwanzig/amber_signer"
     private val amberPackage = "com.greenart7c3.nostrsigner"
