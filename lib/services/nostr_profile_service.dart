@@ -91,15 +91,86 @@ class NostrProfileService {
     String? found;
     try {
       final relays = await RelayConfig.getActiveRelays();
+
+      // 1. Das Nostr-Profil (kind 0) — der uebliche Ort fuer einen Namen.
       for (final r in relays) {
         found = await _fetchNameFromRelay(r, pubkeyHex);
         if (found != null && found.isNotEmpty) break;
+      }
+
+      // 2. Der Spitzname aus dem Reputations-Ereignis.
+      //
+      // Die App veroeffentlicht KEIN Nostr-Profil. Wer sich in der App einen
+      // Namen gibt, hat ihn nur hier stehen — unter identity.nickname. Ohne
+      // diesen zweiten Weg blieben ausgerechnet die Leute namenlos, die ihre
+      // Identitaet in der App angelegt haben: also fast alle. Im
+      // Vertrauensnetzwerk standen deshalb nur npubs.
+      if (found == null || found.isEmpty) {
+        for (final r in relays) {
+          found = await _fetchNicknameFromRelay(r, pubkeyHex);
+          if (found != null && found.isNotEmpty) break;
+        }
       }
     } catch (_) {
       // Ohne Namen bleibt der gekuerzte npub — kein Grund zu scheitern.
     }
     _nameCache[pubkeyHex] = found;
     return found;
+  }
+
+  /// Spitzname aus dem Reputations-Ereignis (kind 30078).
+  ///
+  /// "Anon" ist der Platzhalter fuer "kein Name gesetzt" und wird wie ein
+  /// fehlender Name behandelt — sonst hiesse im Netzwerk die Haelfte "Anon".
+  static Future<String?> _fetchNicknameFromRelay(
+      String relayUrl, String pubkeyHex) async {
+    RelaySocket? ws;
+    try {
+      ws = await RelaySocket.connect(relayUrl).timeout(_timeout);
+      final completer = Completer<String?>();
+      final random = Random.secure();
+      final subId =
+          'nick-${List.generate(8, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+
+      ws.listen(
+        (data) {
+          try {
+            final message = jsonDecode(data as String) as List<dynamic>;
+            if (message[0] == 'EVENT' && message.length >= 3) {
+              final content =
+                  (message[2] as Map<String, dynamic>)['content'] as String? ?? '';
+              final body = jsonDecode(content) as Map<String, dynamic>;
+              final identity = body['identity'];
+              final nick = identity is Map
+                  ? (identity['nickname'] as String?)?.trim()
+                  : null;
+              final usable = (nick != null &&
+                      nick.isNotEmpty &&
+                      nick.toLowerCase() != 'anon')
+                  ? nick
+                  : null;
+              if (!completer.isCompleted) completer.complete(usable);
+            } else if (message[0] == 'EOSE') {
+              if (!completer.isCompleted) completer.complete(null);
+            }
+          } catch (_) {}
+        },
+        onError: (_) { if (!completer.isCompleted) completer.complete(null); },
+        onDone: () { if (!completer.isCompleted) completer.complete(null); },
+      );
+
+      ws.add(jsonEncode(['REQ', subId, {
+        'kinds': [30078],
+        'authors': [pubkeyHex],
+        '#d': ['einundzwanzig-reputation'],
+        'limit': 1,
+      }]));
+      return await completer.future.timeout(_timeout, onTimeout: () => null);
+    } catch (_) {
+      return null;
+    } finally {
+      ws?.close();
+    }
   }
 
   static Future<String?> _fetchNameFromRelay(

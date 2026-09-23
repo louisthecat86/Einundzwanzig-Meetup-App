@@ -6159,4 +6159,8 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get evCancelFailed =>
       'La cancelación no llegó: ningún relé la aceptó.';
+
+  @override
+  String get mnEventNote =>
+      'Los eventos no cuentan aquí como encuentros. Con cientos de asistentes, coincidir no significa haberse conocido, así que la red se forma solo con meetups. Tus insignias de eventos siguen siendo válidas y cuentan para tu Trust Score.';
 }

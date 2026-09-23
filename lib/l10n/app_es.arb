@@ -2665,5 +2665,6 @@
   },
   "evCancelConfirm": "Cancelar",
   "evCancelDone": "Fecha cancelada.",
-  "evCancelFailed": "La cancelación no llegó: ningún relé la aceptó."
+  "evCancelFailed": "La cancelación no llegó: ningún relé la aceptó.",
+  "mnEventNote": "Los eventos no cuentan aquí como encuentros. Con cientos de asistentes, coincidir no significa haberse conocido, así que la red se forma solo con meetups. Tus insignias de eventos siguen siendo válidas y cuentan para tu Trust Score."
 }

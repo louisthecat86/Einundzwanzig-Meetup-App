@@ -11127,6 +11127,12 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Absage nicht angekommen — kein Relay hat sie angenommen.'**
   String get evCancelFailed;
+
+  /// No description provided for @mnEventNote.
+  ///
+  /// In de, this message translates to:
+  /// **'Veranstaltungen zählen hier nicht als Begegnung. Bei hunderten Besuchern heißt gemeinsame Anwesenheit nicht, dass man sich getroffen hat — das Netzwerk entsteht deshalb nur aus Meetups. Deine Event-Badges bleiben gültig und zählen für den Trust Score.'**
+  String get mnEventNote;
 }
 
 class _AppLocalizationsDelegate

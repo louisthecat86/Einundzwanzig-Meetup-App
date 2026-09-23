@@ -2665,5 +2665,6 @@
   },
   "evCancelConfirm": "Cancel it",
   "evCancelDone": "Event cancelled.",
-  "evCancelFailed": "Cancellation not delivered — no relay accepted it."
+  "evCancelFailed": "Cancellation not delivered — no relay accepted it.",
+  "mnEventNote": "Events do not count as encounters here. With hundreds of visitors, being there together does not mean you actually met — so the network is built from meetups only. Your event badges remain valid and count towards your trust score."
 }

@@ -101,9 +101,36 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
         Text(t.mnEmptySub,
             textAlign: TextAlign.center,
             style: const TextStyle(color: cTextSecondary, fontSize: 13, height: 1.5)),
+        const SizedBox(height: 24),
+        _eventNote(t),
       ],
     );
   }
+
+  /// Hinweis: Veranstaltungen zaehlen nicht als Begegnung.
+  ///
+  /// Das ist gewollt — bei fuenfhundert Besuchern sagt gemeinsame
+  /// Anwesenheit nichts darueber, ob man sich begegnet ist. Aber die App
+  /// sagte es bisher nirgends. Wer nur Event-Badges hatte, sah ein leeres
+  /// Netzwerk und hielt es fuer einen Fehler (Issue #57, Punkt 2).
+  Widget _eventNote(AppLocalizations t) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cTileBorder, width: 0.5),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.info_outline_rounded,
+              color: cTextTertiary, size: 16),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(t.mnEventNote,
+                style: const TextStyle(
+                    color: cTextTertiary, fontSize: 12, height: 1.5)),
+          ),
+        ]),
+      );
 
   Widget _buildContent(AppLocalizations t, MyNetwork net) {
     return ListView(
@@ -111,6 +138,8 @@ class _MyNetworkScreenState extends State<MyNetworkScreen> with SingleTickerProv
       children: [
         Text(t.mnIntro,
             style: const TextStyle(color: cTextSecondary, fontSize: 13, height: 1.5)),
+        const SizedBox(height: 12),
+        _eventNote(t),
         const SizedBox(height: 20),
 
         // Interaktiver Netzwerk-Graph (geschwungene Verbindungen, antippbar)

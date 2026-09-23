@@ -33,6 +33,9 @@ class _PlebrapPlayerScreenState extends State<PlebrapPlayerScreen> {
   // dieser Screen ist nur noch eine Ansicht darauf. KEIN dispose des
   // Players: die Musik laeuft nach Verlassen weiter (Dashboard-Mini-Player).
   AudioPlayer get _player => PlebrapAudio.player;
+
+  /// Position unter dem Finger, solange gezogen wird. null = nicht gezogen.
+  double? _dragMs;
   int? get _index => PlebrapAudio.index.value;
   bool get _loading => PlebrapAudio.loading.value;
   int _seenErrors = 0;
@@ -159,16 +162,39 @@ class _PlebrapPlayerScreenState extends State<PlebrapPlayerScreen> {
                             activeTrackColor: cOrange, inactiveTrackColor: cSurface, thumbColor: cOrange,
                             overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
                           ),
+                          // Waehrend des Ziehens zeigt der Balken den WERT UNTER DEM
+                          // FINGER, nicht die Position vom Player — gesprungen wird
+                          // erst beim Loslassen.
+                          //
+                          // Vorher loeste jeder Ziehschritt einen seek aus. Die
+                          // Position vom Player hinkt aber hinterher, der Balken
+                          // wurde bei jedem Neuzeichnen darauf zurueckgesetzt, und
+                          // der Daumen sprang zurueck. Mit der Wiedergabeliste ist
+                          // der Versatz groesser geworden; ziehen ging praktisch
+                          // gar nicht mehr.
                           child: Slider(
-                            value: max > 0 ? pos.inMilliseconds.clamp(0, total.inMilliseconds).toDouble() : 0,
+                            value: max > 0
+                                ? (_dragMs ?? pos.inMilliseconds.toDouble())
+                                    .clamp(0, max)
+                                    .toDouble()
+                                : 0,
                             max: max > 0 ? max : 1,
-                            onChanged: max > 0 ? (v) => _player.seek(Duration(milliseconds: v.round())) : null,
+                            onChanged: max > 0
+                                ? (v) => setState(() => _dragMs = v)
+                                : null,
+                            onChangeEnd: max > 0
+                                ? (v) async {
+                                    await _player.seek(
+                                        Duration(milliseconds: v.round()));
+                                    if (mounted) setState(() => _dragMs = null);
+                                  }
+                                : null,
                           ),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text(_fmt(pos), style: const TextStyle(color: cTextTertiary, fontSize: 11).copyWith(fontFamily: fontMono)),
+                            Text(_fmt(_dragMs != null ? Duration(milliseconds: _dragMs!.round()) : pos), style: const TextStyle(color: cTextTertiary, fontSize: 11).copyWith(fontFamily: fontMono)),
                             Text(_fmt(total), style: const TextStyle(color: cTextTertiary, fontSize: 11).copyWith(fontFamily: fontMono)),
                           ]),
                         ),

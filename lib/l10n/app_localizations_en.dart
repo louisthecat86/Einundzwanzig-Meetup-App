@@ -6125,4 +6125,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get evCancelFailed =>
       'Cancellation not delivered — no relay accepted it.';
+
+  @override
+  String get mnEventNote =>
+      'Events do not count as encounters here. With hundreds of visitors, being there together does not mean you actually met — so the network is built from meetups only. Your event badges remain valid and count towards your trust score.';
 }
