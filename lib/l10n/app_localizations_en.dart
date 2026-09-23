@@ -6195,4 +6195,23 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get evBadgeLocatingHint =>
       'The app is checking that you are at the venue. This can take a few seconds — no need to tap again.';
+
+  @override
+  String get evSessionOpenSettings => 'Settings';
+
+  @override
+  String get evSessionLocationOff =>
+      'Location services are off. Turn them on — the app uses them to check that you are at the venue.';
+
+  @override
+  String get evSessionLocationDenied =>
+      'The app is not allowed to access your location. Allow it on the next attempt — without it, being on site cannot be checked.';
+
+  @override
+  String get evSessionLocationDeniedForever =>
+      'Location access is permanently blocked. You can only allow it again in the app settings.';
+
+  @override
+  String get evSessionLocationNoFix =>
+      'No GPS signal. Location and permission are on, but the device cannot find a position — usually indoors. Step to a window or outside briefly and try again. Devices without Google services (such as GrapheneOS) lack Wi-Fi positioning and need a clear view of the sky.';
 }

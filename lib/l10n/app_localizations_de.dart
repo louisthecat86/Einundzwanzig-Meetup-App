@@ -6240,4 +6240,23 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get evBadgeLocatingHint =>
       'Die App prüft, ob du am Veranstaltungsort bist. Das kann einige Sekunden dauern — bitte nicht erneut tippen.';
+
+  @override
+  String get evSessionOpenSettings => 'Einstellungen';
+
+  @override
+  String get evSessionLocationOff =>
+      'Der Ortungsdienst ist ausgeschaltet. Schalte ihn ein — die App prüft damit, ob du am Veranstaltungsort bist.';
+
+  @override
+  String get evSessionLocationDenied =>
+      'Die App darf deinen Standort nicht abfragen. Erlaube es beim nächsten Versuch — ohne Standort lässt sich nicht prüfen, ob du vor Ort bist.';
+
+  @override
+  String get evSessionLocationDeniedForever =>
+      'Der Standortzugriff ist dauerhaft gesperrt. Du kannst ihn nur in den App-Einstellungen wieder erlauben.';
+
+  @override
+  String get evSessionLocationNoFix =>
+      'Kein GPS-Signal. Ortung und Berechtigung sind an, aber das Gerät findet keine Position — meist drinnen. Geh kurz ans Fenster oder nach draußen und versuche es erneut. Auf Geräten ohne Google-Dienste (etwa GrapheneOS) fehlt die WLAN-Ortung, dort braucht GPS freien Himmel.';
 }

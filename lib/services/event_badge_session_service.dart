@@ -25,6 +25,7 @@ import 'coattendance_service.dart';
 import 'badge_security.dart';
 import 'calendar_event_service.dart';
 import 'meetup_location_service.dart';
+import 'nearby_meetup_service.dart';
 import 'rolling_qr_service.dart';
 import 'signing_service.dart';
 
@@ -37,6 +38,21 @@ enum EventSessionError {
   outsideWindow,
   noEventLocation,
   locationUnavailable,
+
+  /// Ortungsdienst des Geraets ist aus.
+  locationServiceOff,
+
+  /// Berechtigung verweigert — ein erneutes Nachfragen ist moeglich.
+  locationDenied,
+
+  /// Berechtigung dauerhaft verweigert — nur ueber die App-Einstellungen
+  /// zu aendern.
+  locationDeniedForever,
+
+  /// Alles an, aber kein Fix. Typisch drinnen, und besonders auf Geraeten
+  /// ohne Google-Dienste (GrapheneOS, LineageOS), denen die WLAN-Ortung
+  /// fehlt und die allein auf GPS angewiesen sind.
+  locationNoFix,
   tooFarAway,
   sessionFailed,
 }
@@ -104,14 +120,29 @@ class EventBadgeSessionService {
           EventSessionError.noEventLocation);
     }
 
-    final loc = await MeetupLocationService.resolveLocation();
-    if (loc.lat == 0 && loc.lng == 0) {
-      return const EventSessionResult.failure(
-          EventSessionError.locationUnavailable);
+    // Direkt die Ortung — NICHT resolveLocation().
+    //
+    // resolveLocation laedt nach der Ortung zusaetzlich die komplette
+    // Meetup-Liste, um Kandidaten in der Naehe zu finden. Fuer ein Event ist
+    // das ueberfluessig; es verlaengerte nur die Wartezeit. Und es gab den
+    // genauen Grund eines Fehlschlags nicht weiter — aus "kein GPS-Fix
+    // drinnen" wurde derselbe Rat wie bei "Ortungsdienst aus".
+    final loc = await NearbyMeetupService.getCurrentLocation();
+    if (loc.status != LocationStatus.ok || loc.position == null) {
+      final err = switch (loc.status) {
+        LocationStatus.serviceDisabled => EventSessionError.locationServiceOff,
+        LocationStatus.denied => EventSessionError.locationDenied,
+        LocationStatus.deniedForever => EventSessionError.locationDeniedForever,
+        LocationStatus.noFix => EventSessionError.locationNoFix,
+        _ => EventSessionError.locationUnavailable,
+      };
+      AppLogger.warn(_tag, 'Standort nicht verfuegbar: ${loc.status.name}');
+      return EventSessionResult.failure(err);
     }
+    final pos = loc.position!;
 
     final distance = MeetupLocationService.distanceKm(
-        loc.lat, loc.lng, event.lat, event.lng);
+        pos.latitude, pos.longitude, event.lat, event.lng);
     if (distance > issuerRadiusKm) {
       AppLogger.warn(_tag,
           'Zu weit weg: ${distance.toStringAsFixed(1)} km (erlaubt $issuerRadiusKm).');

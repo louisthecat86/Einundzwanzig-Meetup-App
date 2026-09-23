@@ -24,7 +24,13 @@ class NearbyMeetup {
 }
 
 /// Ergebnis der Standortabfrage.
-enum LocationStatus { ok, denied, serviceDisabled, error }
+/// Ergebnis der Ortung.
+///
+/// [deniedForever] und [noFix] sind eigene Faelle, weil sie eigene Abhilfen
+/// brauchen: Bei "fuer immer verweigert" hilft nur der Gang in die
+/// App-Einstellungen, bei "kein Fix" ein Schritt ans Fenster. Frueher lief
+/// beides unter "error" und bekam denselben Rat — der dann nicht half.
+enum LocationStatus { ok, denied, deniedForever, serviceDisabled, noFix, error }
 
 class LocationResult {
   final LocationStatus status;
@@ -51,8 +57,10 @@ class NearbyMeetupService {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
+        return const LocationResult(LocationStatus.deniedForever);
+      }
+      if (permission == LocationPermission.denied) {
         return const LocationResult(LocationStatus.denied);
       }
       try {
@@ -70,6 +78,31 @@ class NearbyMeetupService {
             'Frische Position ermittelt (Genauigkeit ${pos.accuracy.toStringAsFixed(0)} m).');
         return LocationResult(LocationStatus.ok, pos);
       } catch (e) {
+        // ZWEITER VERSUCH direkt ueber den Android-LocationManager.
+        //
+        // Der erste Versuch laeuft ueber den Standard-Weg, auf Geraeten mit
+        // Google-Diensten also ueber den "Fused Location Provider". Auf
+        // GrapheneOS, LineageOS oder mit microG ist dieser Weg mal gar nicht
+        // da, mal umgeleitet und mal eigenwillig. Der LocationManager ist
+        // das, was Android selbst mitbringt — auf entgoogelten Geraeten oft
+        // der einzige Weg, der zuverlaessig einen Fix liefert.
+        AppLogger.warn('Standort',
+            'Erster Versuch ohne Fix — zweiter ueber den LocationManager.', e);
+        try {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: AndroidSettings(
+              accuracy: LocationAccuracy.high,
+              forceLocationManager: true,
+              timeLimit: const Duration(seconds: 20),
+            ),
+          );
+          AppLogger.diag('Standort',
+              'Position ueber LocationManager (Genauigkeit ${pos.accuracy.toStringAsFixed(0)} m).');
+          return LocationResult(LocationStatus.ok, pos);
+        } catch (e2) {
+          AppLogger.warn('Standort', 'Auch der LocationManager lieferte keinen Fix.', e2);
+        }
+
         // RUECKFALLEBENE: Kein frischer Fix (meist Timeout drinnen). Eine
         // KUERZLICH bekannte Position ist fuer den Praesenz-Nachweis voellig
         // ausreichend — der Umkreis betraegt 5 km, in 10 Minuten kommt man
@@ -90,7 +123,9 @@ class NearbyMeetupService {
         } else {
           AppLogger.warn('Standort', 'Keine letzte bekannte Position vorhanden.');
         }
-        return const LocationResult(LocationStatus.error);
+        // Dienst an, Berechtigung da — nur kein Fix. Das ist ein EIGENER
+        // Fall: Der Rat "Ortungsdienst pruefen" waere hier falsch.
+        return const LocationResult(LocationStatus.noFix);
       }
     } catch (e) {
       AppLogger.warn('Nearby', 'Standortfehler: $e');

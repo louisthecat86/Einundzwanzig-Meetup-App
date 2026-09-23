@@ -118,7 +118,11 @@ class MeetupLocationService {
   static GpsStatus _mapStatus(LocationStatus s) {
     switch (s) {
       case LocationStatus.denied: return GpsStatus.denied;
+      // Die Meetup-Pruefung kennt nur die groben Faelle. "Fuer immer
+      // verweigert" ist fuer sie eine Verweigerung, "kein Fix" ein Fehler.
+      case LocationStatus.deniedForever: return GpsStatus.denied;
       case LocationStatus.serviceDisabled: return GpsStatus.serviceDisabled;
+      case LocationStatus.noFix: return GpsStatus.error;
       case LocationStatus.error: return GpsStatus.error;
       case LocationStatus.ok: return GpsStatus.ok;
     }

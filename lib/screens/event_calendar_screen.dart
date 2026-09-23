@@ -8,6 +8,7 @@
 // ============================================
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:nostr/nostr.dart' show Nip19;
 import '../widgets/npub_chip.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -738,10 +739,29 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
     if (!mounted) return;
 
     if (!res.ok) {
+      // Wo es eine direkte Abhilfe gibt, bekommt die Meldung einen Knopf
+      // dorthin. "Ortungsdienst aus" und "dauerhaft verweigert" lassen sich
+      // nur in den Einstellungen beheben — ein Hinweis ohne Weg dorthin
+      // schickt den Nutzer auf die Suche.
+      final SnackBarAction? action = switch (res.error) {
+        EventSessionError.locationServiceOff => SnackBarAction(
+            label: t.evSessionOpenSettings,
+            textColor: Colors.white,
+            onPressed: () => Geolocator.openLocationSettings()),
+        EventSessionError.locationDeniedForever => SnackBarAction(
+            label: t.evSessionOpenSettings,
+            textColor: Colors.white,
+            onPressed: () => Geolocator.openAppSettings()),
+        _ => null,
+      };
       messenger.showSnackBar(SnackBar(
         content: Text(_sessionErrorText(t, res)),
         backgroundColor: cRed,
-        duration: const Duration(seconds: 5),
+        // Die Hinweise zum fehlenden GPS-Fix sind laenger — sie muessen
+        // lesbar bleiben.
+        duration: Duration(
+            seconds: res.error == EventSessionError.locationNoFix ? 10 : 6),
+        action: action,
       ));
       return;
     }
@@ -762,6 +782,11 @@ class _EventCalendarScreenState extends State<EventCalendarScreen> {
         EventSessionError.outsideWindow => t.evSessionOutsideWindow,
         EventSessionError.noEventLocation => t.evSessionNoEventLocation,
         EventSessionError.locationUnavailable => t.evSessionNoLocation,
+        EventSessionError.locationServiceOff => t.evSessionLocationOff,
+        EventSessionError.locationDenied => t.evSessionLocationDenied,
+        EventSessionError.locationDeniedForever =>
+          t.evSessionLocationDeniedForever,
+        EventSessionError.locationNoFix => t.evSessionLocationNoFix,
         EventSessionError.tooFarAway =>
           t.evSessionTooFar((res.distanceKm ?? 0).toStringAsFixed(1)),
         _ => t.evSessionFailed,
