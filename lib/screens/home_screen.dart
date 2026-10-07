@@ -59,6 +59,7 @@ import '../services/plebrap_audio.dart';
 import 'package:just_audio/just_audio.dart';
 import 'v4v_screen.dart';
 import 'bitcoin_dashboard_screen.dart';
+import 'voice_wallet_screen.dart';
 import 'log_screen.dart';
 import '../services/mempool.dart';
 import '../services/widget_service.dart';
@@ -179,7 +180,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
   // diese Reihenfolge — was nicht drin ist, wird nie gezeichnet, egal was
   // in _tileDefs steht. "event_chats" fehlte hier, deshalb blieb die Kachel
   // "Meine Termine" unsichtbar, obwohl Zusagen vorlagen.
-  static const _defaultOrder = ['home_meetup', 'event_chats', 'reputation', 'trust_network', 'community', 'nostr', 'converter', 'btc_dashboard', 'news', 'portal', 'events', 'shoutout', 'podcast', 'satoshiduell', 'portal_area', 'plebrap', 'organisator'];
+  static const _defaultOrder = ['home_meetup', 'event_chats', 'reputation', 'trust_network', 'community', 'nostr', 'converter', 'btc_dashboard', 'voice_wallet', 'news', 'portal', 'events', 'shoutout', 'podcast', 'satoshiduell', 'portal_area', 'plebrap', 'organisator'];
   static const _defaultHidden = {'news', 'shoutout', 'podcast', 'nostr', 'portal', 'events', 'satoshiduell', 'portal_area', 'plebrap'};
 
   late List<_TileDef> _tileDefs;
@@ -365,6 +366,7 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
       _TileDef(id: 'portal_connect', label: 'Portal', span: 2, builder: _buildPortalConnectTile),
       _TileDef(id: 'converter',    label: 'Rechner',          span: 1, builder: _buildConverterTile),
       _TileDef(id: 'btc_dashboard', label: 'Bitcoin',         span: 2, builder: _buildBtcDashboardTile),
+      _TileDef(id: 'voice_wallet', label: 'Sats',            span: 2, builder: _buildVoiceWalletTile),
       _TileDef(id: 'news',         label: 'News',             span: 2, builder: _buildNewsTile),
       _TileDef(id: 'portal',       label: 'Meine Meetups',    span: 2, builder: _buildPortalTile),
       _TileDef(id: 'organisator',  label: 'Organisator',      span: 3, builder: _buildOrganisatorTile, visible: () => _user.isAdmin || _user.isReviewDemo),
@@ -2523,6 +2525,21 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
           content: Text('${t.portalLoginFailed}: ${res.error ?? ''}'), backgroundColor: cRed, behavior: SnackBarBehavior.floating));
     }
   }
+
+  Widget _buildVoiceWalletTile() => _tile(
+    accentColor: cOrange,
+    opacity: 0.07,
+    watermark: Icons.mic_rounded,
+    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VoiceWalletScreen())),
+    child: _heroContent(
+      icon: Icons.mic_rounded,
+      accent: cOrange,
+      label: AppLocalizations.of(context).tileVoiceWallet,
+      value: AppLocalizations.of(context).tileVoiceWalletValue,
+      valueSize: 17,
+      sub: AppLocalizations.of(context).tileVoiceWalletSub,
+    ),
+  );
 
   Widget _buildBtcDashboardTile() => _tile(
     accentColor: cOrange,

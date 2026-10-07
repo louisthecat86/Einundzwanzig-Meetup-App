@@ -71,6 +71,11 @@ dependencies:
 
   flutter_svg: any
   provider: ^6.1.5+1
+  speech_to_text: ^7.5.0
+  # Systemstimme des iPhones. Android spricht nicht.
+  flutter_tts: ^4.2.3
+  # Animierte Cashu-QR (cashu.me): mehrere ur:-Teile, Fountain-Code.
+  bc_ur: ^1.0.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

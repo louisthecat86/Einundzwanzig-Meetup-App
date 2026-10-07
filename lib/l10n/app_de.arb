@@ -2424,6 +2424,27 @@
   "guideEvBasicsBody": "Der Titel steht später in der Terminliste und auf dem Badge, falls du eines vergibst. Der Ort ist die Anschrift zum Vorlesen — die Koordinaten für die Badge-Ausgabe setzt du weiter unten getrennt auf der Karte.",
   "guideEvWhenWhereTitle": "Wann es stattfindet",
   "guideEvWhenWhereBody": "Start ist Pflicht, das Ende darfst du weglassen. Bei einem Event mit Badge zählt der Kalendertag: Badges lassen sich nur an diesem Tag ausgeben, von Mitternacht bis Mitternacht.",
+  "glCatVoice": "Sprach Wallet",
+  "glVoiceIntroTitle": "So sagst du es",
+  "glVoiceIntroBody": "Tippe das Mikrofon und sag einen Befehl. Hältst du es länger, wechselt die App von selbst zwischen Zuhören und Antwort, bis du wieder tippst oder noch einmal länger hältst. Unten stehen alle Wörter, die sie versteht. Den Token liest sie nie vor.",
+  "glVoiceBalanceTitle": "Kontostand",
+  "glVoiceBalanceBody": "Sagt den Stand.\nKontostand, Guthaben, Balance, Wie viel, Wieviel, How much, How many.",
+  "glVoiceScanTitle": "Kamera",
+  "glVoiceScanBody": "Öffnet die Kamera und liest den Code, auch einen wechselnden. Foto meint die Kamera, nicht die Galerie.\nToken, Tokens, Tocken, Kamera, Camera, Foto, Photo, QR, Code, Einlösen, Einlöse, Empfangen, Empfang, Receive, Redeem.\nAuch Q R, KU ER, und jedes Wort, das mit Scan oder Skan beginnt.",
+  "glVoicePasteTitle": "Einfügen",
+  "glVoicePasteBody": "Nimmt Text oder ein Bild aus der Zwischenablage. Ein einzelnes Teil eines wechselnden Codes reicht nicht, dafür nimm die Kamera.\nEinfügen, Paste, Zwischenablage, Clipboard.",
+  "glVoiceGalleryTitle": "Bild",
+  "glVoiceGalleryBody": "Öffnet ein Foto und liest den QR. Bild einfügen öffnet die Galerie, nicht die Zwischenablage.\nGalerie, Gallery, Album, Bild, Bilder, Upload, Screenshot.",
+  "glVoiceSendTitle": "Sats senden",
+  "glVoiceSendBody": "Fragt nach der Summe, wenn keine dabei war, und will danach ein Ja. Die Summe als Ziffer oder als Wort, zum Beispiel tausend oder twenty one. Mehr als ein Bitcoin nimmt sie nicht an. Token senden schickt Sats, es öffnet nicht die Kamera.\nSchick, Schicke, Schicken, Sende, Senden, Send, Zahl, Pay, Überweise, Überweisen.\nAuch Token senden, Token sende, Tokensenden, Sats senden, Sats sende, Satssenden, Satz senden.",
+  "glVoiceYesTitle": "Bestätigen",
+  "glVoiceYesBody": "Gilt nur, wenn der ganze Satz genau eines dieser Wörter ist.\nJa, Jawohl, Yes, Yeah, Ok, Okay, Bestätigen, Confirm, Klar.",
+  "glVoiceNoTitle": "Abbrechen",
+  "glVoiceNoBody": "Als ganzer Satz oder am Anfang eines Satzes.\nNein, No, Abbrechen, Stop, Stopp, Cancel, Zurück.",
+  "glVoiceHelpTitle": "Hilfe",
+  "glVoiceHelpBody": "Liest die kurze Liste vor: Kontostand, Kamera, Einfügen, Bild, Sats senden, und wie du die Ausgabe umschaltest. Die ganze Liste ist diese Kategorie.\nHilfe, Help, Befehle, Commands, Was kann ich, What can I.",
+  "glVoiceOutputTitle": "Ausgabe",
+  "glVoiceOutputBody": "Oben auf der Sprach-Wallet, oder per Sprache. Beides ist der Anfang: Ton und Text.\nTon und Text, Text und Ton, Beides, Both, Sound and text, Text and sound.\nNur Ton, Nur Stimme, Ohne Text, Sound only, Voice only, No text. Dann siehst du keine Antwort, nur drei Punkte, solange sie spricht. Der QR zum Bezahlen bleibt.\nNur Text, Ohne Ton, Kein Ton, Stumm, Text only, No sound, Mute.",
   "glCatApp": "App & Bedienung",
   "glTilesTitle": "Dashboard anpassen",
   "glTilesBody": "Halte eine Kachel lange gedrückt, um sie zu verschieben oder auszublenden. Trust Score und Home-Meetup bleiben immer sichtbar, alles andere kannst du loslösen. Ausgeblendete Kacheln landen in der Verwaltung und lassen sich jederzeit zurückholen.",
@@ -2741,6 +2762,75 @@
       "percent": {
         "type": "int"
       }
+    }
+  },
+  "tileVoiceWallet": "Sats",
+  "tileVoiceWalletValue": "Sprach Wallet",
+  "tileVoiceWalletSub": "Einfach sagen.",
+  "vwLangDe": "Deutsch",
+  "vwLangEn": "Englisch",
+  "vwHintIdle": "Sag Kontostand, Kamera, Einfügen oder Sats senden.",
+  "vwHintListening": "Ich höre zu.",
+  "vwHintConfirm": "Sag ja oder nein.",
+  "vwAskAmount": "Wie viele Sats?",
+  "vwBalanceCaption": "Auf dem Gerät",
+  "vwEmpty": "Noch keine Token hier.",
+  "vwSendPending": "Vorgemerkt. Der Token kommt mit der Wallet.",
+  "vwNotToken": "Kein Cashu-Token.",
+  "vwTokenNoAmount": "Cashu-Token. Den Betrag kann diese Fassung noch nicht lesen.",
+  "vwUnknown": "Noch einmal.",
+  "vwHelp": "Kontostand. Kamera. Einfügen. Galerie. Sats senden. Ton oder Text.",
+  "vwOutBoth": "Beides",
+  "vwOutSound": "Ton",
+  "vwOutText": "Text",
+  "vwOutBothSay": "Ton und Text.",
+  "vwOutSoundSay": "Nur Ton.",
+  "vwOutTextSay": "Nur Text.",
+  "vwSpeechOff": "Die Erkennung auf dem Gerät fehlt. Es wurde nichts verschickt.",
+  "vwSpeechDenied": "Mikrofon oder Spracherkennung ist aus.",
+  "vwAndroidOff": "Auf Android bleibt das Mikrofon aus, solange die Erkennung ins Netz ausweichen könnte.",
+  "vwWorking": "Einen Moment.",
+  "vwAlready": "Den hast du schon.",
+  "vwSpent": "Der Token ist schon eingelöst.",
+  "vwNotEnough": "Dafür sind zu wenig Sats da.",
+  "vwMintNo": "Der Mint hat abgelehnt.",
+  "vwNet": "Kein Netz zum Mint.",
+  "vwBadToken": "Den Cashu-Code kann ich nicht lesen.",
+  "vwNotCashu": "Kein Cashu-Code im Bild.",
+  "vwClipEmpty": "Die Zwischenablage ist leer.",
+  "vwClipNone": "Da ist kein Cashu-Code.",
+  "vwUrPart": "Das ist nur ein Teil. Für den wechselnden Code nimm die Kamera.",
+  "vwUrHold": "Halte die Kamera auf den Code, bis er stehen bleibt.",
+  "vwUrProgress": "Teil {done} von {total}.",
+  "@vwUrProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "vwLightning": "Das ist eine Lightning-Rechnung, kein Token.",
+  "vwOnlySat": "Nur Satoshi-Token.",
+  "vwFeeHigh": "Die Gebühr ist höher als der Token.",
+  "vwNoSat": "Der Mint hat keinen Satoshi-Schlüssel.",
+  "vwReadDetail": "Fassung {version}, {length} Zeichen.",
+  "@vwReadDetail": {
+    "placeholders": {
+      "version": {"type": "String"},
+      "length": {"type": "int"}
+    }
+  },
+  "vwBadMint": "Diesen Mint kann ich nicht ansprechen.",
+  "vwUnknownKeyset": "Der Mint kennt dieses Token nicht.",
+  "vwReceived": "Eingelöst. Stand {balance}.",
+  "@vwReceived": {
+    "placeholders": {
+      "balance": {"type": "int"}
+    }
+  },
+  "vwSent": "Zum Weitergeben. Stand {balance}.",
+  "@vwSent": {
+    "placeholders": {
+      "balance": {"type": "int"}
     }
   },
   "chatRelayUnavailable": "Das Chat-Relay hat gerade nicht geantwortet oder die Anmeldung kam nicht zustande. Versuch es gleich noch einmal — wer einen externen Signierer nutzt, muss die Anmeldung dort bestätigen.",

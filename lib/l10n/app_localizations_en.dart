@@ -5561,6 +5561,79 @@ class AppLocalizationsEn extends AppLocalizations {
       'A start is required, the end is optional. For an event with a badge the calendar day matters: badges can only be issued on that day, from midnight to midnight.';
 
   @override
+  String get glCatVoice => 'Voice Wallet';
+
+  @override
+  String get glVoiceIntroTitle => 'How to say it';
+
+  @override
+  String get glVoiceIntroBody =>
+      'Tap the microphone and say a command. Hold it and the app switches by itself between listening and answering, until you tap or hold again. Every word it understands is listed below. It never reads the token aloud.';
+
+  @override
+  String get glVoiceBalanceTitle => 'Balance';
+
+  @override
+  String get glVoiceBalanceBody =>
+      'Says the balance.\nKontostand, Guthaben, Balance, Wie viel, Wieviel, How much, How many.';
+
+  @override
+  String get glVoiceScanTitle => 'Camera';
+
+  @override
+  String get glVoiceScanBody =>
+      'Opens the camera and reads the code, including one that keeps changing. Foto means the camera, not the gallery.\nToken, Tokens, Tocken, Kamera, Camera, Foto, Photo, QR, Code, Einlösen, Einlöse, Empfangen, Empfang, Receive, Redeem.\nAlso Q R, KU ER, and any word that starts with Scan or Skan.';
+
+  @override
+  String get glVoicePasteTitle => 'Paste';
+
+  @override
+  String get glVoicePasteBody =>
+      'Takes text or a picture from the clipboard. One piece of a changing code is not enough; use the camera for that.\nEinfügen, Paste, Zwischenablage, Clipboard.';
+
+  @override
+  String get glVoiceGalleryTitle => 'Picture';
+
+  @override
+  String get glVoiceGalleryBody =>
+      'Opens a photo and reads the QR. Bild einfügen opens the gallery, not the clipboard.\nGalerie, Gallery, Album, Bild, Bilder, Upload, Screenshot.';
+
+  @override
+  String get glVoiceSendTitle => 'Send sats';
+
+  @override
+  String get glVoiceSendBody =>
+      'Asks for the amount if you did not say one, then wants a yes. Say the amount as digits or as words, for example tausend or twenty one. It will not accept more than one bitcoin. Token senden sends sats, it does not open the camera.\nSchick, Schicke, Schicken, Sende, Senden, Send, Zahl, Pay, Überweise, Überweisen.\nAlso Token senden, Token sende, Tokensenden, Sats senden, Sats sende, Satssenden, Satz senden.';
+
+  @override
+  String get glVoiceYesTitle => 'Confirm';
+
+  @override
+  String get glVoiceYesBody =>
+      'Counts only when the whole sentence is exactly one of these words.\nJa, Jawohl, Yes, Yeah, Ok, Okay, Bestätigen, Confirm, Klar.';
+
+  @override
+  String get glVoiceNoTitle => 'Cancel';
+
+  @override
+  String get glVoiceNoBody =>
+      'As the whole sentence, or at the start of one.\nNein, No, Abbrechen, Stop, Stopp, Cancel, Zurück.';
+
+  @override
+  String get glVoiceHelpTitle => 'Help';
+
+  @override
+  String get glVoiceHelpBody =>
+      'Reads the short list: balance, camera, paste, picture, send sats, and how to switch the output. The full list is this category.\nHilfe, Help, Befehle, Commands, Was kann ich, What can I.';
+
+  @override
+  String get glVoiceOutputTitle => 'Output';
+
+  @override
+  String get glVoiceOutputBody =>
+      'At the top of the voice wallet, or by voice. Both is the start: sound and text.\nTon und Text, Text und Ton, Beides, Both, Sound and text, Text and sound.\nNur Ton, Nur Stimme, Ohne Text, Sound only, Voice only, No text. Then you see no answer, only three dots while it speaks. The QR for paying stays.\nNur Text, Ohne Ton, Kein Ton, Stumm, Text only, No sound, Mute.';
+
+  @override
   String get glCatApp => 'App & handling';
 
   @override
@@ -6218,6 +6291,160 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String prCaching(int percent) {
     return 'Loading song ($percent %) — seeking works once it is fully downloaded. It stays saved afterwards.';
+  }
+
+  @override
+  String get tileVoiceWallet => 'Sats';
+
+  @override
+  String get tileVoiceWalletValue => 'Voice Wallet';
+
+  @override
+  String get tileVoiceWalletSub => 'Just say it.';
+
+  @override
+  String get vwLangDe => 'German';
+
+  @override
+  String get vwLangEn => 'English';
+
+  @override
+  String get vwHintIdle => 'Say balance, camera, paste or send sats.';
+
+  @override
+  String get vwHintListening => 'Listening.';
+
+  @override
+  String get vwHintConfirm => 'Say yes or no.';
+
+  @override
+  String get vwAskAmount => 'How many sats?';
+
+  @override
+  String get vwBalanceCaption => 'On this device';
+
+  @override
+  String get vwEmpty => 'No tokens here yet.';
+
+  @override
+  String get vwSendPending => 'Noted. The token comes with the wallet.';
+
+  @override
+  String get vwNotToken => 'Not a Cashu token.';
+
+  @override
+  String get vwTokenNoAmount =>
+      'Cashu token. This version cannot read the amount yet.';
+
+  @override
+  String get vwUnknown => 'Once more.';
+
+  @override
+  String get vwHelp =>
+      'Balance. Camera. Paste. Gallery. Send sats. Sound or text.';
+
+  @override
+  String get vwOutBoth => 'Both';
+
+  @override
+  String get vwOutSound => 'Sound';
+
+  @override
+  String get vwOutText => 'Text';
+
+  @override
+  String get vwOutBothSay => 'Sound and text.';
+
+  @override
+  String get vwOutSoundSay => 'Sound only.';
+
+  @override
+  String get vwOutTextSay => 'Text only.';
+
+  @override
+  String get vwSpeechOff =>
+      'On-device recognition is missing. Nothing was sent.';
+
+  @override
+  String get vwSpeechDenied => 'Microphone or speech recognition is off.';
+
+  @override
+  String get vwAndroidOff =>
+      'On Android the microphone stays off while recognition could fall back to the network.';
+
+  @override
+  String get vwWorking => 'One moment.';
+
+  @override
+  String get vwAlready => 'You already have this one.';
+
+  @override
+  String get vwSpent => 'This token is already redeemed.';
+
+  @override
+  String get vwNotEnough => 'There aren\'t enough sats for that.';
+
+  @override
+  String get vwMintNo => 'The mint refused.';
+
+  @override
+  String get vwNet => 'No connection to the mint.';
+
+  @override
+  String get vwBadToken => 'I cannot read this Cashu code.';
+
+  @override
+  String get vwNotCashu => 'No Cashu code in the picture.';
+
+  @override
+  String get vwClipEmpty => 'The clipboard is empty.';
+
+  @override
+  String get vwClipNone => 'There is no Cashu code.';
+
+  @override
+  String get vwUrPart =>
+      'That is only one part. Use the camera for the changing code.';
+
+  @override
+  String get vwUrHold => 'Hold the camera on the code until it stops changing.';
+
+  @override
+  String vwUrProgress(int done, int total) {
+    return 'Part $done of $total.';
+  }
+
+  @override
+  String get vwLightning => 'That is a Lightning invoice, not a token.';
+
+  @override
+  String get vwOnlySat => 'Only satoshi tokens.';
+
+  @override
+  String get vwFeeHigh => 'The fee is higher than the token.';
+
+  @override
+  String get vwNoSat => 'The mint has no satoshi key.';
+
+  @override
+  String vwReadDetail(String version, int length) {
+    return 'Version $version, $length characters.';
+  }
+
+  @override
+  String get vwBadMint => 'I cannot reach this mint.';
+
+  @override
+  String get vwUnknownKeyset => 'The mint does not know this token.';
+
+  @override
+  String vwReceived(int balance) {
+    return 'Redeemed. Balance $balance.';
+  }
+
+  @override
+  String vwSent(int balance) {
+    return 'Ready to pass on. Balance $balance.';
   }
 
   @override

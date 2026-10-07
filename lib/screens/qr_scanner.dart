@@ -28,6 +28,8 @@ import '../widgets/scanner_overlay.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/shadows.dart';
 import '../services/app_review_demo.dart';
+import '../services/kickstr_witness.dart';
+import 'kickstr_witness_dialog.dart';
 
 class SecureQRScanner extends StatefulWidget {
   const SecureQRScanner({super.key});
@@ -62,6 +64,11 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
         AppReviewDemo.showSuccess(context).then((_) {
           if (mounted) setState(() => _isScanned = false);
         });
+        break;
+      }
+      if (code.startsWith("21k:")) {
+        setState(() => _isScanned = true);
+        _witnessKickstr(code);
         break;
       }
       if (code.startsWith("21:") || code.startsWith("21v2:") || code.startsWith("21v3:")) {
@@ -109,6 +116,11 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           if (mounted) setState(() => _isScanned = false);
           return;
         }
+        if (code != null && code.startsWith("21k:")) {
+          setState(() => _isScanned = true);
+          await _witnessKickstr(code);
+          return;
+        }
         if (code != null && (code.startsWith("21:") || code.startsWith("21v2:") || code.startsWith("21v3:"))) {
           setState(() => _isScanned = true);
           _verifyAndShow(code);
@@ -133,6 +145,25 @@ class _SecureQRScannerState extends State<SecureQRScanner> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _witnessKickstr(String code) async {
+    final round = KickstrWitness.parse(code);
+    if (round == null) {
+      _showFailed(title: 'Kein Kickstr-Code', subtitle: 'Der QR gehört nicht zu einer offenen Runde.');
+      return;
+    }
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (_) => KickstrWitnessDialog(round: round),
+    );
+    if (!mounted) return;
+    setState(() => _isScanned = false);
+    if (sent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tipp ist bei Kickstr. Auf der Seite ist der Punkt gold, wenn Badges mitgingen.')),
+      );
     }
   }
 

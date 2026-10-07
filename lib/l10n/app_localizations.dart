@@ -10174,6 +10174,132 @@ abstract class AppLocalizations {
   /// **'Start ist Pflicht, das Ende darfst du weglassen. Bei einem Event mit Badge zählt der Kalendertag: Badges lassen sich nur an diesem Tag ausgeben, von Mitternacht bis Mitternacht.'**
   String get guideEvWhenWhereBody;
 
+  /// No description provided for @glCatVoice.
+  ///
+  /// In de, this message translates to:
+  /// **'Sprach Wallet'**
+  String get glCatVoice;
+
+  /// No description provided for @glVoiceIntroTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'So sagst du es'**
+  String get glVoiceIntroTitle;
+
+  /// No description provided for @glVoiceIntroBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Tippe das Mikrofon und sag einen Befehl. Hältst du es länger, wechselt die App von selbst zwischen Zuhören und Antwort, bis du wieder tippst oder noch einmal länger hältst. Unten stehen alle Wörter, die sie versteht. Den Token liest sie nie vor.'**
+  String get glVoiceIntroBody;
+
+  /// No description provided for @glVoiceBalanceTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Kontostand'**
+  String get glVoiceBalanceTitle;
+
+  /// No description provided for @glVoiceBalanceBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Sagt den Stand.\nKontostand, Guthaben, Balance, Wie viel, Wieviel, How much, How many.'**
+  String get glVoiceBalanceBody;
+
+  /// No description provided for @glVoiceScanTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Kamera'**
+  String get glVoiceScanTitle;
+
+  /// No description provided for @glVoiceScanBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Öffnet die Kamera und liest den Code, auch einen wechselnden. Foto meint die Kamera, nicht die Galerie.\nToken, Tokens, Tocken, Kamera, Camera, Foto, Photo, QR, Code, Einlösen, Einlöse, Empfangen, Empfang, Receive, Redeem.\nAuch Q R, KU ER, und jedes Wort, das mit Scan oder Skan beginnt.'**
+  String get glVoiceScanBody;
+
+  /// No description provided for @glVoicePasteTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Einfügen'**
+  String get glVoicePasteTitle;
+
+  /// No description provided for @glVoicePasteBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Nimmt Text oder ein Bild aus der Zwischenablage. Ein einzelnes Teil eines wechselnden Codes reicht nicht, dafür nimm die Kamera.\nEinfügen, Paste, Zwischenablage, Clipboard.'**
+  String get glVoicePasteBody;
+
+  /// No description provided for @glVoiceGalleryTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Bild'**
+  String get glVoiceGalleryTitle;
+
+  /// No description provided for @glVoiceGalleryBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Öffnet ein Foto und liest den QR. Bild einfügen öffnet die Galerie, nicht die Zwischenablage.\nGalerie, Gallery, Album, Bild, Bilder, Upload, Screenshot.'**
+  String get glVoiceGalleryBody;
+
+  /// No description provided for @glVoiceSendTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Sats senden'**
+  String get glVoiceSendTitle;
+
+  /// No description provided for @glVoiceSendBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Fragt nach der Summe, wenn keine dabei war, und will danach ein Ja. Die Summe als Ziffer oder als Wort, zum Beispiel tausend oder twenty one. Mehr als ein Bitcoin nimmt sie nicht an. Token senden schickt Sats, es öffnet nicht die Kamera.\nSchick, Schicke, Schicken, Sende, Senden, Send, Zahl, Pay, Überweise, Überweisen.\nAuch Token senden, Token sende, Tokensenden, Sats senden, Sats sende, Satssenden, Satz senden.'**
+  String get glVoiceSendBody;
+
+  /// No description provided for @glVoiceYesTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Bestätigen'**
+  String get glVoiceYesTitle;
+
+  /// No description provided for @glVoiceYesBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Gilt nur, wenn der ganze Satz genau eines dieser Wörter ist.\nJa, Jawohl, Yes, Yeah, Ok, Okay, Bestätigen, Confirm, Klar.'**
+  String get glVoiceYesBody;
+
+  /// No description provided for @glVoiceNoTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Abbrechen'**
+  String get glVoiceNoTitle;
+
+  /// No description provided for @glVoiceNoBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Als ganzer Satz oder am Anfang eines Satzes.\nNein, No, Abbrechen, Stop, Stopp, Cancel, Zurück.'**
+  String get glVoiceNoBody;
+
+  /// No description provided for @glVoiceHelpTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Hilfe'**
+  String get glVoiceHelpTitle;
+
+  /// No description provided for @glVoiceHelpBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Liest die kurze Liste vor: Kontostand, Kamera, Einfügen, Bild, Sats senden, und wie du die Ausgabe umschaltest. Die ganze Liste ist diese Kategorie.\nHilfe, Help, Befehle, Commands, Was kann ich, What can I.'**
+  String get glVoiceHelpBody;
+
+  /// No description provided for @glVoiceOutputTitle.
+  ///
+  /// In de, this message translates to:
+  /// **'Ausgabe'**
+  String get glVoiceOutputTitle;
+
+  /// No description provided for @glVoiceOutputBody.
+  ///
+  /// In de, this message translates to:
+  /// **'Oben auf der Sprach-Wallet, oder per Sprache. Beides ist der Anfang: Ton und Text.\nTon und Text, Text und Ton, Beides, Both, Sound and text, Text and sound.\nNur Ton, Nur Stimme, Ohne Text, Sound only, Voice only, No text. Dann siehst du keine Antwort, nur drei Punkte, solange sie spricht. Der QR zum Bezahlen bleibt.\nNur Text, Ohne Ton, Kein Ton, Stumm, Text only, No sound, Mute.'**
+  String get glVoiceOutputBody;
+
   /// No description provided for @glCatApp.
   ///
   /// In de, this message translates to:
@@ -11271,6 +11397,288 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Lied wird geladen ({percent} %) — Springen ist möglich, sobald es vollständig da ist. Danach bleibt es gespeichert.'**
   String prCaching(int percent);
+
+  /// No description provided for @tileVoiceWallet.
+  ///
+  /// In de, this message translates to:
+  /// **'Sats'**
+  String get tileVoiceWallet;
+
+  /// No description provided for @tileVoiceWalletValue.
+  ///
+  /// In de, this message translates to:
+  /// **'Sprach Wallet'**
+  String get tileVoiceWalletValue;
+
+  /// No description provided for @tileVoiceWalletSub.
+  ///
+  /// In de, this message translates to:
+  /// **'Einfach sagen.'**
+  String get tileVoiceWalletSub;
+
+  /// No description provided for @vwLangDe.
+  ///
+  /// In de, this message translates to:
+  /// **'Deutsch'**
+  String get vwLangDe;
+
+  /// No description provided for @vwLangEn.
+  ///
+  /// In de, this message translates to:
+  /// **'Englisch'**
+  String get vwLangEn;
+
+  /// No description provided for @vwHintIdle.
+  ///
+  /// In de, this message translates to:
+  /// **'Sag Kontostand, Kamera, Einfügen oder Sats senden.'**
+  String get vwHintIdle;
+
+  /// No description provided for @vwHintListening.
+  ///
+  /// In de, this message translates to:
+  /// **'Ich höre zu.'**
+  String get vwHintListening;
+
+  /// No description provided for @vwHintConfirm.
+  ///
+  /// In de, this message translates to:
+  /// **'Sag ja oder nein.'**
+  String get vwHintConfirm;
+
+  /// No description provided for @vwAskAmount.
+  ///
+  /// In de, this message translates to:
+  /// **'Wie viele Sats?'**
+  String get vwAskAmount;
+
+  /// No description provided for @vwBalanceCaption.
+  ///
+  /// In de, this message translates to:
+  /// **'Auf dem Gerät'**
+  String get vwBalanceCaption;
+
+  /// No description provided for @vwEmpty.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch keine Token hier.'**
+  String get vwEmpty;
+
+  /// No description provided for @vwSendPending.
+  ///
+  /// In de, this message translates to:
+  /// **'Vorgemerkt. Der Token kommt mit der Wallet.'**
+  String get vwSendPending;
+
+  /// No description provided for @vwNotToken.
+  ///
+  /// In de, this message translates to:
+  /// **'Kein Cashu-Token.'**
+  String get vwNotToken;
+
+  /// No description provided for @vwTokenNoAmount.
+  ///
+  /// In de, this message translates to:
+  /// **'Cashu-Token. Den Betrag kann diese Fassung noch nicht lesen.'**
+  String get vwTokenNoAmount;
+
+  /// No description provided for @vwUnknown.
+  ///
+  /// In de, this message translates to:
+  /// **'Noch einmal.'**
+  String get vwUnknown;
+
+  /// No description provided for @vwHelp.
+  ///
+  /// In de, this message translates to:
+  /// **'Kontostand. Kamera. Einfügen. Galerie. Sats senden. Ton oder Text.'**
+  String get vwHelp;
+
+  /// No description provided for @vwOutBoth.
+  ///
+  /// In de, this message translates to:
+  /// **'Beides'**
+  String get vwOutBoth;
+
+  /// No description provided for @vwOutSound.
+  ///
+  /// In de, this message translates to:
+  /// **'Ton'**
+  String get vwOutSound;
+
+  /// No description provided for @vwOutText.
+  ///
+  /// In de, this message translates to:
+  /// **'Text'**
+  String get vwOutText;
+
+  /// No description provided for @vwOutBothSay.
+  ///
+  /// In de, this message translates to:
+  /// **'Ton und Text.'**
+  String get vwOutBothSay;
+
+  /// No description provided for @vwOutSoundSay.
+  ///
+  /// In de, this message translates to:
+  /// **'Nur Ton.'**
+  String get vwOutSoundSay;
+
+  /// No description provided for @vwOutTextSay.
+  ///
+  /// In de, this message translates to:
+  /// **'Nur Text.'**
+  String get vwOutTextSay;
+
+  /// No description provided for @vwSpeechOff.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Erkennung auf dem Gerät fehlt. Es wurde nichts verschickt.'**
+  String get vwSpeechOff;
+
+  /// No description provided for @vwSpeechDenied.
+  ///
+  /// In de, this message translates to:
+  /// **'Mikrofon oder Spracherkennung ist aus.'**
+  String get vwSpeechDenied;
+
+  /// No description provided for @vwAndroidOff.
+  ///
+  /// In de, this message translates to:
+  /// **'Auf Android bleibt das Mikrofon aus, solange die Erkennung ins Netz ausweichen könnte.'**
+  String get vwAndroidOff;
+
+  /// No description provided for @vwWorking.
+  ///
+  /// In de, this message translates to:
+  /// **'Einen Moment.'**
+  String get vwWorking;
+
+  /// No description provided for @vwAlready.
+  ///
+  /// In de, this message translates to:
+  /// **'Den hast du schon.'**
+  String get vwAlready;
+
+  /// No description provided for @vwSpent.
+  ///
+  /// In de, this message translates to:
+  /// **'Der Token ist schon eingelöst.'**
+  String get vwSpent;
+
+  /// No description provided for @vwNotEnough.
+  ///
+  /// In de, this message translates to:
+  /// **'Dafür sind zu wenig Sats da.'**
+  String get vwNotEnough;
+
+  /// No description provided for @vwMintNo.
+  ///
+  /// In de, this message translates to:
+  /// **'Der Mint hat abgelehnt.'**
+  String get vwMintNo;
+
+  /// No description provided for @vwNet.
+  ///
+  /// In de, this message translates to:
+  /// **'Kein Netz zum Mint.'**
+  String get vwNet;
+
+  /// No description provided for @vwBadToken.
+  ///
+  /// In de, this message translates to:
+  /// **'Den Cashu-Code kann ich nicht lesen.'**
+  String get vwBadToken;
+
+  /// No description provided for @vwNotCashu.
+  ///
+  /// In de, this message translates to:
+  /// **'Kein Cashu-Code im Bild.'**
+  String get vwNotCashu;
+
+  /// No description provided for @vwClipEmpty.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Zwischenablage ist leer.'**
+  String get vwClipEmpty;
+
+  /// No description provided for @vwClipNone.
+  ///
+  /// In de, this message translates to:
+  /// **'Da ist kein Cashu-Code.'**
+  String get vwClipNone;
+
+  /// No description provided for @vwUrPart.
+  ///
+  /// In de, this message translates to:
+  /// **'Das ist nur ein Teil. Für den wechselnden Code nimm die Kamera.'**
+  String get vwUrPart;
+
+  /// No description provided for @vwUrHold.
+  ///
+  /// In de, this message translates to:
+  /// **'Halte die Kamera auf den Code, bis er stehen bleibt.'**
+  String get vwUrHold;
+
+  /// No description provided for @vwUrProgress.
+  ///
+  /// In de, this message translates to:
+  /// **'Teil {done} von {total}.'**
+  String vwUrProgress(int done, int total);
+
+  /// No description provided for @vwLightning.
+  ///
+  /// In de, this message translates to:
+  /// **'Das ist eine Lightning-Rechnung, kein Token.'**
+  String get vwLightning;
+
+  /// No description provided for @vwOnlySat.
+  ///
+  /// In de, this message translates to:
+  /// **'Nur Satoshi-Token.'**
+  String get vwOnlySat;
+
+  /// No description provided for @vwFeeHigh.
+  ///
+  /// In de, this message translates to:
+  /// **'Die Gebühr ist höher als der Token.'**
+  String get vwFeeHigh;
+
+  /// No description provided for @vwNoSat.
+  ///
+  /// In de, this message translates to:
+  /// **'Der Mint hat keinen Satoshi-Schlüssel.'**
+  String get vwNoSat;
+
+  /// No description provided for @vwReadDetail.
+  ///
+  /// In de, this message translates to:
+  /// **'Fassung {version}, {length} Zeichen.'**
+  String vwReadDetail(String version, int length);
+
+  /// No description provided for @vwBadMint.
+  ///
+  /// In de, this message translates to:
+  /// **'Diesen Mint kann ich nicht ansprechen.'**
+  String get vwBadMint;
+
+  /// No description provided for @vwUnknownKeyset.
+  ///
+  /// In de, this message translates to:
+  /// **'Der Mint kennt dieses Token nicht.'**
+  String get vwUnknownKeyset;
+
+  /// No description provided for @vwReceived.
+  ///
+  /// In de, this message translates to:
+  /// **'Eingelöst. Stand {balance}.'**
+  String vwReceived(int balance);
+
+  /// No description provided for @vwSent.
+  ///
+  /// In de, this message translates to:
+  /// **'Zum Weitergeben. Stand {balance}.'**
+  String vwSent(int balance);
 
   /// No description provided for @chatRelayUnavailable.
   ///

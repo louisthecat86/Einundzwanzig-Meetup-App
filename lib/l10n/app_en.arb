@@ -2402,6 +2402,27 @@
   "guideEvBasicsBody": "The title appears in the event list later and on the badge, if you issue one. The location field is the address to read out — the coordinates for issuing badges are set separately on the map further down.",
   "guideEvWhenWhereTitle": "When it happens",
   "guideEvWhenWhereBody": "A start is required, the end is optional. For an event with a badge the calendar day matters: badges can only be issued on that day, from midnight to midnight.",
+  "glCatVoice": "Voice Wallet",
+  "glVoiceIntroTitle": "How to say it",
+  "glVoiceIntroBody": "Tap the microphone and say a command. Hold it and the app switches by itself between listening and answering, until you tap or hold again. Every word it understands is listed below. It never reads the token aloud.",
+  "glVoiceBalanceTitle": "Balance",
+  "glVoiceBalanceBody": "Says the balance.\nKontostand, Guthaben, Balance, Wie viel, Wieviel, How much, How many.",
+  "glVoiceScanTitle": "Camera",
+  "glVoiceScanBody": "Opens the camera and reads the code, including one that keeps changing. Foto means the camera, not the gallery.\nToken, Tokens, Tocken, Kamera, Camera, Foto, Photo, QR, Code, Einlösen, Einlöse, Empfangen, Empfang, Receive, Redeem.\nAlso Q R, KU ER, and any word that starts with Scan or Skan.",
+  "glVoicePasteTitle": "Paste",
+  "glVoicePasteBody": "Takes text or a picture from the clipboard. One piece of a changing code is not enough; use the camera for that.\nEinfügen, Paste, Zwischenablage, Clipboard.",
+  "glVoiceGalleryTitle": "Picture",
+  "glVoiceGalleryBody": "Opens a photo and reads the QR. Bild einfügen opens the gallery, not the clipboard.\nGalerie, Gallery, Album, Bild, Bilder, Upload, Screenshot.",
+  "glVoiceSendTitle": "Send sats",
+  "glVoiceSendBody": "Asks for the amount if you did not say one, then wants a yes. Say the amount as digits or as words, for example tausend or twenty one. It will not accept more than one bitcoin. Token senden sends sats, it does not open the camera.\nSchick, Schicke, Schicken, Sende, Senden, Send, Zahl, Pay, Überweise, Überweisen.\nAlso Token senden, Token sende, Tokensenden, Sats senden, Sats sende, Satssenden, Satz senden.",
+  "glVoiceYesTitle": "Confirm",
+  "glVoiceYesBody": "Counts only when the whole sentence is exactly one of these words.\nJa, Jawohl, Yes, Yeah, Ok, Okay, Bestätigen, Confirm, Klar.",
+  "glVoiceNoTitle": "Cancel",
+  "glVoiceNoBody": "As the whole sentence, or at the start of one.\nNein, No, Abbrechen, Stop, Stopp, Cancel, Zurück.",
+  "glVoiceHelpTitle": "Help",
+  "glVoiceHelpBody": "Reads the short list: balance, camera, paste, picture, send sats, and how to switch the output. The full list is this category.\nHilfe, Help, Befehle, Commands, Was kann ich, What can I.",
+  "glVoiceOutputTitle": "Output",
+  "glVoiceOutputBody": "At the top of the voice wallet, or by voice. Both is the start: sound and text.\nTon und Text, Text und Ton, Beides, Both, Sound and text, Text and sound.\nNur Ton, Nur Stimme, Ohne Text, Sound only, Voice only, No text. Then you see no answer, only three dots while it speaks. The QR for paying stays.\nNur Text, Ohne Ton, Kein Ton, Stumm, Text only, No sound, Mute.",
   "glCatApp": "App & handling",
   "glTilesTitle": "Customising the dashboard",
   "glTilesBody": "Press and hold a tile to move or hide it. Trust score and home meetup always stay; everything else can be unpinned. Hidden tiles go to the tile manager and can be brought back any time.",
@@ -2719,6 +2740,75 @@
       "percent": {
         "type": "int"
       }
+    }
+  },
+  "tileVoiceWallet": "Sats",
+  "tileVoiceWalletValue": "Voice Wallet",
+  "tileVoiceWalletSub": "Just say it.",
+  "vwLangDe": "German",
+  "vwLangEn": "English",
+  "vwHintIdle": "Say balance, camera, paste or send sats.",
+  "vwHintListening": "Listening.",
+  "vwHintConfirm": "Say yes or no.",
+  "vwAskAmount": "How many sats?",
+  "vwBalanceCaption": "On this device",
+  "vwEmpty": "No tokens here yet.",
+  "vwSendPending": "Noted. The token comes with the wallet.",
+  "vwNotToken": "Not a Cashu token.",
+  "vwTokenNoAmount": "Cashu token. This version cannot read the amount yet.",
+  "vwUnknown": "Once more.",
+  "vwHelp": "Balance. Camera. Paste. Gallery. Send sats. Sound or text.",
+  "vwOutBoth": "Both",
+  "vwOutSound": "Sound",
+  "vwOutText": "Text",
+  "vwOutBothSay": "Sound and text.",
+  "vwOutSoundSay": "Sound only.",
+  "vwOutTextSay": "Text only.",
+  "vwSpeechOff": "On-device recognition is missing. Nothing was sent.",
+  "vwSpeechDenied": "Microphone or speech recognition is off.",
+  "vwAndroidOff": "On Android the microphone stays off while recognition could fall back to the network.",
+  "vwWorking": "One moment.",
+  "vwAlready": "You already have this one.",
+  "vwSpent": "This token is already redeemed.",
+  "vwNotEnough": "There aren't enough sats for that.",
+  "vwMintNo": "The mint refused.",
+  "vwNet": "No connection to the mint.",
+  "vwBadToken": "I cannot read this Cashu code.",
+  "vwNotCashu": "No Cashu code in the picture.",
+  "vwClipEmpty": "The clipboard is empty.",
+  "vwClipNone": "There is no Cashu code.",
+  "vwUrPart": "That is only one part. Use the camera for the changing code.",
+  "vwUrHold": "Hold the camera on the code until it stops changing.",
+  "vwUrProgress": "Part {done} of {total}.",
+  "@vwUrProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "vwLightning": "That is a Lightning invoice, not a token.",
+  "vwOnlySat": "Only satoshi tokens.",
+  "vwFeeHigh": "The fee is higher than the token.",
+  "vwNoSat": "The mint has no satoshi key.",
+  "vwReadDetail": "Version {version}, {length} characters.",
+  "@vwReadDetail": {
+    "placeholders": {
+      "version": {"type": "String"},
+      "length": {"type": "int"}
+    }
+  },
+  "vwBadMint": "I cannot reach this mint.",
+  "vwUnknownKeyset": "The mint does not know this token.",
+  "vwReceived": "Redeemed. Balance {balance}.",
+  "@vwReceived": {
+    "placeholders": {
+      "balance": {"type": "int"}
+    }
+  },
+  "vwSent": "Ready to pass on. Balance {balance}.",
+  "@vwSent": {
+    "placeholders": {
+      "balance": {"type": "int"}
     }
   },
   "chatRelayUnavailable": "The chat relay did not respond, or signing in did not complete. Please try again in a moment — if you use an external signer, approve the sign-in there.",
