@@ -55,7 +55,7 @@ Die CI führt die NIP-46-Transportsuite zusätzlich in Chrome aus. Die Reaktions
 auf Relay-Ablehnungen wird ab Eingang der Ablehnung gemessen, damit die im Browser
 langsamere Verschlüsselung nicht fälschlich als Transportverzögerung zählt.
 
-Der Nutzer bestätigte am 10.10.2026 die Anzeige von Name und Symbol in Clave auf
-dem iPhone, gekoppelt mit dem Simulator-Build. Noch manuell zu bestätigen sind
-das Leerzeichen nach der `%20`-Korrektur, beide Kopplungswege einzeln sowie eine
-Signaturanfrage nach einem App-Neustart.
+Der Nutzer bestätigte am 10.10.2026 mit Clave auf einem echten iPhone und
+dem Simulator-Build beide Kopplungswege einzeln: Name, Symbol und das mit `%20`
+kodierte Leerzeichen wurden korrekt angezeigt; auch eine Signaturanfrage nach
+einem App-Neustart wurde erfolgreich bestätigt.
