@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme.dart';
 import '../services/app_logger.dart';
+import '../utils/share_origin.dart';
 
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
@@ -83,14 +84,27 @@ class _LogScreenState extends State<LogScreen> {
               }
             },
           ),
-          IconButton(
+          Builder(builder: (btnCtx) => IconButton(
             icon: const Icon(Icons.share_rounded, color: cTextSecondary, size: 20),
             tooltip: 'Teilen',
-            onPressed: () {
+            onPressed: () async {
               final text = AppLogger.exportText();
-              if (text.isNotEmpty) Share.share(text, subject: '21Meetup Diagnose-Log');
+              if (text.isEmpty) return;
+              try {
+                await Share.share(text,
+                    subject: '21Meetup Diagnose-Log',
+                    sharePositionOrigin: shareOriginFor(btnCtx));
+              } catch (_) {
+                // Teilen fehlgeschlagen: wie der Kopieren-Button daneben.
+                await Clipboard.setData(ClipboardData(text: text));
+                if (btnCtx.mounted) {
+                  ScaffoldMessenger.of(btnCtx).showSnackBar(const SnackBar(
+                      content: Text('Log kopiert'),
+                      behavior: SnackBarBehavior.floating));
+                }
+              }
             },
-          ),
+          )),
         ],
       ),
       body: all.isEmpty

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/user.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:add_2_calendar/add_2_calendar.dart' as cal;
@@ -11,6 +12,7 @@ import '../models/meetup.dart';
 import '../theme.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/event_details_sheet.dart';
+import '../utils/share_origin.dart';
 import '../services/safe_url_launcher.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -555,8 +557,22 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 }),
                 const SizedBox(width: 10),
               ],
-              action(t.evShare, Icons.share_rounded, () {
-                Share.share('${event.title} · $when${event.location.isNotEmpty ? '\n${event.location}' : ''}${event.url.isNotEmpty ? '\n${event.url}' : ''}');
+              action(t.evShare, Icons.share_rounded, () async {
+                final text = '${event.title} · $when'
+                    '${event.location.isNotEmpty ? '\n${event.location}' : ''}'
+                    '${event.url.isNotEmpty ? '\n${event.url}' : ''}';
+                try {
+                  await Share.share(text,
+                      sharePositionOrigin: shareOriginFor(ctx));
+                } catch (_) {
+                  // Teilen fehlgeschlagen: zumindest den Termin retten.
+                  await Clipboard.setData(ClipboardData(text: text));
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                        content: Text(t.evShareCopied),
+                        backgroundColor: cOrange));
+                  }
+                }
               }),
             ]),
             const SizedBox(height: 10),

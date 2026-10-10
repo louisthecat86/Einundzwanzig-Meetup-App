@@ -3931,6 +3931,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get evShare => 'Compartir';
 
   @override
+  String get evShareCopied => 'Evento copiado al portapapeles';
+
+  @override
   String get evToCalendar => 'Añadir al calendario';
 
   @override
@@ -4661,6 +4664,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get newsShare => 'Compartir';
+
+  @override
+  String get newsShareCopied => 'Enlace copiado al portapapeles';
 
   @override
   String get newsLikeFailed =>

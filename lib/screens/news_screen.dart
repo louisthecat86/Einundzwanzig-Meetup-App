@@ -16,6 +16,7 @@ import '../services/news_reactions_service.dart';
 import '../services/news_service.dart';
 import '../services/news_zap_service.dart';
 import '../widgets/markdown_view.dart';
+import '../utils/share_origin.dart';
 
 const String _websiteUrl = 'https://media.einundzwanzig.space/s/einundzwanzig-news';
 
@@ -506,9 +507,19 @@ class _ArticleDetailState extends State<_ArticleDetail> {
         _ => t.newsZapFailed,
       };
 
-  void _share() {
+  Future<void> _share(BuildContext anchor) async {
     final a = widget.article;
-    Share.share('${a.title}\n\n${_articleUrl(a)}');
+    final text = '${a.title}\n\n${_articleUrl(a)}';
+    final t = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await Share.share(text, sharePositionOrigin: shareOriginFor(anchor));
+    } catch (_) {
+      // Teilen fehlgeschlagen: zumindest den Link retten.
+      await Clipboard.setData(ClipboardData(text: text));
+      messenger.showSnackBar(SnackBar(
+          content: Text(t.newsShareCopied), backgroundColor: cOrange));
+    }
   }
 
   /// Teilen und Herz. Steht unter dem Artikel, weil beides erst nach dem
@@ -564,8 +575,8 @@ class _ArticleDetailState extends State<_ArticleDetail> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _share,
+          child: Builder(builder: (btnCtx) => OutlinedButton.icon(
+            onPressed: () => _share(btnCtx),
             icon: const Icon(Icons.ios_share_rounded,
                 size: 18, color: cTextSecondary),
             label: Text(t.newsShare,
@@ -574,7 +585,7 @@ class _ArticleDetailState extends State<_ArticleDetail> {
               side: const BorderSide(color: cBorder),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-          ),
+          )),
         ),
       ],
     );

@@ -11,6 +11,7 @@ import '../models/user.dart';
 import '../models/badge.dart';
 import '../services/trust_score_service.dart';
 import '../services/badge_claim_service.dart';
+import '../utils/share_origin.dart';
 
 /// Teilbares Reputations-Profil als schön gestaltete Karte.
 /// Export als PNG via RepaintBoundary -> share_plus.
@@ -62,6 +63,8 @@ class _ReputationCardScreenState extends State<ReputationCardScreen> {
     if (_sharing) return;
     setState(() => _sharing = true);
     final shareText = AppLocalizations.of(context).rcShareText;
+    // Anker vor jeglichem await holen — warum: share_origin.dart (Issue #73).
+    final shareOrigin = shareOriginFor(context);
     try {
       // Auf vollständiges Rendering des Boundary warten
       final completer = Completer<void>();
@@ -94,6 +97,7 @@ class _ReputationCardScreenState extends State<ReputationCardScreen> {
         fileNameOverrides: const [fileName],
         subject: 'Einundzwanzig Reputation',
         text: shareText,
+        sharePositionOrigin: shareOrigin,
       );
     } catch (e) {
       if (mounted) {

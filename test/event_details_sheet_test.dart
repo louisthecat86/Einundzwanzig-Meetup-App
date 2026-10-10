@@ -1,4 +1,5 @@
 import 'package:einundzwanzig_meetup_app/l10n/app_localizations.dart';
+import 'package:einundzwanzig_meetup_app/utils/share_origin.dart';
 import 'package:einundzwanzig_meetup_app/widgets/event_details_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -135,4 +136,57 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+      'Anker im scrollbaren Sheet bleibt innerhalb der Ansicht (Issue #73)',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(402, 874);
+    tester.view.padding = const FakeViewPadding(top: 62, bottom: 34);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetPadding);
+
+    late BuildContext pageContext;
+    late BuildContext contentContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('de'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              pageContext = context;
+              return const Text('Kalender');
+            },
+          ),
+        ),
+      ),
+    );
+
+    // Wie im Kalender: Sheet-Inhalt deutlich größer als die Ansicht.
+    final dismissed = showEventDetailsSheet(
+      context: pageContext,
+      builder: (_) => Builder(
+        builder: (c) {
+          contentContext = c;
+          return const SizedBox(width: 200, height: 4000);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final view = tester.view.physicalSize / tester.view.devicePixelRatio;
+    final rect = shareOriginFor(contentContext);
+    expect(rect.width, greaterThan(0));
+    expect(rect.height, greaterThan(0));
+    expect(rect.height, lessThan(view.height)); // gekürzt, nicht 4000
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.bottom, lessThanOrEqualTo(view.height));
+
+    await tester.tap(find.byTooltip('Schließen'));
+    await tester.pumpAndSettle();
+    await dismissed;
+  });
 }

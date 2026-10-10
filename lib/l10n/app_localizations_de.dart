@@ -3938,6 +3938,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get evShare => 'Teilen';
 
   @override
+  String get evShareCopied => 'Termin in die Zwischenablage kopiert';
+
+  @override
   String get evToCalendar => 'Zum Kalender';
 
   @override
@@ -4668,6 +4671,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get newsShare => 'Teilen';
+
+  @override
+  String get newsShareCopied => 'Link in die Zwischenablage kopiert';
 
   @override
   String get newsLikeFailed =>

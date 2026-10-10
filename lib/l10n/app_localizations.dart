@@ -7240,6 +7240,12 @@ abstract class AppLocalizations {
   /// **'Teilen'**
   String get evShare;
 
+  /// No description provided for @evShareCopied.
+  ///
+  /// In de, this message translates to:
+  /// **'Termin in die Zwischenablage kopiert'**
+  String get evShareCopied;
+
   /// No description provided for @evToCalendar.
   ///
   /// In de, this message translates to:
@@ -8577,6 +8583,12 @@ abstract class AppLocalizations {
   /// In de, this message translates to:
   /// **'Teilen'**
   String get newsShare;
+
+  /// No description provided for @newsShareCopied.
+  ///
+  /// In de, this message translates to:
+  /// **'Link in die Zwischenablage kopiert'**
+  String get newsShareCopied;
 
   /// No description provided for @newsLikeFailed.
   ///

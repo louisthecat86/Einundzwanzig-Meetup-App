@@ -11,6 +11,7 @@ import '../widgets/meetup_crest_watermark.dart';
 import 'badge_wallet.dart'; // BadgeArtPainter als Rueckfallmotiv
 import '../l10n/app_localizations.dart';
 import '../models/badge.dart';
+import '../utils/share_origin.dart';
 
 class BadgeDetailsScreen extends StatefulWidget {
   final MeetupBadge badge;
@@ -80,6 +81,8 @@ class _BadgeDetailsScreenState extends State<BadgeDetailsScreen> {
   void _shareBadge() async {
     final t = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
+    // Anker vor jeglichem await holen — warum: share_origin.dart (Issue #73).
+    final shareOrigin = shareOriginFor(context);
 
     try {
       // Die Karte haengt unsichtbar im Baum. Ein Bild kann erst entstehen,
@@ -114,6 +117,7 @@ class _BadgeDetailsScreenState extends State<BadgeDetailsScreen> {
         text: '${b.meetupName} · ${b.date.day.toString().padLeft(2, '0')}.'
             '${b.date.month.toString().padLeft(2, '0')}.${b.date.year}\n'
             '${t.badgeShareTagline}',
+        sharePositionOrigin: shareOrigin,
       );
     } catch (e) {
       if (!mounted) return;
