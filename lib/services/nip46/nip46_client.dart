@@ -35,6 +35,7 @@ import '../app_logger.dart';
 import '../nip44.dart';
 import '../relay_socket.dart';
 import 'bunker_uri.dart';
+import 'client_metadata.dart';
 import 'nip46_exception.dart';
 
 /// Was der Client von einem Relay braucht. Existiert als eigener Typ, damit
@@ -224,7 +225,12 @@ class Nip46Client {
     }
     await _rpc(
       'connect',
-      [remote, secret ?? '', requestedPerms],
+      [
+        remote,
+        secret ?? '',
+        requestedPerms,
+        jsonEncode(Nip46ClientMetadata.values),
+      ],
       timeout: connectTimeout,
     );
   }

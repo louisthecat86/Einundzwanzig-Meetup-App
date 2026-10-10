@@ -72,6 +72,11 @@ jobs:
     - name: NIP-44 im echten Browser prüfen
       run: flutter test --platform chrome test/nip44_web_smoke_test.dart
 
+    # Prüft verschlüsselte Anfragen, App-Metadaten, URI-Kodierung und
+    # Transportfehler auch mit der JavaScript-Laufzeit im Browser.
+    - name: NIP-46-Transport und App-Metadaten im echten Browser prüfen
+      run: flutter test --platform chrome test/nip46_client_test.dart
+
     # Führt Dart WIRKLICH im Browser aus — der einzige Schritt, der das tut.
     #
     # Für NIP-49 nicht optional: die erste Fassung nutzte pointycastles

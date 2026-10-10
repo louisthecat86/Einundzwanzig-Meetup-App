@@ -41,6 +41,7 @@ import 'app_logger.dart';
 import 'nip07/nip07_bridge.dart';
 import 'nip07/nip07_exception.dart';
 import 'nip46/bunker_uri.dart';
+import 'nip46/client_metadata.dart';
 import 'nip46/nip46_client.dart';
 import 'nip46/nip46_exception.dart';
 import 'relay_config.dart';
@@ -1186,7 +1187,9 @@ class SigningService {
         relays: relays,
         secret: secret,
         perms: Nip46Client.requestedPerms,
-        appName: 'Einundzwanzig Meetup',
+        appName: Nip46ClientMetadata.name,
+        appUrl: Nip46ClientMetadata.url,
+        appImage: Nip46ClientMetadata.image,
       ),
       secret: secret,
       clientSecretKeyHex: clientKey,

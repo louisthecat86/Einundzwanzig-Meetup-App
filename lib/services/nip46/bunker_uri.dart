@@ -94,12 +94,18 @@ class BunkerPointer {
     required String secret,
     required String perms,
     required String appName,
+    String? appUrl,
+    String? appImage,
   }) {
     final params = <String>[
       for (final r in relays) 'relay=${Uri.encodeQueryComponent(r)}',
       'secret=${Uri.encodeQueryComponent(secret)}',
       'perms=${Uri.encodeQueryComponent(perms)}',
-      'name=${Uri.encodeQueryComponent(appName)}',
+      // Native URI-Parser behandeln '+' nicht zwingend als Leerzeichen.
+      // Prozentkodierung (%20) funktioniert auch ohne Formular-Dekodierung.
+      'name=${Uri.encodeComponent(appName)}',
+      if (appUrl != null) 'url=${Uri.encodeQueryComponent(appUrl)}',
+      if (appImage != null) 'image=${Uri.encodeQueryComponent(appImage)}',
     ];
     return 'nostrconnect://$clientPubkeyHex?${params.join('&')}';
   }
