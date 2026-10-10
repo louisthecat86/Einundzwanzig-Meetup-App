@@ -327,20 +327,12 @@ class BackupService {
       if (password == null) return false; // User hat abgebrochen
       if (!context.mounted) return false;
 
-      // Ankerpunkt fuer das iOS-Teilen-Blatt JETZT bestimmen, solange das
-      // Widget sicher gebaut ist. Ohne gueltiges sharePositionOrigin wirft
-      // UIKit (reproduziert auf iPhone/iOS 26, ebenso iPad) — und dieser Wurf
-      // war der Ausloeser der schwarzen Seite.
-      final shareOrigin = shareOriginFor(context);
-
-      if (context.mounted) {
-        loadingOpen = true;
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.orange)),
-        );
-      }
+      loadingOpen = true;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.orange)),
+      );
 
       final user = await UserProfile.load();
       final badges = await MeetupBadge.loadBadges();
@@ -561,6 +553,14 @@ class BackupService {
       } catch (e) {
         AppLogger.debug('App', 'Speicherdialog nicht verfuegbar: $e');
       }
+
+      // Anker erst hier. Passwort, Ableitung und der Speicherdialog liegen
+      // dazwischen; ein frueher festgehaltenes Rechteck liegt nach einer
+      // Drehung ausserhalb der Ansicht, und iOS 26 wirft dann wieder.
+      // Ist die Seite weg, nicht teilen: true wuerde beim Reset die
+      // Schluessel loeschen, obwohl nirgends eine Datei liegt.
+      if (!context.mounted) return false;
+      final shareOrigin = shareOriginFor(context);
 
       final shareResult = await Share.shareXFiles(
         [XFile.fromData(bytes, mimeType: 'application/octet-stream', name: fileName)],
