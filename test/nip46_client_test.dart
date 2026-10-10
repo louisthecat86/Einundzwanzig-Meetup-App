@@ -11,6 +11,7 @@ import 'dart:convert';
 
 import 'package:einundzwanzig_meetup_app/services/nip44.dart';
 import 'package:einundzwanzig_meetup_app/services/nip46/bunker_uri.dart';
+import 'package:einundzwanzig_meetup_app/services/nip46/client_metadata.dart';
 import 'package:einundzwanzig_meetup_app/services/nip46/nip46_client.dart';
 import 'package:einundzwanzig_meetup_app/services/nip46/nip46_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -79,6 +80,7 @@ class _FakeSigner {
   /// Signer sieht es dann nie.
   Set<String> rejectingRelays = {};
   String rejectReason = 'rate-limited: slow down';
+  final rejectionLatency = Stopwatch();
 
   /// Antworten von ALLEN Relays statt nur vom ersten schicken.
   bool answerFromAllRelays = false;
@@ -108,6 +110,7 @@ class _FakeSigner {
     // abgewiesen. Der gute Fall laeuft dadurch in allen Tests mit ueber ein
     // ["OK", …, true, …] — so faellt auf, wenn das die Zuordnung stoert.
     if (rejectingRelays.contains(link.url)) {
+      rejectionLatency.start();
       link.pushRaw(jsonEncode(['OK', event['id'], false, rejectReason]));
       return; // abgewiesen: der Signer bekommt es nie zu sehen
     }
@@ -238,6 +241,8 @@ void main() {
       final params = signer.requests.single['params'] as List;
       expect(params[0], signer.pubkey);
       expect(params[1], 'geheim123');
+      expect(params, hasLength(4));
+      expect(jsonDecode(params[3] as String), Nip46ClientMetadata.values);
       final perms = params[2] as String;
       expect(perms, contains('get_public_key'));
       for (final kind in Nip46Client.signedKinds) {
@@ -246,6 +251,21 @@ void main() {
       }
       await client.close();
     });
+
+    test(
+      'connect ohne Geheimnis belaesst Metadaten an vierter Position',
+      () async {
+        final client = build();
+        await client.connect();
+        final params = signer.requests.single['params'] as List;
+        expect(params, hasLength(4));
+        expect(params[0], signer.pubkey);
+        expect(params[1], '');
+        expect(params[2], Nip46Client.requestedPerms);
+        expect(jsonDecode(params[3] as String), Nip46ClientMetadata.values);
+        await client.close();
+      },
+    );
 
     test('ping erkennt eine lebende Sitzung', () async {
       signer.respond = (r) => {'id': r['id'], 'result': 'pong'};
@@ -336,7 +356,6 @@ void main() {
       signer.rejectReason = 'blocked: pubkey not allowed';
       final client = build();
 
-      final stopwatch = Stopwatch()..start();
       await expectLater(
         client.connect(),
         throwsA(isA<Nip46RelayRejectedException>()
@@ -346,10 +365,12 @@ void main() {
             .having((e) => e.message, 'message',
                 contains('blocked: pubkey not allowed'))),
       );
-      stopwatch.stop();
+      signer.rejectionLatency.stop();
 
       // Der eigentliche Gewinn: es wird NICHT die Frist abgewartet.
-      expect(stopwatch.elapsed, lessThan(shortLimit),
+      // Ab Relay-Ablehnung messen: die vorherige Verschluesselung kann im
+      // Browser laenger dauern als die fuer den Test verkuerzte RPC-Frist.
+      expect(signer.rejectionLatency.elapsed, lessThan(shortLimit),
           reason: 'die Ablehnung muss sofort durchschlagen');
       expect(signer.requests, isEmpty,
           reason: 'ein abgewiesenes Ereignis erreicht den Signer nie');
@@ -570,12 +591,54 @@ void main() {
         relays: const ['wss://a.test'],
         secret: 'abc123',
         perms: Nip46Client.requestedPerms,
-        appName: 'Einundzwanzig Meetup',
+        appName: Nip46ClientMetadata.name,
+        appUrl: Nip46ClientMetadata.url,
+        appImage: Nip46ClientMetadata.image,
       );
       expect(uri, startsWith('nostrconnect://${'cd' * 32}?'));
       expect(uri, contains('secret=abc123'));
       expect(uri, contains('sign_event%3A21000'));
-      expect(uri, contains('name=Einundzwanzig+Meetup'));
+      expect(uri, contains('name=Einundzwanzig%20Meetup'));
+      final parsed = Uri.parse(uri);
+      expect(parsed.queryParameters['url'], Nip46ClientMetadata.url);
+      expect(parsed.queryParameters['image'], Nip46ClientMetadata.image);
+      expect(parsed.queryParametersAll['relay'], ['wss://a.test']);
+    });
+
+    test('App-Name bleibt fuer native URI-Parser unveraendert', () {
+      for (final name in ['Einundzwanzig Meetup', 'Meetup + Café & Bitcoin']) {
+        final uri = BunkerPointer.buildNostrConnectUri(
+          clientPubkeyHex: 'cd' * 32,
+          relays: const ['wss://a.test'],
+          secret: 'abc123',
+          perms: Nip46Client.requestedPerms,
+          appName: name,
+        );
+        final encodedName = uri.split('&name=').last;
+        // Wie ein nativer Parser: Prozentkodierung dekodieren, '+' erhalten.
+        expect(Uri.decodeComponent(encodedName), name);
+        expect(encodedName, isNot(contains('+')));
+        expect(Uri.parse(uri).queryParameters['name'], name);
+      }
+    });
+
+    test('nostrconnect kodiert Bild- und App-URLs ohne Parameterverlust', () {
+      const appUrl = 'https://example.org/app?lang=de&source=signer';
+      const image = 'https://example.org/icon.png?v=2&size=192';
+      final uri = Uri.parse(
+        BunkerPointer.buildNostrConnectUri(
+          clientPubkeyHex: 'cd' * 32,
+          relays: const ['wss://a.test', 'wss://b.test'],
+          secret: 'abc123',
+          perms: Nip46Client.requestedPerms,
+          appName: 'Einundzwanzig Meetup',
+          appUrl: appUrl,
+          appImage: image,
+        ),
+      );
+      expect(uri.queryParameters['url'], appUrl);
+      expect(uri.queryParameters['image'], image);
+      expect(uri.queryParametersAll['relay'], ['wss://a.test', 'wss://b.test']);
     });
   });
 }
