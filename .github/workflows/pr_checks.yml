@@ -58,19 +58,16 @@ jobs:
     - name: Schlüsselableitung im echten Browser prüfen
       run: flutter test --platform chrome test/pbkdf2_web_equality_test.dart
 
-    # Der einzige Schritt, der Dart-Code WIRKLICH IM BROWSER ausführt.
-    #
-    # Nötig, weil dart2js anders rechnet als die VM: BigInt liegt dort auf
-    # JavaScript-BigInt. Die NIP-44-Verschlüsselung des Remote-Signers hängt
-    # daran (ECDH auf secp256k1) — ein Fehler dort wäre im Browser lautlos, und
-    # weder `flutter test` noch `flutter build web` würden ihn sehen: das eine
-    # läuft in der VM, das andere übersetzt nur.
-    #
-    # Bewusst nur diese eine Datei: die grosse Vektor-Datei liest ihre 128
-    # Fälle über dart:io und kann im Browser nicht starten. Ein vollständiger
-    # Chrome-Lauf der Suite würde ausserdem Minuten kosten.
-    - name: NIP-44 im echten Browser prüfen
-      run: flutter test --platform chrome test/nip44_web_smoke_test.dart
+    # Prüft NIP-44 und die Größen-/Anzahlgrenzen des Badge-Syncs im Browser.
+    # JavaScript kann sich von der VM unterscheiden, etwa bei BigInt und
+    # Bitverschiebungen. Der Web-Build allein führt diese Pfade nicht aus.
+    # Die große Vektordatei nutzt dart:io und bleibt im nativen Testlauf.
+    - name: NIP-44 und Badge-Sync-Grenzen im echten Browser prüfen
+      run: >-
+        flutter test --platform chrome
+        test/nip44_web_smoke_test.dart
+        test/badge_sync_payload_size_test.dart
+        test/badge_sync_chunk_limit_test.dart
 
     # Prüft verschlüsselte Anfragen, App-Metadaten, URI-Kodierung und
     # Transportfehler auch mit der JavaScript-Laufzeit im Browser.

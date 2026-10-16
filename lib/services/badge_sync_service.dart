@@ -460,7 +460,7 @@ class BadgeSyncService {
     // gehört der vorigen Identität. Dirty holt ihn unter der neuen nach.
     if (epoch != _epoch) return _SyncAttempt.failed;
     if (await _isHeld()) return _SyncAttempt.held;
-    final pushed = await _push(me, merged, epoch);
+    final pushed = await uploadChunks(me, merged, epoch);
     final prefs = await SharedPreferences.getInstance();
     // Dirty bleibt, wenn ein Chunk auf keinem Relay bestätigt wurde.
     await prefs.setBool(_dirtyKey, !pushed);
@@ -634,23 +634,27 @@ class BadgeSyncService {
   /// deren Inhalt sich geändert hat. Zählt ein Relay erst, wenn es das
   /// Event bestätigt. Gibt false, wenn ein geänderter Chunk auf keinem
   /// Relay ankam — dann bleibt der Sync dirty.
-  static Future<bool> _push(String me, List<MeetupBadge> merged, int epoch) async {
+  @visibleForTesting
+  static Future<bool> uploadChunks(
+    String me,
+    List<MeetupBadge> merged,
+    int epoch, {
+    Future<String> Function(String, String)? encrypt,
+    Future<SignedEvent> Function({
+      required int kind,
+      required List<List<String>> tags,
+      required String content,
+    })? sign,
+    Future<bool> Function(String, Map<String, dynamic>)? publish,
+  }) async {
     if (epoch != _epoch || await _isHeld()) return false;
     if (merged.isEmpty) return true;
 
-    // Mehr Chunks als gelesen werden: lieber nichts schreiben, als
-    // unleserliche Events auf den Relays zu hinterlassen.
-    final wouldBe = BadgeSyncFormat.chunkBadges(merged, (p) => p.length);
-    if (wouldBe.length > BadgeSyncFormat.maxChunks) {
-      AppLogger.warn(_tag,
-          '${wouldBe.length} Chunks nötig, gelesen werden nur ${BadgeSyncFormat.maxChunks} — Sync bleibt aus');
-      return false;
-    }
-
     final prefs = await SharedPreferences.getInstance();
+    // 2^62 ohne Bitverschiebung: JavaScript-Bitoperatoren arbeiten mit 32 Bit.
     final generation =
         (DateTime.now().millisecondsSinceEpoch ~/ 1000)
-            .clamp(prefs.getInt(_lastGenKey) ?? 0, 1 << 62);
+            .clamp(prefs.getInt(_lastGenKey) ?? 0, pow(2, 62).toInt());
     // Chunk-Grenze an der NIP-44-Payload, nicht am Klartext: gzip und
     // base64 machen das Event größer als die Hülle.
     final plaintexts = BadgeSyncFormat.plaintexts(
@@ -659,6 +663,14 @@ class BadgeSyncService {
       (p) => BadgeSyncFormat.payloadCharsForGzip(
           BadgeSyncCodec.deflate(p).length),
     );
+    // Die tatsächliche Anzahl prüfen: Die Klartextlänge unterschätzt die
+    // benötigten Chunks bei Base64/NIP-44. Vor jedem Signer-/Relay-Aufruf
+    // abbrechen, wenn ein Teil des Bestands später nicht eingelesen würde.
+    if (plaintexts.length > BadgeSyncFormat.maxChunks) {
+      AppLogger.warn(_tag,
+          '${plaintexts.length} Chunks nötig, gelesen werden nur ${BadgeSyncFormat.maxChunks} — Sync bleibt aus');
+      return false;
+    }
     final oldHashes = prefs.getStringList(_hashesKey) ?? const [];
 
     final newHashes = <String>[];
@@ -672,9 +684,9 @@ class BadgeSyncService {
       newHashes.add(hash);
       if (i < oldHashes.length && oldHashes[i] == hash) continue;
 
-      final sealed = await SigningService.nip44Encrypt(
+      final sealed = await (encrypt ?? SigningService.nip44Encrypt)(
           me, base64Encode(BadgeSyncCodec.deflate(plain)));
-      final signed = await SigningService.signEvent(
+      final signed = await (sign ?? SigningService.signEvent)(
         kind: BadgeSyncFormat.kind,
         tags: [
           ['d', BadgeSyncFormat.dTag(i)],
@@ -694,7 +706,7 @@ class BadgeSyncService {
       var accepted = false;
       for (final url in syncRelays) {
         try {
-          if (await _publish(url, event)) {
+          if (await (publish ?? _publish)(url, event)) {
             accepted = true;
             break;
           }

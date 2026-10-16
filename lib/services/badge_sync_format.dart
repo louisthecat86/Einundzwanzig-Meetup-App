@@ -134,8 +134,9 @@ class BadgeSyncFormat {
   /// Länge der NIP-44-Payload aus einer gzip-Bytefolge. Nicht die
   /// Klartext-Länge: das NIP-44-Padding und base64 machen sie größer.
   static int payloadCharsForGzip(int gzipBytes) {
-    // NIP-44: base64(1 + 32 + gepolstert + 32).
-    final padded = _padLen(gzipBytes);
+    // Verschlüsselt wird base64(gzip), inklusive NIP-44-Längenpräfix.
+    final plaintextBytes = ((gzipBytes + 2) ~/ 3) * 4;
+    final padded = 2 + _padLen(plaintextBytes);
     return ((1 + 32 + padded + 32 + 2) ~/ 3) * 4;
   }
 
