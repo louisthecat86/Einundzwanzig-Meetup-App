@@ -60,11 +60,24 @@ class MeetupCalendarService {
         .toLocal();
   }
 
-  /// WAPPEN-REGISTRY: Meetup-Name -> Logo-URL, gefüllt beim Portal-Laden.
-  /// So können Home-Kachel & Co. das Wappen zum Termin/Meetup finden.
+  /// WAPPEN-REGISTRY: Meetup-Name ODER Stadt -> Logo-URL.
+  ///
+  /// Gefuellt beim Portal-Laden. Der Name allein reicht nicht: Ein Badge
+  /// traegt die Stadt ("Ostwestfalen-Lippe"), das Portal die Gruppe
+  /// ("Einundzwanzig OWL"). Ohne den zweiten Schluessel findet die Suche
+  /// das vorhandene Logo nicht.
   static final Map<String, String> portalLogos = {};
 
-  /// Liefert das Wappen zu einem Titel/Stadtnamen (exakter Name oder enthalten).
+  /// Merkt ein Wappen unter einem Namen oder einer Stadt.
+  /// Leere Werte werden ignoriert. Dieselbe URL darf unter mehreren
+  /// Schluesseln stehen.
+  static void rememberLogo(String label, String logo) {
+    final key = label.trim();
+    final url = logo.trim();
+    if (key.isEmpty || url.isEmpty) return;
+    portalLogos[key] = url;
+  }
+
   /// Macht relative Portal-Bildpfade absolut ("/storage/x.png" ->
   /// "https://portal.einundzwanzig.space/storage/x.png"). Image.network
   /// scheitert an relativen Pfaden STILL — das Wappen fehlte dann einfach.
@@ -74,12 +87,17 @@ class MeetupCalendarService {
     return 'https://portal.einundzwanzig.space${u.startsWith('/') ? '' : '/'}$u';
   }
 
+  /// Liefert das Wappen zu einem Gruppennamen oder einer Stadt, nur exakt.
+  ///
+  /// Keine Teilstring-Suche: "Ulm" fand damit das Wappen von Neu-Ulm, "Au"
+  /// das von Augsburg. Beide Schluessel liegen hier, der Kalender fragt mit
+  /// dem Gruppennamen, das Badge mit der Stadt. Was nicht exakt passt,
+  /// bekommt lieber kein Wappen als ein fremdes.
   static String logoFor(String titleOrCity) {
     final q = titleOrCity.trim().toLowerCase();
     if (q.isEmpty) return '';
     for (final entry in portalLogos.entries) {
-      final name = entry.key.toLowerCase();
-      if (name == q || name.contains(q) || q.contains(name)) return absoluteImageUrl(entry.value);
+      if (entry.key.toLowerCase() == q) return absoluteImageUrl(entry.value);
     }
     return '';
   }
@@ -106,7 +124,10 @@ class MeetupCalendarService {
         }
         final name = mv('name').trim().isNotEmpty ? mv('name').trim() : 'Meetup';
         final logo = mv('logo');
-        if (logo.isNotEmpty) portalLogos[name] = logo;
+        // Name UND Stadt. Das Badge sucht spaeter mit der Stadt, der
+        // Kalender mit dem Gruppennamen.
+        rememberLogo(name, logo);
+        rememberLogo(mv('city'), logo);
         final link = (e['link'] ?? '').toString();
         events.add(CalendarEvent(
           title: name,

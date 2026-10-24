@@ -1760,18 +1760,16 @@ class HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, W
   Widget _crestCoverFlow(String city, Meetup? meetup, {double size = 56}) {
     // Das EIGENE Wappen des Meetups hat Vorrang.
     //
-    // MeetupCalendarService.logoFor() sucht ueber den Namen und liefert bei
-    // zwei Meetups derselben Stadt beiden dasselbe Bild. Liegt das Meetup-
-    // Objekt vor — seit der Umstellung auf die Portal-ID ist das der
-    // Normalfall —, nehmen wir dessen Logo.
+    // logoFor trifft nur exakt. Der Stadt-Schluessel ist einer pro Stadt,
+    // bei mehreren Gruppen gewinnt also das zuletzt gemerkte Logo. Liegt
+    // das Meetup-Objekt vor, nehmen wir dessen Logo.
     String url = '';
     if (meetup != null) {
       url = MeetupCalendarService.absoluteImageUrl(
           meetup.logoUrl.isNotEmpty ? meetup.logoUrl : meetup.coverImagePath);
     }
-    // Rueckfall: das ueber den Namen gefundene Termin-Logo. Greift bei
-    // Favoriten aus aelteren Fassungen, zu denen kein Meetup-Objekt
-    // aufloest.
+    // Rueckfall fuer alte Favoriten ohne Meetup-Objekt: exakt der
+    // Stadtname, unter dem das Termin-Laden das Logo abgelegt hat.
     if (url.isEmpty) url = MeetupCalendarService.logoFor(city);
     if (url.isEmpty) return const SizedBox.shrink();
     return SizedBox(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import '../models/meetup.dart';
 import 'package:nostr/nostr.dart';
@@ -39,6 +40,10 @@ class MeetupService {
 
   /// Zuletzt geladene Meetups, moeglicherweise leer.
   static List<Meetup> get cached => _cache;
+
+  /// Nur fuer Tests: die Liste ohne Netz befuellen.
+  @visibleForTesting
+  static set cached(List<Meetup> list) => _cache = list;
 
   /// Loest einen gespeicherten Favoriten auf.
   ///

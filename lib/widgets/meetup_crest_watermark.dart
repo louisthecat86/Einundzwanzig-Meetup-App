@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/meetup_calendar_service.dart';
+import '../services/meetup_crest_lookup.dart';
 
 /// Das Wappen des Meetups als Wasserzeichen hinter der generativen Grafik.
 ///
@@ -43,45 +44,28 @@ class MeetupCrestWatermark extends StatefulWidget {
 }
 
 class _MeetupCrestWatermarkState extends State<MeetupCrestWatermark> {
-  /// Laeuft gerade ein Nachladen? Statisch, damit nicht jede Badge-Karte
-  /// im Wallet ihren eigenen Abruf startet — bei zwanzig Badges waeren das
-  /// zwanzig gleiche Anfragen.
-  static Future<void>? _loading;
-
   @override
   void initState() {
     super.initState();
     _ensureLogos();
   }
 
-  /// Die Wappen stehen in MeetupCalendarService.portalLogos, und die Karte
-  /// wird NUR beim Laden der Termine gefuellt. Wer die App oeffnet und
-  /// direkt in die Badge-Wallet geht, hat sie also leer — dann fehlten alle
-  /// Wappen, ohne dass etwas kaputt war. Deshalb holt das Widget sie selbst
-  /// nach, wenn sie fehlen.
+  /// Wer die App oeffnet und direkt in die Badge-Wallet geht, hat die
+  /// Wappen-Listen noch leer. Das Widget holt sie dann selbst nach.
   Future<void> _ensureLogos() async {
-    if (MeetupCalendarService.portalLogos.isNotEmpty) return;
-    if ((widget.imageUrl ?? '').isNotEmpty) return; // feste URL, kein Bedarf
-
-    _loading ??= MeetupCalendarService().fetchMeetupsPortalFirst().then((_) {});
-    await _loading;
+    if ((widget.imageUrl ?? '').trim().isNotEmpty) return;
+    await MeetupCrestLookup.ensureSources();
     if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    // Feste URL schlaegt die Suche.
+    // Feste URL schlaegt die Suche. Event-Badges bringen ihr Bild mit.
     String url = (widget.imageUrl ?? '').trim();
-
-    if (url.isEmpty) {
-      // Der Badge-Name traegt das Land hinten dran — fuer die Wappen-Suche
-      // zaehlt nur der Teil davor.
-      final city = widget.meetupName.split(',').first.trim();
-      if (city.isEmpty) return const SizedBox.shrink();
-
-      url = MeetupCalendarService.absoluteImageUrl(
-        MeetupCalendarService.logoFor(city),
-      );
+    if (url.isNotEmpty) {
+      url = MeetupCalendarService.absoluteImageUrl(url);
+    } else {
+      url = MeetupCrestLookup.urlFor(widget.meetupName);
     }
     if (url.isEmpty) return const SizedBox.shrink();
 
@@ -133,7 +117,7 @@ class _MeetupCrestWatermarkState extends State<MeetupCrestWatermark> {
 ///
 /// Faellt auf [fallback] zurueck, wenn kein Wappen vorliegt oder das Bild
 /// nicht laedt — dort steht dann wieder das gewohnte Symbol.
-class MeetupCrestFace extends StatelessWidget {
+class MeetupCrestFace extends StatefulWidget {
   final String meetupName;
   final Widget fallback;
 
@@ -154,29 +138,38 @@ class MeetupCrestFace extends StatelessWidget {
   });
 
   @override
+  State<MeetupCrestFace> createState() => _MeetupCrestFaceState();
+}
+
+class _MeetupCrestFaceState extends State<MeetupCrestFace> {
+  @override
+  void initState() {
+    super.initState();
+    if ((widget.imageUrl ?? '').trim().isNotEmpty) return;
+    MeetupCrestLookup.ensureSources().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     var url = '';
-    final own = imageUrl?.trim() ?? '';
+    final own = widget.imageUrl?.trim() ?? '';
     if (own.isNotEmpty) {
       url = MeetupCalendarService.absoluteImageUrl(own);
     }
 
-    if (url.isEmpty) {
-      final city = meetupName.split(',').first.trim();
-      if (city.isEmpty) return fallback;
-      url = MeetupCalendarService.absoluteImageUrl(
-        MeetupCalendarService.logoFor(city),
-      );
-    }
-    if (url.isEmpty) return fallback;
+    if (url.isEmpty) url = MeetupCrestLookup.urlFor(widget.meetupName);
+    if (url.isEmpty) return widget.fallback;
 
     return Image.network(
       url,
       fit: BoxFit.contain,
       // Waehrend des Ladens das gewohnte Symbol zeigen statt einer Luecke —
       // die Karte soll nie halbfertig wirken.
-      loadingBuilder: (_, child, progress) => progress == null ? child : fallback,
-      errorBuilder: (_, error, stack) => fallback,
+      loadingBuilder: (_, child, progress) =>
+          progress == null ? child : widget.fallback,
+      errorBuilder: (_, error, stack) => widget.fallback,
     );
   }
 }
