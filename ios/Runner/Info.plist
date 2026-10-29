@@ -50,15 +50,26 @@
 	<key>NSCalendarsUsageDescription</key>
 	<string>Diese App kann Meetup-Termine in deinen Kalender eintragen.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Diese App nutzt die Kamera, um Meetup- und Badge-QR-Codes zu scannen.</string>
+	<string>Diese App nutzt die Kamera, um Meetup-, Badge- und Cashu-QR-Codes zu scannen.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Die App spielt Audio (PlebRap) über ein Audio-Framework ab, das Mikrofon-APIs enthält. Die App nimmt nichts auf und greift nicht auf das Mikrofon zu.</string>
+	<string>Die App erkennt gesprochene Wallet-Befehle auf dem iPhone — die Aufnahme wird nicht verschickt. Zudem spielt die App Audio (PlebRap) über ein Audio-Framework ab, das Mikrofon-APIs enthält, ohne aufzunehmen.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Gesprochene Wallet-Befehle werden auf dem iPhone erkannt. Die Aufnahme verlässt das Gerät nicht.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Diese App nutzt deinen Standort, um Meetups in deiner Nähe anzuzeigen.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Diese App nutzt deinen Standort, um Meetups in deiner Nähe anzuzeigen. Der Standort wird nur verwendet, während die App geöffnet ist.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Diese App nutzt deine Fotomediathek, um Profilbilder auszuwählen.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Die Sprach-Wallet spricht Bark auf einem Rechner im lokalen Netz an, und ein Cashu-Mint, um einen Token einzulösen.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
