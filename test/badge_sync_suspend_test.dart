@@ -118,6 +118,8 @@ void main() {
     expect((await MeetupBadge.loadBadges()).map((b) => b.id), ['bleibt']);
     expect(BadgeSyncService.identitySwitched(_npubA, ''), isFalse);
     expect(BadgeSyncService.identitySwitched(_npubA, _npubB), isTrue);
+    expect(BadgeSyncService.identitySwitched('', _npubB), isFalse,
+        reason: 'ohne Identität davor gibt es keinen Wechsel');
   });
 
   test('offener Wechsel blockiert ein Einspielen, das nicht ersetzt',
@@ -269,6 +271,90 @@ void main() {
 
     expect(prefs.getBool('humanity_verified'), isTrue);
     expect(prefs.getString('platform_proofs'), '[{"platform":"b"}]');
+  });
+
+  test('frisches Gerät: kein Wechsel, importierte Nachweise bleiben',
+      () async {
+    // Kein Wechsel angefangen, das Gerät hatte vorher keine Identität:
+    // from ist leer. Der Keystore trägt schon den npub aus dem Backup,
+    // die Nachweise aus dem Backup liegen schon in den Prefs.
+    FlutterSecureStorage.setMockInitialValues({'nostr_npub_key': _npubB});
+    await BadgeSyncService.beginRestoreHold(fromNpub: '');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('platform_proofs', '[{"platform":"a"}]');
+    await prefs.setBool('humanity_needs_reverification', true);
+    BadgeSyncService.debugResetProcess();
+
+    await BadgeSyncService.settleRestore();
+
+    expect(prefs.getString('platform_proofs'), '[{"platform":"a"}]');
+    expect(prefs.getBool('humanity_needs_reverification'), isTrue);
+    expect(prefs.getBool('badge_restore_hold'), isNot(true),
+        reason: 'der Riegel ist abgeräumt');
+  });
+
+  test('frisches Einspielen räumt liegen gebliebene Nachweise, der Import bleibt',
+      () async {
+    // Signer getrennt, kein lokaler Schlüssel: der npub ist weg, die
+    // Nachweise und die Chunk-Hashes der vorigen Identität nicht.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('humanity_verified', true);
+    await prefs.setString('humanity_receipt_id', 'alt');
+    await prefs.setString('platform_proofs', '[{"platform":"alt"}]');
+    await prefs.setStringList('badge_sync_chunk_hashes', ['alt']);
+    await prefs.setInt('badge_sync_last_gen', 9);
+    await prefs.setBool('badge_sync_dirty', true);
+
+    FlutterSecureStorage.setMockInitialValues({'nostr_npub_key': _npubB});
+    await BadgeSyncService.beginRestoreHold(fromNpub: '');
+    // Der Schlüssel aus dem Backup ist lesbar. Erst dann wird geräumt.
+    await BadgeSyncService.releaseUnownedState(expectNpubs: [_npubB]);
+
+    expect(prefs.getBool('humanity_verified'), isFalse);
+    expect(prefs.getString('humanity_receipt_id'), isNull);
+    expect(prefs.getString('platform_proofs'), isNull);
+    expect(prefs.getStringList('badge_sync_chunk_hashes'), isNull);
+    expect(prefs.getInt('badge_sync_last_gen'), isNull);
+    expect(prefs.getBool('badge_sync_dirty'), isNot(true));
+
+    // Das Backup schreibt danach seine eigenen Nachweise.
+    await prefs.setString('platform_proofs', '[{"platform":"neu"}]');
+    await prefs.setBool('humanity_needs_reverification', true);
+    await prefs.setString('humanity_receipt_id', 'neu');
+    BadgeSyncService.debugResetProcess();
+
+    await BadgeSyncService.settleRestore();
+
+    expect(prefs.getString('platform_proofs'), '[{"platform":"neu"}]');
+    expect(prefs.getBool('humanity_needs_reverification'), isTrue);
+    expect(prefs.getString('humanity_receipt_id'), 'neu');
+    expect(prefs.getBool('humanity_verified'), isFalse);
+    expect(prefs.getStringList('badge_sync_chunk_hashes'), isNull);
+    expect(prefs.getBool('badge_restore_hold'), isNot(true));
+    expect(prefs.getBool('badge_restore_proofs'), isNot(true),
+        reason: 'der Vormerk ist mit dem Riegel weg');
+  });
+
+  test('ohne Schlüssel aus dem Backup bleibt der alte Nachweis liegen',
+      () async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('humanity_verified', true);
+    await prefs.setString('humanity_receipt_id', 'alt');
+    await prefs.setString('platform_proofs', '[{"platform":"alt"}]');
+    await prefs.setStringList('badge_sync_chunk_hashes', ['alt']);
+
+    // npub nicht lesbar: Lese-Aussetzer oder Einspielen ohne Schlüssel.
+    await BadgeSyncService.releaseUnownedState(expectNpubs: [_npubB]);
+    // Lesbar, aber eine andere Identität als die aus dem Backup.
+    FlutterSecureStorage.setMockInitialValues({'nostr_npub_key': _npubA});
+    await BadgeSyncService.releaseUnownedState(expectNpubs: [_npubB]);
+    // Backup ohne Identität, obwohl lokal ein npub lesbar ist.
+    await BadgeSyncService.releaseUnownedState();
+
+    expect(prefs.getBool('humanity_verified'), isTrue);
+    expect(prefs.getString('humanity_receipt_id'), 'alt');
+    expect(prefs.getString('platform_proofs'), '[{"platform":"alt"}]');
+    expect(prefs.getStringList('badge_sync_chunk_hashes'), ['alt']);
   });
 
   test('neues Einspielen übernimmt erst, was der Keystore schon entschied',

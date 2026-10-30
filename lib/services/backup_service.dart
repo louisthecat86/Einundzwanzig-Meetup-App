@@ -1092,6 +1092,17 @@ class BackupService {
         // keine Wirkung mehr, und etwas wiederherzustellen, das nichts tut,
         // waere nur Ballast.
 
+        // Frisch, und der Keystore trägt eine Identität aus dem Backup.
+        // Erst jetzt die liegen gebliebenen Nachweise und Chunk-Hashes
+        // weg: direkt bevor die Nachweise aus dem Backup darüber
+        // geschrieben werden. Kam kein Schlüssel an, oder ist der lesbare
+        // npub nicht der aus dem Backup, bleibt alles.
+        if (decision == RestoreDecision.fresh) {
+          await BadgeSyncService.releaseUnownedState(
+            expectNpubs: backupIdentities(data),
+          );
+        }
+
         // =============================================
         // PLATFORM PROOFS WIEDERHERSTELLEN (MIT VALIDIERUNG)
         // =============================================
