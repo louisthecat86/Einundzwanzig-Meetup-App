@@ -189,7 +189,11 @@ class BadgeSyncService {
 
   /// Ein Wechsel liegt nur vor, wenn jetzt eine andere Identität lesbar ist.
   /// Ein leerer npub ist ein Lese-Aussetzer, kein vollzogener Wechsel.
+  /// Gab es vorher keine Identität (leeres from), kann nichts gewechselt
+  /// haben. Was ohne npub liegen geblieben ist, räumt
+  /// [releaseUnownedState], sobald der Schlüssel aus dem Backup lesbar ist.
   static bool identitySwitched(String from, String now) {
+    if (from.trim().isEmpty) return false;
     final current = now.trim().toLowerCase();
     if (current.isEmpty) return false;
     return current != from.trim().toLowerCase();
@@ -211,6 +215,34 @@ class BadgeSyncService {
   static Future<void> clearRestoreMark() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_clearKey);
+  }
+
+  /// Frisches Einspielen, direkt bevor die Nachweise aus dem Backup
+  /// geschrieben werden.
+  ///
+  /// Eine lesbare Identität gab es vorher nicht. Nachweise und Chunk-Hashes
+  /// können trotzdem liegen: wer den Signer trennt, verliert den npub, nicht
+  /// die Prefs. Blieben sie, hinge der Humanity-Nachweis oder ein
+  /// Plattform-Proof der vorigen Identität an der neuen, und gleiche
+  /// Chunk-Hashes ließen die Veröffentlichung unter dem neuen Pubkey aus.
+  ///
+  /// Nur wenn [expectNpubs] den jetzt lesbaren npub enthält. Ein leerer
+  /// npub ist ein Lese-Aussetzer oder ein abgebrochenes Einspielen, und
+  /// ein anderer npub ist nicht der Schlüssel aus dem Backup. In beiden
+  /// Fällen bleiben die Nachweise liegen. [clearIdentityProofs] merkt das
+  /// Räumen vor, damit settle den Import nicht noch einmal löscht.
+  static Future<void> releaseUnownedState({
+    List<String> expectNpubs = const [],
+  }) async {
+    final now = ((await SigningService.npub()) ?? '').trim().toLowerCase();
+    if (now.isEmpty) return;
+    final wanted = <String>{
+      for (final n in expectNpubs)
+        if (n.trim().isNotEmpty) n.trim().toLowerCase(),
+    };
+    if (!wanted.contains(now)) return;
+    await clearIdentityProofs();
+    await forgetLocalState();
   }
 
   /// Räumt einen Riegel ab, auch nach einem Absturz mitten im Wechsel.
