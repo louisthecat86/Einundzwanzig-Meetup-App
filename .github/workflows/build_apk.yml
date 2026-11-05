@@ -134,3 +134,21 @@ jobs:
           build/app/outputs/flutter-apk/einundzwanzig-meetup-*.apk
         prerelease: false
         make_latest: true
+
+    # 12. Zapstore nur bei einem Versions-Tag, und erst wenn die APK am
+    #     Release hängt. zsp liest sie über repository in zapstore.yaml.
+    #     Ohne Signier-Secret bleibt dieser Release grün.
+    - name: Publish to Zapstore
+      if: startsWith(github.ref, 'refs/tags/v')
+      env:
+        SIGN_WITH: ${{ secrets.ZAPSTORE_SIGN_WITH }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        if [ -z "$SIGN_WITH" ]; then
+          echo "::warning title=Zapstore übersprungen::ZAPSTORE_SIGN_WITH fehlt. Die APK liegt auf dem GitHub-Release, nicht im Zapstore."
+          exit 0
+        fi
+        curl -fsSL -o "$RUNNER_TEMP/zsp" \
+          https://github.com/zapstore/zsp/releases/download/v2.0.1/zsp-2.0.1-linux-amd64
+        chmod +x "$RUNNER_TEMP/zsp"
+        "$RUNNER_TEMP/zsp" publish -q
