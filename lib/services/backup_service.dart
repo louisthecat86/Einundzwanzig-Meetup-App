@@ -893,6 +893,17 @@ class BackupService {
         // Backup aus dem lokalen Modus soll einen Amber-Nutzer nicht still
         // auf den lokalen Schlüssel umstellen.
         if (!additive && version >= 2 && data['nostr'] != null) {
+          // Frisch hieß: kein npub lesbar. Ist jetzt doch einer da, war die
+          // erste Lesung ein Aussetzer, und der Schlüssel aus dem Backup
+          // würde eine vorhandene Identität ohne Rückfrage überschreiben.
+          // Profil und Badges sind schon da, der Schlüssel bleibt der alte.
+          if (decision == RestoreDecision.fresh &&
+              ((await SigningService.npub()) ?? '').trim().isNotEmpty) {
+            throw Exception(
+                'Die Identität war kurz nicht lesbar. Der Schlüssel aus dem '
+                'Backup wurde nicht übernommen. Bitte das Einspielen noch '
+                'einmal starten.');
+          }
           final nostrData = data['nostr'] as Map<String, dynamic>;
           final hasKey = nostrData['has_key'] ?? false;
           final mode = '${nostrData['signing_mode'] ?? 'local'}';
