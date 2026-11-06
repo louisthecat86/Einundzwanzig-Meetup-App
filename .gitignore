@@ -121,3 +121,5 @@ app.*.symbols
 android/key.properties
 android/app/release.jks
 *.keystore
+
+lib/services/voice_wallet/bark_local.dart
