@@ -514,13 +514,26 @@ class TrustScoreService {
   // BRIDGE SCORE: Verbindest du Meetup-Cluster?
   // =============================================
   static double calculateBridgeScore(List<MeetupBadge> badges) {
-    if (badges.length < 3) return 0;
+    // Vorschlag: Teilnahme und Organisation verbinden Gemeinschaften.
+    // Rollen bleiben in der Wallet getrennt, zählen hier je Termin einmal.
+    // Bei beiden Rollen liefert die Teilnahme die Metadaten des Termins;
+    // ein zusätzlicher Marker darf weder Orte noch Aussteller hinzufügen.
+    final byEvent = <String, MeetupBadge>{};
+    for (final badge in MeetupBadge.unionByIdentity(badges, const [])) {
+      final key = MeetupBadge.identityKey(badge);
+      final previous = byEvent[key];
+      if (previous == null || (previous.isOrganizer && !badge.isOrganizer)) {
+        byEvent[key] = badge;
+      }
+    }
+    final contributions = byEvent.values;
+    if (contributions.length < 3) return 0;
     // Auch hier nur echte Meetups: "verbindest du Cluster" meint ORTE, und
     // ein Grossevent ist kein Ort im Sinne einer lokalen Gemeinschaft.
     final cities =
-        badges.where((b) => !b.isEvent).map((b) => b.meetupName).toSet();
+        contributions.where((b) => !b.isEvent).map((b) => b.meetupName).toSet();
     if (cities.length <= 1) return 0;
-    final signers = badges.map((b) => b.signerNpub).where((s) => s.isNotEmpty).toSet();
+    final signers = contributions.map((b) => b.signerNpub).where((s) => s.isNotEmpty).toSet();
     return cities.length.toDouble() * max(signers.length.toDouble(), 1.0);
   }
 
