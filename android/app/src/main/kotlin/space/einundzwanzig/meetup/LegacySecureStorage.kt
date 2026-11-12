@@ -27,14 +27,23 @@ object LegacySecureStorage {
     private const val KEY_KEYSET = "__androidx_security_crypto_encrypted_prefs_key_keyset__"
     private const val VALUE_KEYSET = "__androidx_security_crypto_encrypted_prefs_value_keyset__"
 
-    /** Leere Map: es gibt keinen alten Speicher, oder sein Schlüssel ist weg. */
+    /**
+     * Leere Map, wenn die alte Datei keine Keysets hat.
+     * Sind Keysets da, der Hauptschlüssel im Keystore aber nicht, wird
+     * geworfen. Eine leere Map hielte Dart für „nichts zu holen“ und
+     * würde die Wiederherstellung nicht wiederholen.
+     */
     fun read(context: Context, keys: List<String>): Map<String, String> {
         val raw = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         // Ohne diese Prüfungen würde das Öffnen Keysets und Hauptschlüssel
         // neu anlegen.
         if (!raw.contains(KEY_KEYSET) || !raw.contains(VALUE_KEYSET)) return emptyMap()
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        if (!keyStore.containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) return emptyMap()
+        if (!keyStore.containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
+            throw IllegalStateException(
+                "Alter Speicher hat Keysets, der Hauptschlüssel fehlt"
+            )
+        }
 
         // Dieselben Parameter wie im Plugin, sonst passt der Schlüssel nicht.
         val masterKey = MasterKey.Builder(context)

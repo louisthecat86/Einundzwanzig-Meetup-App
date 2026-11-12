@@ -14,7 +14,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'app_logger.dart';
 
 class LegacySecureStorage {
@@ -34,6 +33,9 @@ class LegacySecureStorage {
     ),
   );
 
+  /// Liegt im sicheren Speicher, nicht in den Einstellungen: das
+  /// Zurücksetzen der App leert die Einstellungen, und ohne Merker käme
+  /// die alte Identität beim nächsten Start zurück.
   static const _doneKey = 'legacy_secure_storage_recovered';
 
   static const _badgeKey = 'badge_encryption_key';
@@ -44,6 +46,9 @@ class LegacySecureStorage {
 
   /// Identität samt EasyAuth-Wraps gehört zusammen: einzelne alte Werte
   /// neben einer neuen Identität ergäben ein Gemisch aus zwei Schlüsseln.
+  /// Ein schon liegender Wert, der dem alten gleicht, ist dieselbe Identität:
+  /// fehlende Felder werden nachgezogen. Ein abweichender Wert blockiert
+  /// den ganzen Satz.
   static const _identity = [
     'nostr_nsec_key',
     'nostr_npub_key',
@@ -60,14 +65,13 @@ class LegacySecureStorage {
   /// des alten Speichers fehl, versucht es der nächste Start erneut.
   static Future<void> recover() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_doneKey) ?? false) return;
     try {
+      final current = await _storage.readAll();
+      if (current.containsKey(_doneKey)) return;
       final old = await _channel.invokeMapMethod<String, String>('read', {
             'keys': [_badgeKey, ..._identity, _nip46ClientKey],
           }) ??
           const <String, String>{};
-      final current = await _storage.readAll();
       bool missing(String key) => (current[key] ?? '').isEmpty;
       bool has(String key) => (old[key] ?? '').isNotEmpty;
       final adopted = <String>[];
@@ -77,9 +81,13 @@ class LegacySecureStorage {
         await _storage.write(key: target, value: old[_badgeKey]);
         adopted.add(target);
       }
-      if (_identity.every(missing)) {
-        for (final key in _identity.where(has)) {
-          await _storage.write(key: key, value: old[key]);
+      final sameIdentity = _identity.every(
+          (key) => missing(key) || !has(key) || current[key] == old[key]);
+      if (sameIdentity) {
+        for (final key in _identity) {
+          final value = old[key];
+          if (value == null || value.isEmpty || !missing(key)) continue;
+          await _storage.write(key: key, value: value);
           adopted.add(key);
         }
       }
@@ -88,7 +96,7 @@ class LegacySecureStorage {
         adopted.add(_nip46ClientKey);
       }
 
-      await prefs.setBool(_doneKey, true);
+      await _storage.write(key: _doneKey, value: '1');
       if (adopted.isNotEmpty) {
         AppLogger.info('LegacyStorage',
             'Aus dem alten sicheren Speicher übernommen: ${adopted.join(', ')}');

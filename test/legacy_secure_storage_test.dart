@@ -153,6 +153,40 @@ void main() {
     expect(secure.containsKey('easyauth_password_ncryptsec'), isFalse);
   });
 
+  test('dieselbe Identität wird vervollständigt', () async {
+    legacy.addAll({
+      'nostr_nsec_key': 'nsec-alt',
+      'nostr_npub_key': 'npub-alt',
+      'nostr_priv_hex': 'priv-alt',
+      'easyauth_password_ncryptsec': 'wrap-alt',
+    });
+    secure.addAll({
+      'nostr_nsec_key': 'nsec-alt',
+      'nostr_npub_key': 'npub-alt',
+    });
+
+    await LegacySecureStorage.recover();
+
+    expect(secure['nostr_priv_hex'], 'priv-alt');
+    expect(secure['easyauth_password_ncryptsec'], 'wrap-alt');
+  });
+
+  test('ein abweichender Schlüssel blockiert den Rest der alten Identität',
+      () async {
+    legacy.addAll({
+      'nostr_nsec_key': 'nsec-alt',
+      'nostr_priv_hex': 'priv-alt',
+      'easyauth_password_ncryptsec': 'wrap-alt',
+    });
+    secure['nostr_nsec_key'] = 'nsec-neu';
+
+    await LegacySecureStorage.recover();
+
+    expect(secure['nostr_nsec_key'], 'nsec-neu');
+    expect(secure.containsKey('nostr_priv_hex'), isFalse);
+    expect(secure.containsKey('easyauth_password_ncryptsec'), isFalse);
+  });
+
   test('Lesefehler: nichts gilt als erledigt, der nächste Start holt nach',
       () async {
     final oldKey = _hexKey();
@@ -160,14 +194,36 @@ void main() {
     legacyFails = true;
 
     await LegacySecureStorage.recover();
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool(_doneKey), isNull);
     expect(secure, isEmpty);
 
     legacyFails = false;
     await LegacySecureStorage.recover();
     expect(secure[_keyAlias], oldKey);
-    expect(prefs.getBool(_doneKey), isTrue);
+    expect(secure[_doneKey], isNotNull);
+  });
+
+  test('nach dem Zurücksetzen der App kommt die alte Identität nicht zurück',
+      () async {
+    legacy.addAll({
+      'nostr_nsec_key': 'nsec-alt',
+      'nostr_npub_key': 'npub-alt',
+      'nostr_priv_hex': 'priv-alt',
+    });
+    await LegacySecureStorage.recover();
+    expect(secure['nostr_nsec_key'], 'nsec-alt');
+
+    // Wie das Zurücksetzen: Einstellungen leer, Schlüssel gelöscht.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    secure
+      ..remove('nostr_nsec_key')
+      ..remove('nostr_npub_key')
+      ..remove('nostr_priv_hex');
+
+    await LegacySecureStorage.recover();
+
+    expect(secure.containsKey('nostr_nsec_key'), isFalse);
+    expect(reads, 1);
   });
 
   test('läuft nur einmal und nur auf Android', () async {
