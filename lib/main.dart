@@ -21,6 +21,7 @@ import 'services/app_logger.dart';
 import 'models/badge.dart';
 import 'services/badge_sync_service.dart';
 import 'services/diagnostics_service.dart';
+import 'services/legacy_secure_storage.dart';
 import 'services/signing_service.dart';
 
 /// Messenger der App-Wurzel. Gebraucht, um Meldungen aus Code OHNE
@@ -192,6 +193,9 @@ Future<void> _start() async {
   // Speicher anfasst. Der Umzug von flutter_secure_storage darf nicht aus
   // mehreren Objekten parallel starten, und ein fehlendes Lesen darf keinen
   // neuen Schlüssel über den alten schreiben.
+  // Davor: Werte aus dem alten Android-Speicher (bis 1.6.9) nachholen,
+  // sonst fehlt der Badge-Schlüssel beim ersten Lesen.
+  await LegacySecureStorage.recover();
   await MeetupBadge.loadBadges();
 
   // Badge-Sync an saveBadges hängen und einmal fern lesen. Läuft im

@@ -67,6 +67,7 @@ class MainActivity : FlutterFragmentActivity() {
     // lokalen Speicher; Dart fragt es bei jedem Aufwachen hier ab.
     private val widgetChannelName = "einundzwanzig/widget"
     private val screenChannelName = "einundzwanzig/screen"
+    private val legacyStorageChannelName = "einundzwanzig/legacy_secure_storage"
 
     // Request-Codes für die Vordergrund-Intents
     private val reqGetPublicKey = 9551
@@ -106,6 +107,28 @@ class MainActivity : FlutterFragmentActivity() {
                             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         }
                         result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Alter sicherer Speicher (bis 1.6.9), nur lesen. Keystore und Tink
+        // brauchen spürbar Zeit, deshalb nicht auf dem UI-Thread.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, legacyStorageChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "read" -> {
+                        val keys = call.argument<List<String>>("keys") ?: emptyList()
+                        Thread {
+                            try {
+                                val values = LegacySecureStorage.read(applicationContext, keys)
+                                runOnUiThread { result.success(values) }
+                            } catch (e: Exception) {
+                                runOnUiThread {
+                                    result.error("legacy_read_failed", e.toString(), null)
+                                }
+                            }
+                        }.start()
                     }
                     else -> result.notImplemented()
                 }
